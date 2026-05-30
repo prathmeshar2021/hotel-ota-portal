@@ -1,0 +1,481 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-1.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── ENUMS ────────────────────────────────────────────────────────────────────
+
+enum Role {
+  CUSTOMER
+  HOTEL_STAFF
+  HOTEL_ADMIN
+  SUPER_ADMIN
+}
+
+enum RoomType {
+  LUXURY_COTTAGE
+  AC_ROOM
+  NON_AC_ROOM
+}
+
+enum RoomStatus {
+  AVAILABLE
+  OCCUPIED
+  CLEANING
+  MAINTENANCE
+}
+
+enum BookingStatus {
+  PENDING_PAYMENT
+  CONFIRMED
+  CHECKED_IN
+  CHECKED_OUT
+  CANCELLED
+  NO_SHOW
+}
+
+enum BookingSource {
+  PORTAL
+  WALK_IN
+  PHONE
+  MMT
+  GOIBIBO
+  BOOKING_COM
+  OTHER
+}
+
+enum PaymentMode {
+  CASH
+  ONLINE
+  MIXED
+}
+
+enum ConsentStatus {
+  PENDING
+  SENT
+  ACCEPTED
+  REJECTED
+}
+
+enum ConsentMode {
+  WHATSAPP
+  PORTAL
+}
+
+enum IdType {
+  AADHAR
+  DRIVING_LICENSE
+  PASSPORT
+  VOTER_ID
+  OTHER
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum SyncStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+enum DiscountType {
+  FLAT
+  PERCENT
+}
+
+// ─── PLATFORM SUPER ADMIN ─────────────────────────────────────────────────────
+
+model SuperAdmin {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─── HOTEL ────────────────────────────────────────────────────────────────────
+
+model Hotel {
+  id          String  @id @default(cuid())
+  name        String
+  slug        String  @unique
+  email       String  @unique
+  phone       String
+  description String?
+  address     String
+  city        String
+  state       String
+  pincode     String
+  latitude    Float?
+  longitude   Float?
+  starRating  Int     @default(3)
+  gstin       String?
+  panNumber   String?
+
+  images    String[]
+  amenities String[]
+
+  checkInTime  String @default("12:00")
+  checkOutTime String @default("11:00")
+
+  isActive       Boolean @default(true)
+  isApproved     Boolean @default(false)
+  commissionRate Float   @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  rooms        Room[]
+  staff        HotelStaff[]
+  bookings     Booking[]
+  coupons      Coupon[]
+  reviews      Review[]
+  otaSync      OtaChannelSync[]
+  appsheetSync AppsheetSyncLog[]
+}
+
+// ─── HOTEL STAFF ──────────────────────────────────────────────────────────────
+
+model HotelStaff {
+  id       String  @id @default(cuid())
+  hotelId  String
+  name     String
+  email    String  @unique
+  password String
+  role     Role    @default(HOTEL_STAFF)
+  phone    String?
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  hotel Hotel @relation(fields: [hotelId], references: [id])
+}
+
+// ─── ROOM ─────────────────────────────────────────────────────────────────────
+
+model Room {
+  id          String     @id @default(cuid())
+  hotelId     String
+  roomNumber  String
+  roomType    RoomType
+  floor       Int?
+  capacity    Int
+  basePrice   Float
+  description String?
+  images      String[]
+  amenities   String[]
+  status      RoomStatus @default(AVAILABLE)
+  isActive    Boolean    @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  hotel    Hotel      @relation(fields: [hotelId], references: [id])
+  bookings Booking[]
+  rates    RoomRate[]
+
+  @@unique([hotelId, roomNumber])
+}
+
+// Seasonal / date-specific pricing overrides
+model RoomRate {
+  id       String   @id @default(cuid())
+  roomId   String
+  fromDate DateTime
+  toDate   DateTime
+  price    Float
+  label    String?
+
+  room Room @relation(fields: [roomId], references: [id])
+}
+
+// ─── GUEST (CUSTOMER ACCOUNT) ─────────────────────────────────────────────────
+
+model Guest {
+  id          String    @id @default(cuid())
+  email       String?   @unique
+  phone       String?   @unique
+  name        String
+  gender      Gender?
+  dateOfBirth DateTime?
+  address     String?
+  occupation  String?
+  idType      IdType?
+  idNumber    String?
+  idFrontUrl  String?
+  idBackUrl   String?
+  password    String?
+  isVerified  Boolean   @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bookings         Booking[]          @relation("PrimaryGuest")
+  companionIn      BookingCompanion[]
+  consents         Consent[]          @relation("PrimaryConsent")
+  secondaryConsent Consent[]          @relation("SecondaryConsent")
+  reviews          Review[]
+  onlineCheckins   OnlineCheckin[]
+}
+
+// ─── BOOKING ──────────────────────────────────────────────────────────────────
+
+model Booking {
+  id             String        @id @default(cuid())
+  bookingRef     String        @unique
+  hotelId        String
+  roomId         String
+  primaryGuestId String
+  source         BookingSource @default(PORTAL)
+  status         BookingStatus @default(PENDING_PAYMENT)
+
+  checkInDate  DateTime
+  checkOutDate DateTime
+  noOfNights   Int
+  noOfPersons  Int
+
+  roomRent          Float
+  couponDiscount    Float @default(0)
+  refundableDeposit Float @default(0)
+  additionalCharges Float @default(0)
+  taxableAmount     Float @default(0)
+  cgst              Float @default(0)
+  sgst              Float @default(0)
+  totalAmount       Float
+  cashPaid          Float @default(0)
+  onlinePaid        Float @default(0)
+  balanceDue        Float @default(0)
+  depositRefunded   Boolean @default(false)
+
+  couponId        String?
+  specialRequests String?
+  guestGstin      String?
+
+  onlineCheckinDone Boolean   @default(false)
+  checkedInAt       DateTime?
+  checkedOutAt      DateTime?
+
+  appsheetBookingNo Int?
+  appsheetConsentId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  hotel        Hotel              @relation(fields: [hotelId], references: [id])
+  room         Room               @relation(fields: [roomId], references: [id])
+  primaryGuest Guest              @relation("PrimaryGuest", fields: [primaryGuestId], references: [id])
+  coupon       Coupon?            @relation(fields: [couponId], references: [id])
+  companions   BookingCompanion[]
+  consent      Consent?
+  payment      Payment?
+  gstInvoice   GstInvoice?
+  charges      AdditionalCharge[]
+  onlineCheckin OnlineCheckin?
+  syncLogs     AppsheetSyncLog[]
+}
+
+// ─── BOOKING COMPANION ────────────────────────────────────────────────────────
+
+model BookingCompanion {
+  id         String  @id @default(cuid())
+  bookingId  String
+  guestId    String?
+  name       String
+  relation   String?
+  idType     IdType?
+  idNumber   String?
+  idFrontUrl String?
+  idBackUrl  String?
+
+  booking Booking @relation(fields: [bookingId], references: [id])
+  guest   Guest?  @relation(fields: [guestId], references: [id])
+}
+
+// ─── ONLINE CHECK-IN ──────────────────────────────────────────────────────────
+
+model OnlineCheckin {
+  id                   String    @id @default(cuid())
+  bookingId            String    @unique
+  guestId              String
+  comingFrom           String?
+  goingTo              String?
+  purpose              String?
+  vehicleNo            String?
+  expectedCheckInTime  String?
+  expectedCheckOutTime String?
+  completedAt          DateTime?
+
+  booking Booking @relation(fields: [bookingId], references: [id])
+  guest   Guest   @relation(fields: [guestId], references: [id])
+}
+
+// ─── CONSENT ──────────────────────────────────────────────────────────────────
+
+model Consent {
+  id                  String        @id @default(cuid())
+  bookingId           String        @unique
+  primaryGuestId      String
+  secondaryGuestId    String?
+  status              ConsentStatus @default(PENDING)
+  secondaryStatus     ConsentStatus?
+  mode                ConsentMode   @default(PORTAL)
+  pdfUrl              String?
+  sentAt              DateTime?
+  primaryAcceptedAt   DateTime?
+  secondaryAcceptedAt DateTime?
+  consentToken        String?
+
+  booking        Booking @relation(fields: [bookingId], references: [id])
+  primaryGuest   Guest   @relation("PrimaryConsent", fields: [primaryGuestId], references: [id])
+  secondaryGuest Guest?  @relation("SecondaryConsent", fields: [secondaryGuestId], references: [id])
+}
+
+// ─── PAYMENT ──────────────────────────────────────────────────────────────────
+
+model Payment {
+  id                String      @id @default(cuid())
+  bookingId         String      @unique
+  razorpayOrderId   String?     @unique
+  razorpayPaymentId String?     @unique
+  amount            Float
+  currency          String      @default("INR")
+  mode              PaymentMode
+  status            String      @default("pending")
+  paidAt            DateTime?
+  refundedAt        DateTime?
+  refundAmount      Float?
+  notes             String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  booking Booking @relation(fields: [bookingId], references: [id])
+}
+
+// ─── ADDITIONAL CHARGES ───────────────────────────────────────────────────────
+
+model AdditionalCharge {
+  id          String      @id @default(cuid())
+  bookingId   String
+  chargeTypes String[]
+  description String?
+  quantity    Float       @default(1)
+  unitPrice   Float
+  amount      Float
+  mode        PaymentMode @default(CASH)
+  addedAt     DateTime    @default(now())
+  addedBy     String?
+
+  booking Booking @relation(fields: [bookingId], references: [id])
+}
+
+// ─── GST INVOICE ──────────────────────────────────────────────────────────────
+
+model GstInvoice {
+  id                String   @id @default(cuid())
+  bookingId         String   @unique
+  invoiceNumber     String   @unique
+  customerName      String
+  customerPhone     String
+  customerGstin     String?
+  roomNo            String
+  checkIn           DateTime
+  checkOut          DateTime
+  roomRent          Float
+  additionalCharges Float    @default(0)
+  couponDiscount    Float    @default(0)
+  taxableAmount     Float
+  cgst              Float
+  sgst              Float
+  totalAmount       Float
+  generatedAt       DateTime @default(now())
+  pdfUrl            String?
+
+  booking Booking @relation(fields: [bookingId], references: [id])
+}
+
+// ─── COUPON ───────────────────────────────────────────────────────────────────
+
+model Coupon {
+  id            String       @id @default(cuid())
+  hotelId       String?
+  code          String       @unique
+  discountType  DiscountType
+  discountValue Float
+  minAmount     Float        @default(0)
+  maxDiscount   Float?
+  maxUses       Int?
+  usedCount     Int          @default(0)
+  referrerName  String?
+  expiryDate    DateTime?
+  isActive      Boolean      @default(true)
+
+  createdAt DateTime @default(now())
+
+  hotel    Hotel?    @relation(fields: [hotelId], references: [id])
+  bookings Booking[]
+}
+
+// ─── REVIEW ───────────────────────────────────────────────────────────────────
+
+model Review {
+  id             String  @id @default(cuid())
+  hotelId        String
+  guestId        String
+  bookingId      String? @unique
+  rating         Int
+  title          String?
+  comment        String?
+  isVerifiedStay Boolean @default(false)
+  isVisible      Boolean @default(true)
+
+  createdAt DateTime @default(now())
+
+  hotel   Hotel   @relation(fields: [hotelId], references: [id])
+  guest   Guest   @relation(fields: [guestId], references: [id])
+}
+
+// ─── APPSHEET SYNC LOG ────────────────────────────────────────────────────────
+
+model AppsheetSyncLog {
+  id        String     @id @default(cuid())
+  hotelId   String
+  bookingId String?
+  action    String
+  status    SyncStatus @default(PENDING)
+  payload   Json?
+  response  Json?
+  error     String?
+  attempts  Int        @default(0)
+  syncedAt  DateTime?
+  createdAt DateTime   @default(now())
+
+  hotel   Hotel    @relation(fields: [hotelId], references: [id])
+  booking Booking? @relation(fields: [bookingId], references: [id])
+}
+
+// ─── OTA CHANNEL SYNC (future) ────────────────────────────────────────────────
+
+model OtaChannelSync {
+  id           String   @id @default(cuid())
+  hotelId      String
+  channel      String
+  apiKey       String?
+  propertyId   String?
+  syncEnabled  Boolean  @default(false)
+  lastSyncedAt DateTime?
+
+  hotel Hotel @relation(fields: [hotelId], references: [id])
+
+  @@unique([hotelId, channel])
+}
