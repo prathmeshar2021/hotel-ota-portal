@@ -10,6 +10,9 @@ declare global {
 function createPrismaClient() {
   const pool = new pg.Pool({
     connectionString: process.env.DATABASE_URL,
+    // Serverless: limit to 1 connection per Lambda instance to avoid exhausting
+    // Supabase's connection pool (15-connection limit in session mode).
+    max: 1,
     ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : undefined,
   });
   const adapter = new PrismaPg(pool);
