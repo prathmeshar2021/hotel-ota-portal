@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import { auth } from "@/lib/auth/auth";
 import { generateBookingRef, computeTotals, applyCoupon } from "@/lib/utils/booking";
+import { REFUNDABLE_DEPOSIT } from "@/lib/utils/booking-calc";
 import { createOrder } from "@/lib/services/razorpay";
 import { z } from "zod";
 
@@ -123,7 +124,7 @@ export async function POST(req: NextRequest) {
     roomRentPerNight: room.basePrice,
     noOfNights,
     couponDiscount,
-    refundableDeposit: data.refundableDeposit,
+    refundableDeposit: REFUNDABLE_DEPOSIT, // always Rs 200, server-enforced
   });
 
   const bookingRef = await generateBookingRef();
@@ -144,7 +145,7 @@ export async function POST(req: NextRequest) {
         noOfPersons: data.noOfPersons,
         roomRent: totals.roomRent,
         couponDiscount,
-        refundableDeposit: data.refundableDeposit,
+        refundableDeposit: REFUNDABLE_DEPOSIT,
         taxableAmount: totals.taxableAmount,
         cgst: totals.cgst,
         sgst: totals.sgst,
@@ -193,7 +194,7 @@ export async function POST(req: NextRequest) {
       noOfPersons: data.noOfPersons,
       roomRent: totals.roomRent,
       couponDiscount,
-      refundableDeposit: data.refundableDeposit,
+      refundableDeposit: REFUNDABLE_DEPOSIT,
       taxableAmount: totals.taxableAmount,
       cgst: totals.cgst,
       sgst: totals.sgst,

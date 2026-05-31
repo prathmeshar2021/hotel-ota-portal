@@ -22,6 +22,8 @@ import {
   Clock,
   LogIn,
   LogOut,
+  ShieldCheck,
+  XCircle,
 } from "lucide-react";
 import { format } from "date-fns";
 import BookingStatusButton, { NoShowButton } from "@/components/hotel-admin/BookingStatusButton";
@@ -29,6 +31,7 @@ import CounterCheckinButton from "@/components/hotel-admin/CounterCheckinButton"
 import CollectPaymentModal from "@/components/hotel-admin/CollectPaymentModal";
 import AddChargeModal from "@/components/hotel-admin/AddChargeModal";
 import DeleteChargeButton from "@/components/hotel-admin/DeleteChargeButton";
+import AdminCancelBookingButton from "@/components/hotel-admin/CancelBookingButton";
 
 const ROOM_LABELS: Record<string, string> = {
   LUXURY_COTTAGE: "Luxury Cottage",
@@ -125,6 +128,13 @@ export default async function BookingDetailPage({
         <div className="flex items-center gap-2 flex-wrap">
           {booking.status === "CONFIRMED" && (
             <>
+              <AdminCancelBookingButton
+                bookingId={booking.id}
+                bookingRef={booking.bookingRef}
+                checkInDate={booking.checkInDate}
+                totalAmount={booking.totalAmount}
+                depositAmount={booking.refundableDeposit}
+              />
               <NoShowButton bookingId={booking.id} />
               {/* Counter check-in opens the full form modal — pre-fills from web check-in if done */}
               <CounterCheckinButton
@@ -436,14 +446,47 @@ export default async function BookingDetailPage({
                   </div>
                 </>
               )}
+              {booking.refundableDeposit > 0 && (
+                <div className="flex justify-between text-green-400/70 text-xs">
+                  <span className="flex items-center gap-1">
+                    <ShieldCheck className="w-3 h-3" /> Refundable deposit
+                  </span>
+                  <span>₹{booking.refundableDeposit.toLocaleString("en-IN")}</span>
+                </div>
+              )}
               <div className="flex justify-between font-bold text-white border-t border-white/8 pt-2 mt-2">
-                <span>Total Paid</span>
+                <span>Total Amount</span>
                 <span style={{ color: accent }}>₹{booking.totalAmount.toLocaleString("en-IN")}</span>
               </div>
               {booking.balanceDue > 0 && (
                 <div className="flex justify-between font-semibold text-red-400 text-sm">
                   <span>Balance Due</span>
                   <span>₹{booking.balanceDue.toLocaleString("en-IN")}</span>
+                </div>
+              )}
+              {/* Cancellation details */}
+              {booking.status === "CANCELLED" && booking.cancellationCharge !== null && (
+                <div className="mt-3 pt-3 border-t border-red-500/15 space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-red-400 text-xs font-semibold mb-2">
+                    <XCircle className="w-3.5 h-3.5" /> Cancellation Details
+                  </div>
+                  <div className="flex justify-between text-xs text-red-400/70">
+                    <span>Cancellation charge</span>
+                    <span>₹{(booking.cancellationCharge ?? 0).toLocaleString("en-IN")}</span>
+                  </div>
+                  <div className="flex justify-between text-xs text-green-400/70">
+                    <span className="flex items-center gap-1"><ShieldCheck className="w-3 h-3" /> Deposit refund</span>
+                    <span>₹{booking.refundableDeposit.toLocaleString("en-IN")}</span>
+                  </div>
+                  <div className="flex justify-between text-sm font-semibold text-white/70 pt-1 border-t border-white/8">
+                    <span>Total refund to guest</span>
+                    <span className="text-green-400">₹{(booking.totalAmount - (booking.cancellationCharge ?? 0)).toLocaleString("en-IN")}</span>
+                  </div>
+                  {booking.cancelledAt && (
+                    <p className="text-[10px] text-white/25 mt-1">
+                      Cancelled {format(booking.cancelledAt, "dd MMM yyyy, hh:mm a")}
+                    </p>
+                  )}
                 </div>
               )}
             </div>

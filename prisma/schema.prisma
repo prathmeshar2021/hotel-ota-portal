@@ -265,6 +265,10 @@ model Booking {
   checkedInAt       DateTime?
   checkedOutAt      DateTime?
 
+  // Cancellation
+  cancelledAt        DateTime?
+  cancellationCharge Float?    // null = not cancelled; 0 = free; >0 = charged amount
+
   appsheetBookingNo Int?
   appsheetConsentId String?
 

@@ -6,9 +6,9 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   Loader2, Tag, CheckCircle, XCircle, User, Phone, Mail, Users, MessageSquare,
-  CreditCard, Banknote, ArrowRight, Wifi, Calendar,
+  CreditCard, Banknote, ArrowRight, Wifi, Calendar, ShieldCheck, Info,
 } from "lucide-react";
-import { computeTotals } from "@/lib/utils/booking-calc";
+import { computeTotals, REFUNDABLE_DEPOSIT } from "@/lib/utils/booking-calc";
 import { signIn } from "next-auth/react";
 
 interface BookingFormProps {
@@ -108,9 +108,9 @@ export default function BookingForm({
   // Payment mode
   const [payMode, setPayMode] = useState<PayMode>("PAY_NOW");
 
-  // Recompute totals dynamically from selected dates
+  // Recompute totals dynamically from selected dates (always includes Rs 200 deposit)
   const liveTotals = localNights > 0
-    ? computeTotals({ roomRentPerNight: room.basePrice, noOfNights: localNights, couponDiscount: couponApplied ? couponDiscount : 0 })
+    ? computeTotals({ roomRentPerNight: room.basePrice, noOfNights: localNights, couponDiscount: couponApplied ? couponDiscount : 0, refundableDeposit: REFUNDABLE_DEPOSIT })
     : totals;
 
   const totalAfterCoupon = liveTotals.totalAmount;
@@ -305,13 +305,27 @@ export default function BookingForm({
 
         {/* Duration + price summary */}
         {localNights > 0 ? (
-          <p className="mt-3 text-xs font-semibold text-center py-2 rounded-xl"
-            style={{ background: `${accentColor}12`, color: accentColor }}>
-            {localNights} night{localNights > 1 ? "s" : ""} ·{" "}
-            ₹{liveTotals.roomRent.toLocaleString("en-IN")} room rent
-            {liveTotals.cgst > 0 && ` + ₹${(liveTotals.cgst + liveTotals.sgst).toLocaleString("en-IN")} GST`}
-            {" "}= <strong>₹{liveTotals.totalAmount.toLocaleString("en-IN")}</strong>
-          </p>
+          <div className="mt-3 rounded-xl px-4 py-3 text-xs space-y-1"
+            style={{ background: `${accentColor}12` }}>
+            <div className="flex justify-between" style={{ color: accentColor }}>
+              <span>{localNights} night{localNights > 1 ? "s" : ""} × ₹{room.basePrice.toLocaleString("en-IN")}</span>
+              <span>₹{liveTotals.roomRent.toLocaleString("en-IN")}</span>
+            </div>
+            {liveTotals.cgst > 0 && (
+              <div className="flex justify-between opacity-70" style={{ color: accentColor }}>
+                <span>GST (CGST + SGST)</span>
+                <span>₹{(liveTotals.cgst + liveTotals.sgst).toLocaleString("en-IN")}</span>
+              </div>
+            )}
+            <div className="flex justify-between text-green-400">
+              <span className="flex items-center gap-1"><ShieldCheck className="w-3 h-3" /> Refundable deposit</span>
+              <span>₹{REFUNDABLE_DEPOSIT}</span>
+            </div>
+            <div className="flex justify-between font-bold pt-1 border-t border-white/10" style={{ color: accentColor }}>
+              <span>Total</span>
+              <strong>₹{liveTotals.totalAmount.toLocaleString("en-IN")}</strong>
+            </div>
+          </div>
         ) : (
           <p className="mt-3 text-xs text-white/30 text-center py-2 rounded-xl bg-white/3 border border-white/6">
             Select check-in and check-out dates to see the total
@@ -474,6 +488,49 @@ export default function BookingForm({
             </div>
           </div>
         )}
+      </div>
+
+      {/* ── Refundable Deposit Info ───────────────── */}
+      <div className="rounded-2xl border border-green-500/25 bg-green-500/5 px-5 py-4">
+        <div className="flex items-start gap-3">
+          <ShieldCheck className="w-5 h-5 text-green-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-bold text-green-300 mb-0.5">
+              ₹200 Refundable Security Deposit
+            </p>
+            <p className="text-xs text-green-400/70 leading-relaxed">
+              A refundable deposit of <span className="font-semibold text-green-300">₹200</span> is included in your total.
+              This is <span className="font-semibold text-green-300">fully refunded</span> at checkout.
+              It may be deducted only in case of damage to property or excessive dirt.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Cancellation Policy ───────────────────── */}
+      <div className="rounded-2xl border border-white/8 bg-white/3 px-5 py-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Info className="w-4 h-4 text-blue-400 shrink-0" />
+          <p className="text-sm font-semibold text-white/70">Cancellation Policy</p>
+        </div>
+        <div className="space-y-2 text-xs text-white/50">
+          <div className="flex items-start gap-2">
+            <span className="w-2 h-2 rounded-full bg-green-400 shrink-0 mt-1" />
+            <span><span className="text-green-400 font-semibold">Free cancellation</span> — more than 72 hours before check-in</span>
+          </div>
+          <div className="flex items-start gap-2">
+            <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0 mt-1" />
+            <span><span className="text-amber-400 font-semibold">50% charge</span> on room rent — between 24 and 72 hours before check-in</span>
+          </div>
+          <div className="flex items-start gap-2">
+            <span className="w-2 h-2 rounded-full bg-red-400 shrink-0 mt-1" />
+            <span><span className="text-red-400 font-semibold">100% charge</span> on room rent — within 24 hours of check-in</span>
+          </div>
+          <div className="flex items-start gap-2 pt-1 border-t border-white/6 mt-2">
+            <ShieldCheck className="w-3.5 h-3.5 text-green-400 shrink-0 mt-0.5" />
+            <span className="text-green-400/80">The ₹200 deposit is <span className="font-semibold">always refunded</span>, regardless of cancellation timing.</span>
+          </div>
+        </div>
       </div>
 
       {/* ── Section 4: Payment Mode ────────────────── */}

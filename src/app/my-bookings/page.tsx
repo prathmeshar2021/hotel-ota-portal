@@ -13,7 +13,9 @@ import {
   ArrowRight,
   Hotel,
   Moon,
+  ShieldCheck,
 } from "lucide-react";
+import CancelBookingButton from "@/components/customer/CancelBookingButton";
 import { format } from "date-fns";
 
 const STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
@@ -67,7 +69,9 @@ export default async function MyBookingsPage() {
       onlineCheckin: { select: { completedAt: true } },
     },
     orderBy: { createdAt: "desc" },
+    // select extra fields for deposit + cancellation display
   });
+  // Note: prisma.findMany with include returns all scalar fields by default
 
   return (
     <div className="min-h-screen bg-[#071209]">
@@ -153,6 +157,12 @@ export default async function MyBookingsPage() {
                           <p className="font-bold text-white/80">
                             ₹{booking.totalAmount.toLocaleString("en-IN")}
                           </p>
+                          {booking.refundableDeposit > 0 && (
+                            <p className="text-[10px] text-green-400/70 mt-0.5 flex items-center gap-0.5">
+                              <ShieldCheck className="w-2.5 h-2.5" />
+                              incl. ₹{booking.refundableDeposit} deposit
+                            </p>
+                          )}
                         </div>
                       </div>
 
@@ -191,6 +201,22 @@ export default async function MyBookingsPage() {
                         <div className="flex items-center gap-1.5 text-xs font-semibold text-yellow-400 bg-yellow-500/10 border border-yellow-500/20 px-3 py-2.5 rounded-xl">
                           <Clock className="w-4 h-4" />
                           Payment Pending
+                        </div>
+                      )}
+                      {booking.status === "CONFIRMED" && (
+                        <CancelBookingButton
+                          bookingId={booking.id}
+                          bookingRef={booking.bookingRef}
+                          checkInDate={booking.checkInDate}
+                          totalAmount={booking.totalAmount}
+                          depositAmount={booking.refundableDeposit}
+                        />
+                      )}
+                      {booking.status === "CANCELLED" && booking.cancellationCharge !== null && (
+                        <div className="text-xs text-red-400/60 bg-red-500/5 border border-red-500/10 rounded-xl px-3 py-2.5 text-center">
+                          {booking.cancellationCharge === 0
+                            ? "Free cancellation"
+                            : `₹${booking.cancellationCharge.toLocaleString("en-IN")} charged`}
                         </div>
                       )}
                       <Link

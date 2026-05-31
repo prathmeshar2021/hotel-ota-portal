@@ -11,13 +11,15 @@ export function calculateGST(roomRentPerNight: number) {
   return { cgstRate: 9, sgstRate: 9 };
 }
 
+export const REFUNDABLE_DEPOSIT = 200; // Rs 200 fixed deposit — always collected, always refunded
+
 export function computeTotals(params: {
   roomRentPerNight: number;
   noOfNights: number;
   couponDiscount?: number;
   refundableDeposit?: number;
 }) {
-  const { roomRentPerNight, noOfNights, couponDiscount = 0, refundableDeposit = 0 } = params;
+  const { roomRentPerNight, noOfNights, couponDiscount = 0, refundableDeposit = REFUNDABLE_DEPOSIT } = params;
   const roomRent = roomRentPerNight * noOfNights;
   const { cgstRate, sgstRate } = calculateGST(roomRentPerNight);
   const taxableAmount = roomRent - couponDiscount;
