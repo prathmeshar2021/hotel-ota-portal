@@ -191,7 +191,7 @@ export default async function HotelDetailPage({ params, searchParams }: Props) {
   return (
     <div className="min-h-screen bg-[#071209]">
       {/* Cinematic zoom-from-space intro — plays once per session, zero cost */}
-      <HeroZoomOverlay heroImage={heroImage} onComplete={() => {}} />
+      <HeroZoomOverlay heroImage={heroImage} />
 
       <Navbar />
 

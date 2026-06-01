@@ -39,11 +39,12 @@ const BHILAI_TILE =
 
 interface Props {
   /** The hotel hero image src — shown as the final frame before fade-out. */
-  heroImage: string;
-  onComplete: () => void;
+  heroImage?: string | null;
 }
 
-export default function HeroZoomOverlay({ heroImage, onComplete }: Props) {
+export default function HeroZoomOverlay({ heroImage }: Props) {
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
+  const onComplete = () => {};
   const [phase, setPhase] = useState<Phase>("earth");
   const [crumb, setCrumb] = useState("");
   const [fadeOut, setFadeOut] = useState(false);
@@ -259,7 +260,7 @@ export default function HeroZoomOverlay({ heroImage, onComplete }: Props) {
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={heroImage}
+          src={heroImage ?? undefined}
           alt="The Urban Escape"
           className="absolute inset-0 w-full h-full object-cover"
           loading="eager"

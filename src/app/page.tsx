@@ -11,6 +11,7 @@ import { prisma } from "@/lib/db/prisma";
 import { Mail, MapPin, Phone, Shield, Tv2, Wind, Zap, Droplets, Car, Wifi, Flame, ArrowRight } from "lucide-react";
 import type { ShowcaseRoom } from "@/components/customer/RoomShowcase";
 import { getCategoryImages } from "@/lib/utils/room-categories";
+import HeroZoomOverlay from "@/components/customer/HeroZoomOverlay";
 
 async function getResort() {
   return prisma.hotel.findUnique({
@@ -156,6 +157,9 @@ export default async function HomePage() {
 
   return (
     <>
+      {/* Cinematic zoom-from-space intro — plays once per session */}
+      <HeroZoomOverlay heroImage={heroImage} />
+
       <Navbar />
 
       {/* ════════════════════════════════════════════════════════
