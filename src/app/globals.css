@@ -131,6 +131,14 @@
 
 /* ─── Custom animation keyframes ─────────────────────────────────────────── */
 
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in-up {
+  animation: fade-in-up 0.5s ease-out forwards;
+}
+
 /* Infinite horizontal marquee (scrolls left) */
 @keyframes marquee {
   from { transform: translateX(0); }
