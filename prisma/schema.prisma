@@ -17,9 +17,15 @@ enum Role {
 }
 
 enum RoomType {
-  LUXURY_COTTAGE
+  // Legacy value kept for DB compat — do not use for new bookings
   AC_ROOM
+  // Active category types
   NON_AC_ROOM
+  PREMIUM_AC_ROOM
+  CAVE_AC_ROOM
+  PINEWOOD_COTTAGE
+  THEATRE_COTTAGE
+  LUXURY_COTTAGE
 }
 
 enum RoomStatus {
@@ -91,6 +97,29 @@ enum DiscountType {
   PERCENT
 }
 
+enum CouponKind {
+  INSTANT
+  SEASONAL
+}
+
+enum OtpPurpose {
+  CASH_COLLECTION
+  EXPENSE_DEBIT
+  DELETE_BOOKING
+  DELETE_TRANSACTION
+  DEPOSIT_DEDUCTION
+  REFUND
+  OTHER
+}
+
+enum OtpStatus {
+  PENDING // admin requested, awaiting super admin
+  ISSUED // super admin issued the code, awaiting admin entry
+  USED // consumed successfully
+  REJECTED // super admin declined
+  EXPIRED // code expired before use
+}
+
 // ─── PLATFORM SUPER ADMIN ─────────────────────────────────────────────────────
 
 model SuperAdmin {
@@ -134,13 +163,18 @@ model Hotel {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  rooms        Room[]
-  staff        HotelStaff[]
-  bookings     Booking[]
-  coupons      Coupon[]
-  reviews      Review[]
-  otaSync      OtaChannelSync[]
-  appsheetSync AppsheetSyncLog[]
+  rooms           Room[]
+  staff           HotelStaff[]
+  bookings        Booking[]
+  coupons         Coupon[]
+  reviews         Review[]
+  otaSync         OtaChannelSync[]
+  appsheetSync    AppsheetSyncLog[]
+  cashCollections CashCollection[]
+  expenses        HotelExpense[]
+  inventory       RoomInventory[]
+  promotions      PromotionScheme[]
+  adminOtps       AdminOtp[]
 }
 
 // ─── HOTEL STAFF ──────────────────────────────────────────────────────────────
@@ -414,6 +448,7 @@ model Coupon {
   id            String       @id @default(cuid())
   hotelId       String?
   code          String       @unique
+  kind          CouponKind   @default(INSTANT)
   discountType  DiscountType
   discountValue Float
   minAmount     Float        @default(0)
@@ -421,13 +456,18 @@ model Coupon {
   maxUses       Int?
   usedCount     Int          @default(0)
   referrerName  String?
+  label         String? // human-friendly description shown to staff
+  validFrom     DateTime?
   expiryDate    DateTime?
   isActive      Boolean      @default(true)
+  createdBy     String? // super admin name
+  promotionId   String?
 
   createdAt DateTime @default(now())
 
-  hotel    Hotel?    @relation(fields: [hotelId], references: [id])
-  bookings Booking[]
+  hotel     Hotel?           @relation(fields: [hotelId], references: [id])
+  promotion PromotionScheme? @relation(fields: [promotionId], references: [id])
+  bookings  Booking[]
 }
 
 // ─── REVIEW ───────────────────────────────────────────────────────────────────
@@ -468,6 +508,36 @@ model AppsheetSyncLog {
   booking Booking? @relation(fields: [bookingId], references: [id])
 }
 
+// ─── CASH COLLECTION (owner withdrawals from till) ────────────────────────────
+
+model CashCollection {
+  id          String   @id @default(cuid())
+  hotelId     String
+  amount      Float
+  note        String?
+  collectedBy String?
+  createdAt   DateTime @default(now())
+
+  hotel Hotel @relation(fields: [hotelId], references: [id])
+}
+
+// ─── HOTEL EXPENSE / MANUAL LEDGER ENTRY ─────────────────────────────────────
+
+model HotelExpense {
+  id          String      @id @default(cuid())
+  hotelId     String
+  entryType   String      // "DEBIT" | "CREDIT"
+  category    String      // e.g. "Electricity", "Plumber", "Salary"
+  description String?
+  amount      Float
+  mode        PaymentMode @default(CASH)
+  expenseDate DateTime    @default(now())
+  addedBy     String?
+  createdAt   DateTime    @default(now())
+
+  hotel Hotel @relation(fields: [hotelId], references: [id])
+}
+
 // ─── OTA CHANNEL SYNC (future) ────────────────────────────────────────────────
 
 model OtaChannelSync {
@@ -482,4 +552,70 @@ model OtaChannelSync {
   hotel Hotel @relation(fields: [hotelId], references: [id])
 
   @@unique([hotelId, channel])
+}
+
+// ─── ROOM INVENTORY (date-wise availability override per category) ────────────
+// units = number of bookable rooms of this category on this specific date.
+// Absence of a row = use the category's default room count.
+model RoomInventory {
+  id        String   @id @default(cuid())
+  hotelId   String
+  roomType  RoomType
+  date      DateTime @db.Date
+  units     Int
+  note      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  hotel Hotel @relation(fields: [hotelId], references: [id])
+
+  @@unique([hotelId, roomType, date])
+  @@index([hotelId, date])
+}
+
+// ─── PROMOTION SCHEME (seasonal campaigns; groups coupons) ────────────────────
+model PromotionScheme {
+  id            String       @id @default(cuid())
+  hotelId       String?
+  name          String
+  keyword       String? // optional reference keyword baked into coupon codes
+  description   String?
+  discountType  DiscountType
+  discountValue Float
+  minAmount     Float        @default(0)
+  maxDiscount   Float?
+  validFrom     DateTime?
+  validTo       DateTime?
+  isActive      Boolean      @default(true)
+  createdBy     String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  hotel   Hotel?   @relation(fields: [hotelId], references: [id])
+  coupons Coupon[]
+}
+
+// ─── ADMIN OTP (super-admin authorisation for debits & deletes) ───────────────
+// Flow: admin requests (PENDING) → super admin issues code (ISSUED, 10-min TTL)
+//        → admin enters code → action executes (USED). May be REJECTED/EXPIRED.
+model AdminOtp {
+  id          String     @id @default(cuid())
+  hotelId     String
+  purpose     OtpPurpose
+  description String // human-readable summary shown to the super admin
+  amount      Float?
+  refId       String? // entity being acted on (booking id, transaction id, …)
+  code        String? // 6-digit, set when issued
+  status      OtpStatus  @default(PENDING)
+  requestedBy String?
+  issuedBy    String?
+  issuedAt    DateTime?
+  expiresAt   DateTime?
+  usedAt      DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  hotel Hotel @relation(fields: [hotelId], references: [id])
+
+  @@index([hotelId, status])
 }

@@ -103,6 +103,26 @@ export const gupshup = {
         `${process.env.NEXT_PUBLIC_APP_URL}/checkin/${data.bookingRef}`,
     }),
 
+  sendCoupon: (phone: string, data: {
+    code: string;
+    hotelName: string;
+    discountLabel: string; // e.g. "₹200 off" or "15% off"
+    expiry?: string; // formatted expiry date, optional
+    guestName?: string;
+    note?: string; // optional custom line (e.g. promotion name)
+  }) =>
+    send({
+      to: phone,
+      message:
+        `🎁 *A Special Offer from ${data.hotelName}!*\n\n` +
+        (data.guestName ? `Dear ${data.guestName},\n\n` : "") +
+        (data.note ? `${data.note}\n\n` : "") +
+        `Use coupon code:\n\n*${data.code}*\n\n` +
+        `🏷️ *${data.discountLabel}* on your stay.\n` +
+        (data.expiry ? `⏳ Valid until *${data.expiry}*.\n` : "") +
+        `\nBook directly with us to redeem. We look forward to hosting you! 🌿`,
+    }),
+
   sendConsentDocument: (phone: string, data: {
     guestName: string;
     pdfUrl: string;

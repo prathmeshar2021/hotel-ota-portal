@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { X, AlertTriangle, Loader2, ShieldCheck, CheckCircle } from "lucide-react";
+import { X, AlertTriangle, ShieldCheck, CheckCircle } from "lucide-react";
 import { getCancellationPolicy, computeCancellationBreakdown, formatHoursUntilCheckIn } from "@/lib/utils/cancellation";
+import OtpGate from "@/components/hotel-admin/OtpGate";
 
 interface Props {
   bookingId: string;
@@ -17,7 +18,7 @@ export default function AdminCancelBookingButton({
   bookingId, bookingRef, checkInDate, totalAmount, depositAmount,
 }: Props) {
   const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [otpOpen, setOtpOpen] = useState(false);
   const [waiveCharge, setWaiveCharge] = useState(false);
 
   const policy = getCancellationPolicy(new Date(checkInDate));
@@ -30,24 +31,18 @@ export default function AdminCancelBookingButton({
     policy.tier === "HALF" ? "bg-amber-500/10 border-amber-500/20 text-amber-400" :
     "bg-red-500/10 border-red-500/20 text-red-400";
 
-  async function handleCancel() {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/hotel-admin/bookings/${bookingId}/cancel`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ overrideCharge: finalCharge }),
-      });
-      const data = await res.json();
-      if (!res.ok) { toast.error(data.error ?? "Cancellation failed"); return; }
-      toast.success(`Booking #${bookingRef} cancelled`);
-      setOpen(false);
-      window.location.reload();
-    } catch {
-      toast.error("Something went wrong");
-    } finally {
-      setLoading(false);
-    }
+  async function handleCancel(otpId: string, otpCode: string) {
+    const res = await fetch(`/api/hotel-admin/bookings/${bookingId}/cancel`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ overrideCharge: finalCharge, otpId, otpCode }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error ?? "Cancellation failed");
+    toast.success(`Booking #${bookingRef} cancelled`);
+    setOtpOpen(false);
+    setOpen(false);
+    window.location.reload();
   }
 
   return (
@@ -61,7 +56,7 @@ export default function AdminCancelBookingButton({
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => !loading && setOpen(false)} />
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setOpen(false)} />
           <div className="relative bg-[#0d1a0e] border border-white/10 rounded-3xl p-6 w-full max-w-md shadow-2xl">
 
             {/* Header */}
@@ -75,7 +70,7 @@ export default function AdminCancelBookingButton({
                   <p className="text-white/35 text-xs">#{bookingRef}</p>
                 </div>
               </div>
-              <button onClick={() => !loading && setOpen(false)} className="text-white/30 hover:text-white/60 p-1 rounded-lg transition-colors">
+              <button onClick={() => setOpen(false)} className="text-white/30 hover:text-white/60 p-1 rounded-lg transition-colors">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -139,29 +134,32 @@ export default function AdminCancelBookingButton({
             {/* Actions */}
             <div className="flex gap-3">
               <button
-                onClick={() => !loading && setOpen(false)}
-                disabled={loading}
-                className="flex-1 py-3 rounded-xl border border-white/10 text-white/50 hover:text-white hover:border-white/20 text-sm font-semibold transition-all disabled:opacity-50"
+                onClick={() => setOpen(false)}
+                className="flex-1 py-3 rounded-xl border border-white/10 text-white/50 hover:text-white hover:border-white/20 text-sm font-semibold transition-all"
               >
                 Keep Booking
               </button>
               <button
-                onClick={handleCancel}
-                disabled={loading}
-                className="flex-1 py-3 rounded-xl bg-red-500/15 hover:bg-red-500/25 border border-red-500/25 text-red-400 hover:text-red-300 text-sm font-bold transition-all disabled:opacity-60"
+                onClick={() => setOtpOpen(true)}
+                className="flex-1 py-3 rounded-xl bg-red-500/15 hover:bg-red-500/25 border border-red-500/25 text-red-400 hover:text-red-300 text-sm font-bold transition-all"
               >
-                {loading ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin" /> Cancelling…
-                  </span>
-                ) : (
-                  "Confirm Cancellation"
-                )}
+                Confirm Cancellation
               </button>
             </div>
           </div>
         </div>
       )}
+
+      <OtpGate
+        open={otpOpen}
+        onClose={() => setOtpOpen(false)}
+        purpose="DELETE_BOOKING"
+        description={`Cancel booking #${bookingRef}`}
+        amount={finalCharge > 0 ? finalCharge : undefined}
+        refId={bookingId}
+        onConfirm={handleCancel}
+        title="Owner Approval — Cancel Booking"
+      />
     </>
   );
 }

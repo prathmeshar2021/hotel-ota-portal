@@ -2,11 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
 import { getCancellationPolicy, computeCancellationBreakdown, DEPOSIT_AMOUNT } from "@/lib/utils/cancellation";
+import { consumeOtp } from "@/lib/utils/otp";
 import { z } from "zod";
 
 const Schema = z.object({
   // Admin can optionally override the charge (e.g., waive it as goodwill)
   overrideCharge: z.number().min(0).optional(),
+  otpId: z.string(),
+  otpCode: z.string(),
 });
 
 export async function POST(
@@ -17,7 +20,7 @@ export async function POST(
   if (!session?.user?.hotelId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (session.user.role !== "HOTEL_ADMIN" && session.user.role !== "HOTEL_STAFF") {
+  if (session.user.role !== "HOTEL_ADMIN" && session.user.role !== "HOTEL_STAFF" && session.user.role !== "SUPER_ADMIN") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -51,6 +54,16 @@ export async function POST(
       { status: 404 }
     );
   }
+
+  // Owner OTP approval required to cancel a booking
+  const otp = await consumeOtp({
+    hotelId: session.user.hotelId,
+    otpId: parsed.data.otpId,
+    code: parsed.data.otpCode,
+    purpose: "DELETE_BOOKING",
+    refId: booking.id,
+  });
+  if (!otp.ok) return NextResponse.json({ error: otp.error }, { status: 403 });
 
   const depositAmount = booking.refundableDeposit ?? DEPOSIT_AMOUNT;
   const policy = getCancellationPolicy(new Date(booking.checkInDate));
