@@ -13,7 +13,12 @@ import { signIn } from "next-auth/react";
 
 interface BookingFormProps {
   hotel: { id: string; name: string };
-  room: { id: string; roomTypeLabel: string; basePrice: number; capacity: number };
+  /**
+   * `id` = category type string (e.g. "LUXURY_COTTAGE") when isCategory=true,
+   *       = room DB id (UUID) for legacy room-level bookings.
+   * `isCategory` tells the form to send roomCategory instead of roomId.
+   */
+  room: { id: string; roomTypeLabel: string; basePrice: number; capacity: number; isCategory?: boolean };
   checkIn: string;
   checkOut: string;
   nights: number;
@@ -77,16 +82,31 @@ export default function BookingForm({
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
       try {
-        const res = await fetch(
-          `/api/rooms/${room.id}/availability?checkIn=${localCheckIn}&checkOut=${localCheckOut}`
-        );
-        const data = await res.json();
-        setAvailStatus(data.available ? "available" : "unavailable");
-        setAvailReason(data.reason ?? "");
+        let available = true;
+        let reason = "";
+        if (room.isCategory) {
+          // Category-level availability check
+          const res = await fetch(
+            `/api/categories/${room.id.toLowerCase().replace(/_/g, "-")}/availability?hotelId=${hotel.id}&checkIn=${localCheckIn}&checkOut=${localCheckOut}`
+          );
+          const data = await res.json();
+          available = data.available > 0;
+          reason = available ? "" : `${data.total} room${data.total !== 1 ? "s" : ""} fully booked for these dates`;
+        } else {
+          // Legacy: specific room availability
+          const res = await fetch(
+            `/api/rooms/${room.id}/availability?checkIn=${localCheckIn}&checkOut=${localCheckOut}`
+          );
+          const data = await res.json();
+          available = data.available;
+          reason = data.reason ?? "";
+        }
+        setAvailStatus(available ? "available" : "unavailable");
+        setAvailReason(reason);
       } catch {
         setAvailStatus("idle");
       }
-    }, 600); // 600 ms debounce
+    }, 600);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localCheckIn, localCheckOut]);
@@ -168,7 +188,9 @@ export default function BookingForm({
     setLoading(true);
     try {
       const payload = {
-        hotelId: hotel.id, roomId: room.id,
+        hotelId: hotel.id,
+        // Category bookings use roomCategory; legacy room bookings use roomId
+        ...(room.isCategory ? { roomCategory: room.id } : { roomCategory: room.id }),
         checkInDate: localCheckIn, checkOutDate: localCheckOut,
         noOfPersons,
         couponCode: couponApplied ? couponCode : undefined,
@@ -393,12 +415,17 @@ export default function BookingForm({
 
           {/* Phone */}
           <div>
-            <label className={labelCls}>Mobile Number *</label>
+            <label className={labelCls}>
+              Mobile Number *
+              <span className="ml-1.5 text-green-400/70 normal-case font-normal tracking-normal text-[10px]">
+                📲 WhatsApp preferred — confirmation sent here
+              </span>
+            </label>
             <div className="flex">
               <span className="flex items-center gap-1.5 px-3 bg-white/5 border border-white/10 border-r-0 rounded-l-xl text-white/35 text-sm shrink-0">
                 <Phone className="w-3.5 h-3.5" /> +91
               </span>
-              <input type="tel" placeholder="10-digit number" value={guestPhone}
+              <input type="tel" placeholder="WhatsApp number" value={guestPhone}
                 onChange={(e) => setGuestPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
                 className="flex-1 bg-white/5 border border-white/10 rounded-r-xl px-4 py-3 text-white placeholder:text-white/25 text-sm focus:outline-none focus:border-amber-400/40 focus:bg-white/8 transition-all" />
             </div>

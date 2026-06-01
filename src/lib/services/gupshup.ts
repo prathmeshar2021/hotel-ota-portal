@@ -1,4 +1,4 @@
-const GUPSHUP_API_URL = "https://api.gupshup.io/sm/api/v1/msg";
+const GUPSHUP_API_URL = "https://api.gupshup.io/wa/api/v1/msg";
 
 interface WhatsAppTextMessage {
   to: string;
@@ -72,6 +72,7 @@ export const gupshup = {
     checkIn: string;
     checkOut: string;
     totalAmount: number;
+    payAtHotel?: boolean; // if true, show "Amount due at hotel" instead of "Amount paid"
   }) =>
     send({
       to: phone,
@@ -83,8 +84,10 @@ export const gupshup = {
         `🛏️ *Room:* ${data.roomType}\n` +
         `📅 *Check-in:* ${data.checkIn}\n` +
         `📅 *Check-out:* ${data.checkOut}\n` +
-        `💰 *Amount Paid:* ₹${data.totalAmount}\n\n` +
-        `Complete your *online check-in* at:\n` +
+        (data.payAtHotel
+          ? `💰 *Amount Due at Hotel:* ₹${data.totalAmount}\n`
+          : `💰 *Amount Paid:* ₹${data.totalAmount}\n`) +
+        `\nComplete your *online check-in* at:\n` +
         `${process.env.NEXT_PUBLIC_APP_URL}/checkin/${data.bookingRef}\n\n` +
         `This saves you time at the hotel. 🙏`,
     }),

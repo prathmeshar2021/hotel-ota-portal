@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
 import { z } from "zod";
-import { generateBookingRef, computeTotals } from "@/lib/utils/booking";
+import { generateBookingRef, computeTotals, applyCoupon } from "@/lib/utils/booking";
+import { REFUNDABLE_DEPOSIT } from "@/lib/utils/booking-calc";
+import { gupshup } from "@/lib/services/gupshup";
+import { format } from "date-fns";
+import { getCategoryMeta } from "@/lib/utils/room-categories";
 
 const AdminBookingSchema = z.object({
   roomId: z.string(),
@@ -29,13 +33,14 @@ const AdminBookingSchema = z.object({
   cashPaid: z.number().min(0).default(0),
   onlinePaid: z.number().min(0).default(0),
   refundableDeposit: z.number().min(0).default(0),
+  couponCode: z.string().optional(),
   specialRequests: z.string().optional(),
 });
 
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.hotelId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (session.user.role !== "HOTEL_ADMIN" && session.user.role !== "HOTEL_STAFF") {
+  if (session.user.role !== "HOTEL_ADMIN" && session.user.role !== "HOTEL_STAFF" && session.user.role !== "SUPER_ADMIN") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -104,11 +109,36 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Compute totals
+  // Validate coupon (if provided)
+  let couponDiscount = 0;
+  let couponId: string | undefined;
+
+  if (d.couponCode) {
+    const coupon = await prisma.coupon.findFirst({
+      where: {
+        code: d.couponCode.toUpperCase(),
+        isActive: true,
+        OR: [{ hotelId }, { hotelId: null }],
+        AND: [
+          { OR: [{ expiryDate: null }, { expiryDate: { gte: new Date() } }] },
+        ],
+      },
+    });
+    if (coupon) {
+      const hasUseLimit = coupon.maxUses !== null;
+      if (!hasUseLimit || coupon.usedCount < coupon.maxUses!) {
+        couponDiscount = applyCoupon(coupon, room.basePrice * noOfNights);
+        couponId = coupon.id;
+      }
+    }
+  }
+
+  // Compute totals — server always enforces REFUNDABLE_DEPOSIT
   const totals = computeTotals({
     roomRentPerNight: room.basePrice,
     noOfNights,
-    refundableDeposit: d.refundableDeposit,
+    couponDiscount,
+    refundableDeposit: REFUNDABLE_DEPOSIT,
   });
 
   const totalPaid = d.cashPaid + d.onlinePaid;
@@ -122,6 +152,7 @@ export async function POST(req: NextRequest) {
       bookingRef,
       hotelId,
       roomId: d.roomId,
+      roomCategory: room.roomType,   // always set from physical room's type
       primaryGuestId: guestId,
       source: d.source,
       status: "CONFIRMED",
@@ -130,6 +161,8 @@ export async function POST(req: NextRequest) {
       noOfNights,
       noOfPersons: d.noOfPersons,
       roomRent: totals.roomRent,
+      couponDiscount,
+      couponId: couponId ?? undefined,
       taxableAmount: totals.taxableAmount,
       cgst: totals.cgst,
       sgst: totals.sgst,
@@ -137,10 +170,18 @@ export async function POST(req: NextRequest) {
       cashPaid: d.cashPaid,
       onlinePaid: d.onlinePaid,
       balanceDue,
-      refundableDeposit: d.refundableDeposit,
+      refundableDeposit: REFUNDABLE_DEPOSIT,
       specialRequests: d.specialRequests || undefined,
     },
   });
+
+  // Increment coupon usage count
+  if (couponId) {
+    await prisma.coupon.update({
+      where: { id: couponId },
+      data: { usedCount: { increment: 1 } },
+    });
+  }
 
   // Payment record (cash/online split is tracked on the Booking itself)
   await prisma.payment.create({
@@ -179,6 +220,24 @@ export async function POST(req: NextRequest) {
         },
       });
     }
+  }
+
+  // Send WhatsApp confirmation to guest (fire-and-forget)
+  if (d.guestPhone) {
+    const hotel = await prisma.hotel.findUnique({
+      where: { id: hotelId },
+      select: { name: true },
+    });
+    gupshup.sendBookingConfirmation(d.guestPhone, {
+      guestName: d.guestName,
+      bookingRef,
+      hotelName: hotel?.name ?? "The Hotel",
+      roomType: getCategoryMeta(room.roomType).displayName,
+      checkIn: format(checkIn, "dd MMM yyyy"),
+      checkOut: format(checkOut, "dd MMM yyyy"),
+      totalAmount: totals.totalAmount,
+      payAtHotel: true,
+    }).catch((e) => console.error("[WhatsApp] Admin booking confirmation failed:", e));
   }
 
   return NextResponse.json({ bookingId: booking.id, bookingRef }, { status: 201 });

@@ -101,11 +101,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         );
         if (!valid) return null;
 
+        // Attach the default (single) hotel context so the super admin can use
+        // all hotel-admin features that rely on session.user.hotelId.
+        const hotel = await prisma.hotel.findFirst({
+          where: { isActive: true },
+          orderBy: { createdAt: "asc" },
+          select: { id: true, name: true, slug: true },
+        });
+
         return {
           id: admin.id,
           name: admin.name,
           email: admin.email,
           role: "SUPER_ADMIN" as Role,
+          hotelId: hotel?.id,
+          hotelName: hotel?.name,
+          hotelSlug: hotel?.slug,
         };
       },
     }),

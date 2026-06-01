@@ -4,6 +4,7 @@ import { verifyPaymentSignature } from "@/lib/services/razorpay";
 import { gupshup } from "@/lib/services/gupshup";
 import { syncBookingToAppSheet } from "@/lib/services/appsheet-sync";
 import { format } from "date-fns";
+import { getCategoryMeta } from "@/lib/utils/room-categories";
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
@@ -54,7 +55,7 @@ export async function POST(req: NextRequest) {
       guestName: booking.primaryGuest.name,
       bookingRef: booking.bookingRef,
       hotelName: booking.hotel.name,
-      roomType: booking.room.roomType.replace(/_/g, " "),
+      roomType: getCategoryMeta(booking.roomCategory).displayName,
       checkIn: format(booking.checkInDate, "dd MMM yyyy"),
       checkOut: format(booking.checkOutDate, "dd MMM yyyy"),
       totalAmount: booking.totalAmount,

@@ -9,7 +9,7 @@ export const metadata = { title: "New Booking – Front Desk" };
 export default async function NewBookingPage() {
   const session = await auth();
   if (!session?.user?.hotelId) redirect("/auth/staff-login");
-  if (session.user.role !== "HOTEL_ADMIN" && session.user.role !== "HOTEL_STAFF") redirect("/");
+  if (session.user.role !== "HOTEL_ADMIN" && session.user.role !== "HOTEL_STAFF" && session.user.role !== "SUPER_ADMIN") redirect("/");
 
   return (
     <div className="p-6 md:p-8 max-w-5xl">

@@ -8,7 +8,7 @@ import AccountsClient from "@/components/hotel-admin/AccountsClient";
 export default async function AccountsPage() {
   const session = await auth();
   if (!session?.user?.hotelId) redirect("/auth/staff-login");
-  if (session.user.role !== "HOTEL_ADMIN" && session.user.role !== "HOTEL_STAFF") redirect("/");
+  if (session.user.role !== "HOTEL_ADMIN" && session.user.role !== "HOTEL_STAFF" && session.user.role !== "SUPER_ADMIN") redirect("/");
 
   return (
     <div className="p-6 max-w-6xl">

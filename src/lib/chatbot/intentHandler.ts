@@ -86,10 +86,10 @@ export function getRuleBasedResponse(intent: Intent): BotResponse | null {
     // ── Room info ──────────────────────────────────────────────────────────────
     case "ROOM_INFO":
       return {
-        text: `🏡 We have **3 unique room types**, each with its own personality:\n\n${RESORT.rooms
+        text: `🏡 We have **15 rooms across 3 categories**, each with its own personality:\n\n${RESORT.rooms
           .map(
             (r) =>
-              `**${r.label}** · _${r.tagline}_\n👥 Up to ${r.capacity} guests · ${r.features.slice(0, 3).join(" · ")}`
+              `**${r.label}** (${r.group}) · _${r.tagline}_\n👥 Up to ${r.capacity} guests · ${r.qty} room${r.qty > 1 ? "s" : ""} · ${r.features.slice(0, 3).join(" · ")}`
           )
           .join("\n\n")}\n\nWould you like to check availability for your dates?`,
         quickReplies: ["Check Availability", "View Pricing", "Book Now"],

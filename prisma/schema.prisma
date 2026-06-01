@@ -214,9 +214,9 @@ model Room {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  hotel    Hotel      @relation(fields: [hotelId], references: [id])
-  bookings Booking[]
-  rates    RoomRate[]
+  hotel           Hotel      @relation(fields: [hotelId], references: [id])
+  assignedBookings Booking[]  // bookings where this room has been physically assigned
+  rates           RoomRate[]
 
   @@unique([hotelId, roomNumber])
 }
@@ -268,7 +268,10 @@ model Booking {
   id             String        @id @default(cuid())
   bookingRef     String        @unique
   hotelId        String
-  roomId         String
+  // Category booked by guest (always set). One of the RoomCategoryType strings.
+  roomCategory   String        @default("LUXURY_COTTAGE")
+  // Physical room assigned by admin after booking (null until assigned)
+  roomId         String?
   primaryGuestId String
   source         BookingSource @default(PORTAL)
   status         BookingStatus @default(PENDING_PAYMENT)
@@ -299,6 +302,10 @@ model Booking {
   checkedInAt       DateTime?
   checkedOutAt      DateTime?
 
+  // Checkout deposit decision
+  depositDeducted    Float   @default(0)   // amount actually deducted (can exceed deposit for damage)
+  depositNotes       String?               // reason for deduction
+
   // Cancellation
   cancelledAt        DateTime?
   cancellationCharge Float?    // null = not cancelled; 0 = free; >0 = charged amount
@@ -310,7 +317,7 @@ model Booking {
   updatedAt DateTime @updatedAt
 
   hotel        Hotel              @relation(fields: [hotelId], references: [id])
-  room         Room               @relation(fields: [roomId], references: [id])
+  room         Room?              @relation(fields: [roomId], references: [id])
   primaryGuest Guest              @relation("PrimaryGuest", fields: [primaryGuestId], references: [id])
   coupon       Coupon?            @relation(fields: [couponId], references: [id])
   companions   BookingCompanion[]
@@ -596,24 +603,26 @@ model PromotionScheme {
 }
 
 // ─── ADMIN OTP (super-admin authorisation for debits & deletes) ───────────────
-// Flow: admin requests (PENDING) → super admin issues code (ISSUED, 10-min TTL)
-//        → admin enters code → action executes (USED). May be REJECTED/EXPIRED.
+// Flow: admin requests (PENDING) → super admin issues code (no expiry)
+//        → admin enters code in Pending Approvals → action executes (USED).
+// OTPs never expire — super admin approves when free; admin completes at any time.
 model AdminOtp {
-  id          String     @id @default(cuid())
-  hotelId     String
-  purpose     OtpPurpose
-  description String // human-readable summary shown to the super admin
-  amount      Float?
-  refId       String? // entity being acted on (booking id, transaction id, …)
-  code        String? // 6-digit, set when issued
-  status      OtpStatus  @default(PENDING)
-  requestedBy String?
-  issuedBy    String?
-  issuedAt    DateTime?
-  expiresAt   DateTime?
-  usedAt      DateTime?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  id            String     @id @default(cuid())
+  hotelId       String
+  purpose       OtpPurpose
+  description   String // human-readable summary shown to the super admin
+  amount        Float?
+  refId         String? // entity being acted on (booking id, transaction id, …)
+  actionPayload Json? // full payload needed to re-execute the action on OTP entry
+  code          String? // 6-digit, set when issued
+  status        OtpStatus  @default(PENDING)
+  requestedBy   String?
+  issuedBy      String?
+  issuedAt      DateTime?
+  expiresAt     DateTime? // kept for DB compat; no longer set or checked
+  usedAt        DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
 
   hotel Hotel @relation(fields: [hotelId], references: [id])
 

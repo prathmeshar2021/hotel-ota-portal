@@ -8,7 +8,7 @@ import LedgerClient from "@/components/hotel-admin/LedgerClient";
 export default async function LedgerPage() {
   const session = await auth();
   if (!session?.user?.hotelId) redirect("/auth/staff-login");
-  if (session.user.role !== "HOTEL_ADMIN" && session.user.role !== "HOTEL_STAFF") redirect("/");
+  if (session.user.role !== "HOTEL_ADMIN" && session.user.role !== "HOTEL_STAFF" && session.user.role !== "SUPER_ADMIN") redirect("/");
 
   return (
     <div className="p-6 max-w-6xl">

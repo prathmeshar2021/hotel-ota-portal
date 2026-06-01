@@ -14,22 +14,12 @@ import {
   Users,
   Banknote,
   BookOpen,
+  BedDouble,
 } from "lucide-react";
 import { format } from "date-fns";
 import { auth } from "@/lib/auth/auth";
 import LoginNudge from "@/components/customer/LoginNudge";
-
-const ROOM_TYPE_LABELS: Record<string, string> = {
-  LUXURY_COTTAGE: "Luxury Cottage",
-  AC_ROOM: "AC Room",
-  NON_AC_ROOM: "Non-AC Room",
-};
-
-const ROOM_ACCENT: Record<string, string> = {
-  LUXURY_COTTAGE: "#F59E0B",
-  AC_ROOM: "#60A5FA",
-  NON_AC_ROOM: "#4ADE80",
-};
+import { getCategoryMeta } from "@/lib/utils/room-categories";
 
 export default async function ConfirmationPage({
   params,
@@ -53,7 +43,9 @@ export default async function ConfirmationPage({
 
   if (!booking) notFound();
 
-  const accentColor = ROOM_ACCENT[booking.room.roomType] ?? "#F59E0B";
+  const categoryMeta = getCategoryMeta(booking.roomCategory as never);
+  const accentColor = categoryMeta?.accentColor ?? "#F59E0B";
+  const categoryLabel = categoryMeta?.displayName ?? booking.roomCategory;
 
   return (
     <div className="min-h-screen bg-[#071209]">
@@ -162,12 +154,26 @@ export default async function ConfirmationPage({
             <div className="grid grid-cols-2 gap-3 pt-2 border-t border-white/8">
               <div className="glass-card rounded-xl p-3">
                 <p className="text-xs text-white/35 flex items-center gap-1 mb-1">
-                  <BookOpen className="w-3 h-3" /> Room
+                  <BookOpen className="w-3 h-3" /> Category
                 </p>
                 <p className="text-sm font-semibold text-white/80">
-                  {ROOM_TYPE_LABELS[booking.room.roomType]} #{booking.room.roomNumber}
+                  {categoryLabel}
                 </p>
               </div>
+
+              <div className="glass-card rounded-xl p-3">
+                <p className="text-xs text-white/35 flex items-center gap-1 mb-1">
+                  <BedDouble className="w-3 h-3" /> Room
+                </p>
+                {booking.room ? (
+                  <p className="text-sm font-semibold text-white/80">
+                    #{booking.room.roomNumber}
+                  </p>
+                ) : (
+                  <p className="text-xs text-white/40 italic">Assigned at hotel</p>
+                )}
+              </div>
+
               <div className="glass-card rounded-xl p-3">
                 <p className="text-xs text-white/35 flex items-center gap-1 mb-1">
                   <Moon className="w-3 h-3" /> Duration
@@ -176,14 +182,16 @@ export default async function ConfirmationPage({
                   {booking.noOfNights} night{booking.noOfNights > 1 ? "s" : ""}
                 </p>
               </div>
+
               <div className="glass-card rounded-xl p-3">
                 <p className="text-xs text-white/35 flex items-center gap-1 mb-1">
                   <Users className="w-3 h-3" /> Guests
                 </p>
                 <p className="text-sm font-semibold text-white/80">{booking.noOfPersons}</p>
               </div>
+
               {booking.onlinePaid === 0 && booking.balanceDue > 0 ? (
-                <div className="bg-amber-500/8 border border-amber-500/20 rounded-xl p-3">
+                <div className="col-span-2 bg-amber-500/8 border border-amber-500/20 rounded-xl p-3">
                   <p className="text-xs text-amber-400/70 flex items-center gap-1 mb-1">
                     <Banknote className="w-3 h-3" /> Due at Check-in
                   </p>
@@ -192,7 +200,7 @@ export default async function ConfirmationPage({
                   </p>
                 </div>
               ) : (
-                <div className="bg-white/3 rounded-xl p-3">
+                <div className="col-span-2 bg-white/3 rounded-xl p-3">
                   <p className="text-xs text-white/30 flex items-center gap-1 mb-1">
                     <Banknote className="w-3 h-3" /> Amount Paid
                   </p>

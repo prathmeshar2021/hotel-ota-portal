@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db/prisma";
 import Link from "next/link";
 import { format, startOfDay, endOfDay } from "date-fns";
 import { Calendar, User, ArrowRight, Phone, Search, LogIn, LogOut } from "lucide-react";
+import { getCategoryMeta } from "@/lib/utils/room-categories";
 
 type Filter = "all" | "arrivals-today" | "departures-today" | "in-house" | "upcoming" | "checked-out";
 
@@ -22,17 +23,6 @@ const STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
   NO_SHOW: { label: "No Show", cls: "bg-orange-500/15 text-orange-400 border-orange-500/25" },
 };
 
-const ROOM_ACCENT: Record<string, string> = {
-  LUXURY_COTTAGE: "#F59E0B",
-  AC_ROOM: "#60A5FA",
-  NON_AC_ROOM: "#4ADE80",
-};
-
-const ROOM_SHORT: Record<string, string> = {
-  LUXURY_COTTAGE: "LC",
-  AC_ROOM: "AC",
-  NON_AC_ROOM: "NAC",
-};
 
 const FILTERS: { key: Filter; label: string }[] = [
   { key: "all", label: "All Bookings" },
@@ -151,19 +141,20 @@ export default async function BookingsPage({ searchParams }: Props) {
         <div className="space-y-2">
           {bookings.map((b) => {
             const status = STATUS_CONFIG[b.status] ?? { label: b.status, cls: "bg-white/8 text-white/40 border-white/10" };
-            const accent = ROOM_ACCENT[b.room.roomType] ?? "#F59E0B";
+            const catMeta = getCategoryMeta(b.roomCategory);
+            const accent = catMeta.accentColor;
             return (
               <Link
                 key={b.id}
                 href={`/hotel-admin/bookings/${b.id}`}
                 className="flex items-center gap-4 bg-white/3 border border-white/8 rounded-2xl px-5 py-4 hover:bg-white/5 hover:border-white/15 transition-all group"
               >
-                {/* Room badge */}
+                {/* Category badge */}
                 <div
                   className="w-10 h-10 rounded-xl flex items-center justify-center text-xs font-bold text-black shrink-0"
                   style={{ background: accent }}
                 >
-                  {ROOM_SHORT[b.room.roomType]}
+                  {catMeta.shortName.slice(0, 3).toUpperCase()}
                 </div>
 
                 {/* Guest + ref */}
@@ -178,7 +169,11 @@ export default async function BookingsPage({ searchParams }: Props) {
                     <span className="flex items-center gap-1">
                       <Phone className="w-3 h-3" />{b.primaryGuest.phone}
                     </span>
-                    <span>#{b.room.roomNumber}</span>
+                    {b.room ? (
+                      <span>Room #{b.room.roomNumber}</span>
+                    ) : (
+                      <span className="italic text-white/25">Room TBA</span>
+                    )}
                     <span className="font-mono text-white/50">{b.bookingRef}</span>
                   </div>
                 </div>

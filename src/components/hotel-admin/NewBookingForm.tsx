@@ -1,16 +1,17 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import Image from "next/image";
 import {
   Search, User, Phone, Mail, CreditCard, ChevronRight, ChevronLeft,
   Check, Loader2, BedDouble, Calendar, Users, Banknote, Car,
-  MapPin, X, ArrowRight, UserPlus, UserCheck,
+  MapPin, X, ArrowRight, UserPlus, UserCheck, Tag, ShieldCheck, XCircle,
 } from "lucide-react";
-import { computeTotals } from "@/lib/utils/booking-calc";
+import { computeTotals, REFUNDABLE_DEPOSIT } from "@/lib/utils/booking-calc";
 import IdPhotoUpload from "@/components/hotel-admin/IdPhotoUpload";
+import { getCategoryMeta } from "@/lib/utils/room-categories";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -25,17 +26,7 @@ interface GuestResult {
   _count: { bookings: number };
 }
 
-const ROOM_LABELS: Record<string, string> = {
-  LUXURY_COTTAGE: "Luxury Cottage", AC_ROOM: "AC Room", NON_AC_ROOM: "Non-AC Room",
-};
-const ROOM_ACCENT: Record<string, string> = {
-  LUXURY_COTTAGE: "#F59E0B", AC_ROOM: "#60A5FA", NON_AC_ROOM: "#4ADE80",
-};
-const ROOM_FALLBACK: Record<string, string> = {
-  LUXURY_COTTAGE: "/images/lc-interior.jpg",
-  AC_ROOM: "/images/ac-interior.jpg",
-  NON_AC_ROOM: "/images/nonac-interior.jpg",
-};
+
 const ID_TYPES = [
   { value: "AADHAR", label: "Aadhar Card" },
   { value: "DRIVING_LICENSE", label: "Driving License" },
@@ -75,14 +66,16 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
   const [loadingRooms, setLoadingRooms] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState<AvailableRoom | null>(null);
 
-  // Step 2
-  const [guestPhone, setGuestPhone] = useState("");
+  // Step 2 — guest search
+  const [searchQuery, setSearchQuery] = useState("");
   const [searching, setSearching] = useState(false);
-  const [foundGuest, setFoundGuest] = useState<GuestResult | null>(null);
-  const [guestNotFound, setGuestNotFound] = useState(false);
+  const [searchResults, setSearchResults] = useState<GuestResult[]>([]);
   const [selectedGuest, setSelectedGuest] = useState<GuestResult | null>(null);
+  const [showRegisterForm, setShowRegisterForm] = useState(false);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // New guest form
   const [newGuestName, setNewGuestName] = useState("");
+  const [newGuestPhone, setNewGuestPhone] = useState("");
   const [newGuestEmail, setNewGuestEmail] = useState("");
   const [newGuestIdType, setNewGuestIdType] = useState("AADHAR");
   const [newGuestIdNumber, setNewGuestIdNumber] = useState("");
@@ -97,8 +90,14 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
   const [paymentMode, setPaymentMode] = useState<"CASH" | "ONLINE" | "MIXED">("CASH");
   const [cashPaid, setCashPaid] = useState("");
   const [onlinePaid, setOnlinePaid] = useState("");
-  const [deposit, setDeposit] = useState("0");
   const [specialRequests, setSpecialRequests] = useState("");
+  // Coupon
+  const [couponCode, setCouponCode] = useState("");
+  const [couponLoading, setCouponLoading] = useState(false);
+  const [appliedCoupon, setAppliedCoupon] = useState<{
+    couponId: string; discount: number; message: string;
+  } | null>(null);
+  const [couponError, setCouponError] = useState("");
 
   // ── Computed ──
   const nights = checkIn && checkOut
@@ -106,7 +105,12 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
     : 0;
 
   const totals = selectedRoom && nights > 0
-    ? computeTotals({ roomRentPerNight: selectedRoom.basePrice, noOfNights: nights, refundableDeposit: Number(deposit) || 0 })
+    ? computeTotals({
+        roomRentPerNight: selectedRoom.basePrice,
+        noOfNights: nights,
+        couponDiscount: appliedCoupon?.discount ?? 0,
+        refundableDeposit: REFUNDABLE_DEPOSIT,
+      })
     : null;
 
   const totalPaid = (Number(cashPaid) || 0) + (Number(onlinePaid) || 0);
@@ -127,43 +131,88 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
     } finally { setLoadingRooms(false); }
   }
 
-  // ── Step 2 handlers ──
-  async function searchGuest() {
-    const phone = guestPhone.replace(/\D/g, "");
-    if (phone.length < 10) { toast.error("Enter a valid 10-digit phone number"); return; }
+  // ── Guest search (debounced) ──
+  async function runSearch(q: string) {
+    const query = q.trim();
+    if (query.length < 2) { setSearchResults([]); return; }
     setSearching(true);
-    setFoundGuest(null);
-    setGuestNotFound(false);
-    setSelectedGuest(null);
     try {
-      const res = await fetch(`/api/hotel-admin/guests?q=${phone}`);
-      const data: GuestResult[] = await res.json();
-      const match = data.find(g => g.phone === phone);
-      if (match) {
-        setFoundGuest(match);
-        setSelectedGuest(match);
-      } else {
-        setGuestNotFound(true);
-      }
+      const res = await fetch(`/api/hotel-admin/guests?q=${encodeURIComponent(query)}`);
+      if (res.ok) setSearchResults(await res.json());
     } finally { setSearching(false); }
   }
 
-  function clearGuest() {
-    setFoundGuest(null);
-    setGuestNotFound(false);
+  function handleSearchChange(val: string) {
+    setSearchQuery(val);
     setSelectedGuest(null);
-    setGuestPhone("");
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => runSearch(val), 400);
+  }
+
+  useEffect(() => () => { if (searchTimer.current) clearTimeout(searchTimer.current); }, []);
+
+  function selectGuest(g: GuestResult) {
+    setSelectedGuest(g);
+    setSearchResults([]);
+    setSearchQuery("");
+    setShowRegisterForm(false);
+  }
+
+  // Called while typing — only clears previous search results, NOT the phone input
+  function clearGuestResults() {
+    setSearchResults([]);
+    setSelectedGuest(null);
     setNewGuestName("");
     setNewGuestEmail("");
+    setNewGuestPhone("");
     setNewGuestIdNumber("");
     setNewGuestIdFrontUrl("");
     setNewGuestIdBackUrl("");
   }
 
+  // Full reset of Step 2
+  function clearGuest() {
+    clearGuestResults();
+    setSearchQuery("");
+    setShowRegisterForm(false);
+  }
+
+  // ── Coupon handler ──
+  async function applyCouponCode() {
+    const code = couponCode.trim().toUpperCase();
+    if (!code) { setCouponError("Enter a coupon code"); return; }
+    if (!selectedRoom || !nights) { setCouponError("Select room and dates first"); return; }
+    setCouponLoading(true);
+    setCouponError("");
+    setAppliedCoupon(null);
+    try {
+      const roomRent = selectedRoom.basePrice * nights;
+      const res = await fetch("/api/coupons/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, hotelId, amount: roomRent }),
+      });
+      const data = await res.json();
+      if (!data.valid) { setCouponError(data.message ?? "Invalid coupon"); return; }
+      setAppliedCoupon({ couponId: data.couponId, discount: data.discount, message: data.message });
+    } catch {
+      setCouponError("Failed to validate coupon");
+    } finally {
+      setCouponLoading(false);
+    }
+  }
+
+  function removeCoupon() {
+    setAppliedCoupon(null);
+    setCouponCode("");
+    setCouponError("");
+  }
+
+  // ── Step 2 handlers ──
   // ── Submit ──
   async function handleSubmit() {
     const guestName = selectedGuest?.name ?? newGuestName;
-    const phone = guestPhone.replace(/\D/g, "");
+    const phone = (selectedGuest?.phone ?? newGuestPhone).replace(/\D/g, "");
 
     if (!guestName || phone.length !== 10) { toast.error("Guest details incomplete"); return; }
     if (!selectedRoom || !checkIn || !checkOut || nights < 1) { toast.error("Room/dates missing"); return; }
@@ -195,7 +244,8 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
           paymentMode,
           cashPaid: Number(cashPaid) || 0,
           onlinePaid: Number(onlinePaid) || 0,
-          refundableDeposit: Number(deposit) || 0,
+          refundableDeposit: REFUNDABLE_DEPOSIT,
+          couponCode: appliedCoupon ? couponCode.trim().toUpperCase() : undefined,
           specialRequests: specialRequests || undefined,
         }),
       });
@@ -279,21 +329,30 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
                 {rooms.length} room{rooms.length !== 1 ? "s" : ""} available
               </p>
               {rooms.map(room => {
-                const accent = ROOM_ACCENT[room.roomType] ?? "#F59E0B";
-                const img = room.images[0] ?? ROOM_FALLBACK[room.roomType];
+                const catMeta = getCategoryMeta(room.roomType);
+                const accent = catMeta.accentColor;
+                const img = room.images?.[0] ?? null;
                 const isSelected = selectedRoom?.id === room.id;
                 return (
                   <button key={room.id} onClick={() => setSelectedRoom(isSelected ? null : room)}
                     className={`w-full text-left flex gap-4 rounded-2xl p-4 border transition-all ${
                       isSelected ? "border-blue-500/50 bg-blue-500/8" : "border-white/8 bg-white/3 hover:border-white/20 hover:bg-white/5"
                     }`}>
-                    <div className="relative w-24 h-20 rounded-xl overflow-hidden shrink-0">
-                      <Image src={img} alt={room.roomNumber} fill className="object-cover" />
-                    </div>
+                    {img && (
+                      <div className="relative w-24 h-20 rounded-xl overflow-hidden shrink-0">
+                        <Image src={img} alt={room.roomNumber} fill className="object-cover" />
+                      </div>
+                    )}
+                    {!img && (
+                      <div className="w-24 h-20 rounded-xl shrink-0 flex items-center justify-center text-2xl font-bold"
+                        style={{ background: `${accent}20`, color: accent }}>
+                        {room.roomNumber}
+                      </div>
+                    )}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-sm font-bold" style={{ color: accent }}>
-                          {ROOM_LABELS[room.roomType]}
+                          {catMeta.displayName}
                         </span>
                         <span className="text-xs text-white/40">#{room.roomNumber}</span>
                         {isSelected && <Check className="w-4 h-4 text-blue-400 ml-auto" />}
@@ -330,152 +389,232 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
       {/* ── STEP 2: Guest ── */}
       {step === 2 && (
         <div className="space-y-5">
-          {/* Search by phone */}
-          <div className="bg-white/3 border border-white/8 rounded-2xl p-5">
-            <h2 className="font-semibold text-white mb-4 flex items-center gap-2">
-              <Search className="w-4 h-4 text-blue-400" /> Search Existing Guest
-            </h2>
-            <div className="flex gap-2">
-              <div className="flex flex-1">
-                <span className="flex items-center gap-1.5 px-3 bg-white/5 border border-white/10 border-r-0 rounded-l-xl text-white/35 text-sm shrink-0">
-                  <Phone className="w-3.5 h-3.5" /> +91
-                </span>
-                <input type="tel" placeholder="Enter phone number"
-                  value={guestPhone}
-                  onChange={e => { setGuestPhone(e.target.value.replace(/\D/g, "").slice(0, 10)); clearGuest(); }}
-                  className="flex-1 bg-white/5 border border-white/10 rounded-r-xl px-4 py-3 text-white placeholder:text-white/25 text-sm focus:outline-none focus:border-blue-400/40 transition-all" />
-              </div>
-              <button onClick={searchGuest} disabled={searching || guestPhone.replace(/\D/g, "").length < 10}
-                className="flex items-center gap-2 bg-blue-500 hover:bg-blue-400 disabled:opacity-50 text-white font-semibold px-4 py-3 rounded-xl text-sm transition-all shrink-0">
-                {searching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                Search
-              </button>
-            </div>
 
-            {/* Found existing guest */}
-            {foundGuest && (
-              <div className="mt-4 bg-green-500/8 border border-green-500/20 rounded-xl p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
-                      <UserCheck className="w-5 h-5 text-green-400" />
+          {/* Selected guest card — shown once a guest is chosen from search */}
+          {selectedGuest && (
+            <div className="bg-green-500/8 border border-green-500/25 rounded-2xl p-5">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-full bg-green-500/20 border border-green-500/25 flex items-center justify-center shrink-0">
+                    <UserCheck className="w-5 h-5 text-green-400" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-bold text-white">{selectedGuest.name}</p>
+                      <span className="text-[10px] font-semibold text-green-400 bg-green-500/15 border border-green-500/20 px-2 py-0.5 rounded-full">
+                        {selectedGuest._count.bookings > 0
+                          ? `${selectedGuest._count.bookings} past booking${selectedGuest._count.bookings !== 1 ? "s" : ""}`
+                          : "New guest"}
+                      </span>
+                    </div>
+                    <p className="text-white/50 text-sm">+91 {selectedGuest.phone}</p>
+                    {selectedGuest.email && <p className="text-white/35 text-xs">{selectedGuest.email}</p>}
+                    {selectedGuest.idNumber && (
+                      <p className="text-white/30 text-xs">{selectedGuest.idType} · {selectedGuest.idNumber}</p>
+                    )}
+                  </div>
+                </div>
+                <button onClick={clearGuest}
+                  className="flex items-center gap-1.5 text-xs text-white/35 hover:text-white/70 border border-white/10 hover:border-white/25 bg-white/3 hover:bg-white/8 px-3 py-2 rounded-xl transition-all shrink-0">
+                  <X className="w-3.5 h-3.5" /> Change
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Search + Register panel — hidden once a guest is selected */}
+          {!selectedGuest && (
+            <div className="bg-white/3 border border-white/8 rounded-2xl p-5">
+              {/* Header row */}
+              <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+                <h2 className="font-semibold text-white flex items-center gap-2">
+                  {showRegisterForm
+                    ? <><UserPlus className="w-4 h-4 text-amber-400" /> Register New Guest</>
+                    : <><Search className="w-4 h-4 text-blue-400" /> Find Guest</>}
+                </h2>
+                {!showRegisterForm ? (
+                  <button
+                    onClick={() => { setShowRegisterForm(true); setSearchResults([]); setSearchQuery(""); }}
+                    className="flex items-center gap-1.5 text-xs font-semibold text-amber-400 bg-amber-500/10 hover:bg-amber-500/18 border border-amber-500/25 px-3 py-2 rounded-xl transition-all shrink-0">
+                    <UserPlus className="w-3.5 h-3.5" /> Register New Guest
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setShowRegisterForm(false)}
+                    className="flex items-center gap-1.5 text-xs font-semibold text-white/40 hover:text-white/70 bg-white/5 hover:bg-white/10 border border-white/10 px-3 py-2 rounded-xl transition-all shrink-0">
+                    <Search className="w-3.5 h-3.5" /> Search Instead
+                  </button>
+                )}
+              </div>
+
+              {/* ── Search mode ── */}
+              {!showRegisterForm && (
+                <div>
+                  <div className="relative">
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/25 pointer-events-none" />
+                    {searching && (
+                      <Loader2 className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 animate-spin" />
+                    )}
+                    <input
+                      type="text"
+                      placeholder="Search by name, phone, email or ID number…"
+                      value={searchQuery}
+                      onChange={e => handleSearchChange(e.target.value)}
+                      onKeyDown={e => e.key === "Enter" && runSearch(searchQuery)}
+                      className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-10 py-3 text-white placeholder:text-white/25 text-sm focus:outline-none focus:border-blue-400/40 transition-all"
+                    />
+                  </div>
+                  <p className="text-white/25 text-xs mt-2">Type at least 2 characters — searches name, phone, email and ID</p>
+
+                  {/* Results */}
+                  {searchResults.length > 0 && (
+                    <div className="mt-3 space-y-2">
+                      {searchResults.map(g => (
+                        <button key={g.id} onClick={() => selectGuest(g)}
+                          className="w-full flex items-center gap-3 p-3.5 bg-white/3 hover:bg-blue-500/8 border border-white/8 hover:border-blue-500/30 rounded-xl transition-all text-left group">
+                          <div className="w-9 h-9 rounded-full bg-white/8 border border-white/10 flex items-center justify-center shrink-0 text-sm font-bold text-white/40 group-hover:bg-blue-500/15 group-hover:text-blue-300 transition-all">
+                            {g.name.charAt(0).toUpperCase()}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="font-semibold text-white/85 text-sm">{g.name}</p>
+                              {g._count.bookings > 0 && (
+                                <span className="text-[10px] text-blue-400/70 bg-blue-500/8 border border-blue-500/15 px-1.5 py-0.5 rounded-full">
+                                  {g._count.bookings} booking{g._count.bookings !== 1 ? "s" : ""}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-3 mt-0.5 flex-wrap">
+                              {g.phone && <span className="text-white/35 text-xs flex items-center gap-1"><Phone className="w-3 h-3" />+91 {g.phone}</span>}
+                              {g.email && <span className="text-white/30 text-xs truncate max-w-[160px]">{g.email}</span>}
+                              {g.idNumber && <span className="text-white/25 text-xs font-mono">{g.idType} {g.idNumber}</span>}
+                            </div>
+                          </div>
+                          <span className="text-blue-400/50 group-hover:text-blue-400 text-xs font-semibold shrink-0 transition-colors">Select →</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {searchQuery.length >= 2 && !searching && searchResults.length === 0 && (
+                    <div className="mt-3 text-center py-5 border border-dashed border-white/10 rounded-xl">
+                      <p className="text-white/30 text-sm">No guest found for &ldquo;{searchQuery}&rdquo;</p>
+                      <button
+                        onClick={() => { setShowRegisterForm(true); setSearchResults([]); }}
+                        className="mt-2 text-xs text-amber-400 hover:text-amber-300 transition-colors font-semibold">
+                        + Register as new guest
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── Register New Guest form ── */}
+              {showRegisterForm && (
+                <div className="space-y-4">
+
+                  {/* Phone — first field */}
+                  <div>
+                    <label className={labelCls}>Phone Number *</label>
+                    <div className="relative">
+                      <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/25" />
+                      <input
+                        type="tel"
+                        value={newGuestPhone}
+                        onChange={e => setNewGuestPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                        placeholder="10-digit mobile number"
+                        className={`${inputCls} pl-10`}
+                        maxLength={10}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className={labelCls}>Full Name *</label>
+                      <div className="relative">
+                        <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/25" />
+                        <input value={newGuestName} onChange={e => setNewGuestName(e.target.value)}
+                          placeholder="As on government ID" className={`${inputCls} pl-10`} />
+                      </div>
                     </div>
                     <div>
-                      <p className="font-semibold text-white">{foundGuest.name}</p>
-                      <p className="text-white/40 text-xs">+91 {foundGuest.phone}</p>
-                      {foundGuest.email && <p className="text-white/35 text-xs">{foundGuest.email}</p>}
-                      {foundGuest.idNumber && (
-                        <p className="text-white/35 text-xs">{foundGuest.idType} · {foundGuest.idNumber}</p>
-                      )}
+                      <label className={labelCls}>Email <span className="normal-case font-normal text-white/20">(optional)</span></label>
+                      <div className="relative">
+                        <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/25" />
+                        <input type="email" value={newGuestEmail} onChange={e => setNewGuestEmail(e.target.value)}
+                          placeholder="guest@email.com" className={`${inputCls} pl-10`} />
+                      </div>
+                    </div>
+                    <div>
+                      <label className={labelCls}>ID Type</label>
+                      <select value={newGuestIdType} onChange={e => setNewGuestIdType(e.target.value)} className={selectCls}>
+                        {ID_TYPES.map(t => <option key={t.value} value={t.value} className="bg-[#0D1B0E]">{t.label}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelCls}>ID Number *</label>
+                      <div className="relative">
+                        <CreditCard className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/25" />
+                        <input value={newGuestIdNumber} onChange={e => setNewGuestIdNumber(e.target.value)}
+                          placeholder="Enter ID number" className={`${inputCls} pl-10`} />
+                      </div>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <span className="text-xs text-green-400 bg-green-500/15 border border-green-500/20 px-2 py-1 rounded-full">
-                      Returning Guest
-                    </span>
-                    <p className="text-white/30 text-xs mt-1">{foundGuest._count.bookings} past booking{foundGuest._count.bookings !== 1 ? "s" : ""}</p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
 
-          {/* New guest form */}
-          {guestNotFound && (
-            <div className="bg-white/3 border border-white/8 rounded-2xl p-5">
-              <h2 className="font-semibold text-white mb-1 flex items-center gap-2">
-                <UserPlus className="w-4 h-4 text-amber-400" /> Register New Guest
-              </h2>
-              <p className="text-white/30 text-xs mb-4">No account found for this number. Fill in details to register.</p>
+                  <IdPhotoUpload
+                    frontUrl={newGuestIdFrontUrl}
+                    backUrl={newGuestIdBackUrl}
+                    onFrontChange={setNewGuestIdFrontUrl}
+                    onBackChange={setNewGuestIdBackUrl}
+                  />
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                <div>
-                  <label className={labelCls}>Full Name *</label>
-                  <div className="relative">
-                    <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/25" />
-                    <input value={newGuestName} onChange={e => setNewGuestName(e.target.value)}
-                      placeholder="As on government ID" className={`${inputCls} pl-10`} />
+                  <div>
+                    <p className="text-white/30 text-xs uppercase tracking-wider font-semibold mb-3">
+                      Travel Details <span className="normal-case font-normal">(optional)</span>
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div>
+                        <label className={labelCls}>Coming From</label>
+                        <div className="relative">
+                          <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/25" />
+                          <input value={comingFrom} onChange={e => setComingFrom(e.target.value)}
+                            placeholder="City / Address" className={`${inputCls} pl-10`} />
+                        </div>
+                      </div>
+                      <div>
+                        <label className={labelCls}>Purpose of Visit</label>
+                        <select value={purpose} onChange={e => setPurpose(e.target.value)} className={selectCls}>
+                          <option value="" className="bg-[#0D1B0E]">Select</option>
+                          {["Leisure / Tourism", "Business", "Family Visit", "Medical", "Education", "Other"].map(p => (
+                            <option key={p} value={p} className="bg-[#0D1B0E]">{p}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={labelCls}>Vehicle No. <span className="normal-case font-normal text-white/20">(optional)</span></label>
+                        <div className="relative">
+                          <Car className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/25" />
+                          <input value={vehicleNo} onChange={e => setVehicleNo(e.target.value.toUpperCase())}
+                            placeholder="CG04AB1234" className={`${inputCls} pl-10 uppercase`} />
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
-                <div>
-                  <label className={labelCls}>Email <span className="normal-case font-normal text-white/20">(optional)</span></label>
-                  <div className="relative">
-                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/25" />
-                    <input type="email" value={newGuestEmail} onChange={e => setNewGuestEmail(e.target.value)}
-                      placeholder="guest@email.com" className={`${inputCls} pl-10`} />
-                  </div>
-                </div>
-                <div>
-                  <label className={labelCls}>ID Type</label>
-                  <select value={newGuestIdType} onChange={e => setNewGuestIdType(e.target.value)} className={selectCls}>
-                    {ID_TYPES.map(t => <option key={t.value} value={t.value} className="bg-[#0D1B0E]">{t.label}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className={labelCls}>ID Number *</label>
-                  <div className="relative">
-                    <CreditCard className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/25" />
-                    <input value={newGuestIdNumber} onChange={e => setNewGuestIdNumber(e.target.value)}
-                      placeholder="Enter ID number" className={`${inputCls} pl-10`} />
-                  </div>
-                </div>
-              </div>
-
-              {/* ID Photos */}
-              <div className="mb-4">
-                <IdPhotoUpload
-                  frontUrl={newGuestIdFrontUrl}
-                  backUrl={newGuestIdBackUrl}
-                  onFrontChange={setNewGuestIdFrontUrl}
-                  onBackChange={setNewGuestIdBackUrl}
-                />
-              </div>
-
-              {/* Travel details */}
-              <p className="text-white/30 text-xs uppercase tracking-wider font-semibold mb-3">Travel Details <span className="normal-case font-normal">(optional)</span></p>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className={labelCls}>Coming From</label>
-                  <div className="relative">
-                    <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/25" />
-                    <input value={comingFrom} onChange={e => setComingFrom(e.target.value)}
-                      placeholder="City / Address" className={`${inputCls} pl-10`} />
-                  </div>
-                </div>
-                <div>
-                  <label className={labelCls}>Purpose of Visit</label>
-                  <select value={purpose} onChange={e => setPurpose(e.target.value)} className={selectCls}>
-                    <option value="" className="bg-[#0D1B0E]">Select</option>
-                    {["Leisure / Tourism", "Business", "Family Visit", "Medical", "Education", "Other"].map(p => (
-                      <option key={p} value={p} className="bg-[#0D1B0E]">{p}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className={labelCls}>Vehicle No. <span className="normal-case font-normal text-white/20">(optional)</span></label>
-                  <div className="relative">
-                    <Car className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/25" />
-                    <input value={vehicleNo} onChange={e => setVehicleNo(e.target.value.toUpperCase())}
-                      placeholder="CG04AB1234" className={`${inputCls} pl-10 uppercase`} />
-                  </div>
-                </div>
-              </div>
+              )}
             </div>
           )}
 
-          {!foundGuest && !guestNotFound && (
-            <div className="text-center py-8 text-white/20 text-sm">
-              Search by phone to find an existing guest or register a new one
-            </div>
-          )}
-
+          {/* Navigation — always visible */}
           <div className="flex gap-3 justify-between">
-            <button onClick={() => setStep(1)} className="flex items-center gap-2 text-white/40 hover:text-white/70 text-sm font-semibold px-4 py-3 rounded-xl bg-white/5 hover:bg-white/8 transition-all">
+            <button onClick={() => setStep(1)}
+              className="flex items-center gap-2 text-white/40 hover:text-white/70 text-sm font-semibold px-4 py-3 rounded-xl bg-white/5 hover:bg-white/8 transition-all">
               <ChevronLeft className="w-4 h-4" /> Back
             </button>
             <button
               onClick={() => setStep(3)}
-              disabled={!foundGuest && (!guestNotFound || !newGuestName || newGuestIdNumber.length < 4)}
+              disabled={!selectedGuest && (!showRegisterForm || !newGuestName || newGuestPhone.replace(/\D/g, "").length !== 10)}
               className="flex items-center gap-2 bg-blue-500 hover:bg-blue-400 disabled:opacity-40 text-white font-bold px-6 py-3 rounded-xl transition-all">
               Next: Payment <ChevronRight className="w-4 h-4" />
             </button>
@@ -491,7 +630,7 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
             <div>
               <p className="text-white/30 text-xs mb-0.5">Room</p>
               <p className="text-white/75 font-semibold">
-                {ROOM_LABELS[selectedRoom!.roomType]} #{selectedRoom!.roomNumber}
+                {getCategoryMeta(selectedRoom!.roomType).displayName} #{selectedRoom!.roomNumber}
               </p>
             </div>
             <div>
@@ -504,7 +643,7 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
             </div>
             <div>
               <p className="text-white/30 text-xs mb-0.5">Phone</p>
-              <p className="text-white/75 font-semibold">+91 {guestPhone}</p>
+              <p className="text-white/75 font-semibold">+91 {selectedGuest?.phone ?? newGuestPhone}</p>
             </div>
           </div>
 
@@ -557,11 +696,56 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
                     placeholder="0" className={inputCls} />
                 </div>
               )}
-              <div>
-                <label className={labelCls}>Refundable Deposit (₹) <span className="normal-case font-normal text-white/20">(optional)</span></label>
-                <input type="number" value={deposit} onChange={e => setDeposit(e.target.value)}
-                  placeholder="0" className={inputCls} />
+              {/* Fixed deposit — not editable */}
+              <div className="flex items-center justify-between bg-green-500/5 border border-green-500/15 rounded-xl px-4 py-3">
+                <div className="flex items-center gap-2 text-green-400/80 text-sm font-semibold">
+                  <ShieldCheck className="w-4 h-4 shrink-0" />
+                  Refundable Security Deposit
+                </div>
+                <span className="font-bold text-green-400">₹{REFUNDABLE_DEPOSIT}</span>
               </div>
+
+              {/* Coupon code */}
+              <div>
+                <label className={labelCls}>Coupon Code <span className="normal-case font-normal text-white/20">(optional)</span></label>
+                {appliedCoupon ? (
+                  <div className="flex items-center gap-3 bg-amber-500/8 border border-amber-500/20 rounded-xl px-4 py-3">
+                    <Tag className="w-4 h-4 text-amber-400 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-amber-300">{couponCode.toUpperCase()}</p>
+                      <p className="text-xs text-amber-400/70">{appliedCoupon.message}</p>
+                    </div>
+                    <button onClick={removeCoupon} className="text-white/30 hover:text-white/60 transition-colors shrink-0">
+                      <XCircle className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={couponCode}
+                        onChange={e => { setCouponCode(e.target.value.toUpperCase()); setCouponError(""); }}
+                        placeholder="Enter coupon code"
+                        className={`${inputCls} flex-1 uppercase`}
+                        onKeyDown={e => e.key === "Enter" && applyCouponCode()}
+                      />
+                      <button
+                        onClick={applyCouponCode}
+                        disabled={couponLoading || !couponCode.trim()}
+                        className="flex items-center gap-2 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/25 text-amber-400 hover:text-amber-300 font-semibold px-4 py-3 rounded-xl text-sm transition-all disabled:opacity-50 shrink-0"
+                      >
+                        {couponLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Tag className="w-4 h-4" />}
+                        Apply
+                      </button>
+                    </div>
+                    {couponError && (
+                      <p className="text-xs text-red-400/80">{couponError}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+
               <div>
                 <label className={labelCls}>Special Requests <span className="normal-case font-normal text-white/20">(optional)</span></label>
                 <textarea rows={2} value={specialRequests} onChange={e => setSpecialRequests(e.target.value)}
@@ -579,6 +763,12 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
                   <span>Room ({nights}N × ₹{selectedRoom!.basePrice.toLocaleString("en-IN")})</span>
                   <span>₹{totals.roomRent.toLocaleString("en-IN")}</span>
                 </div>
+                {appliedCoupon && (
+                  <div className="flex justify-between text-amber-400 text-xs">
+                    <span className="flex items-center gap-1"><Tag className="w-3 h-3" /> Coupon ({couponCode.toUpperCase()})</span>
+                    <span>−₹{appliedCoupon.discount.toLocaleString("en-IN")}</span>
+                  </div>
+                )}
                 {totals.cgst > 0 && <>
                   <div className="flex justify-between text-white/30 text-xs">
                     <span>CGST ({totals.cgstRate}%)</span>
@@ -589,12 +779,10 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
                     <span>₹{totals.sgst.toLocaleString("en-IN")}</span>
                   </div>
                 </>}
-                {Number(deposit) > 0 && (
-                  <div className="flex justify-between text-white/40 text-xs">
-                    <span>Refundable Deposit</span>
-                    <span>₹{Number(deposit).toLocaleString("en-IN")}</span>
-                  </div>
-                )}
+                <div className="flex justify-between text-green-400/70 text-xs">
+                  <span className="flex items-center gap-1"><ShieldCheck className="w-3 h-3" /> Refundable Deposit</span>
+                  <span>₹{REFUNDABLE_DEPOSIT}</span>
+                </div>
                 <div className="flex justify-between font-bold text-white text-base border-t border-white/8 pt-2 mt-2">
                   <span>Total</span>
                   <span className="text-amber-400">₹{totals.totalAmount.toLocaleString("en-IN")}</span>

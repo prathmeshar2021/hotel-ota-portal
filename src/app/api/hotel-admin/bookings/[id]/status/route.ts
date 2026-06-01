@@ -15,17 +15,18 @@ export async function PATCH(
   if (!session?.user?.hotelId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (session.user.role !== "HOTEL_ADMIN" && session.user.role !== "HOTEL_STAFF") {
+  if (session.user.role !== "HOTEL_ADMIN" && session.user.role !== "HOTEL_STAFF" && session.user.role !== "SUPER_ADMIN") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const { id } = await params;
-  const { status: newStatus } = await req.json();
+  const body = await req.json();
+  const { status: newStatus, depositRefunded, depositDeducted, depositNotes } = body;
 
   // Verify booking belongs to this hotel
   const booking = await prisma.booking.findFirst({
     where: { id, hotelId: session.user.hotelId },
-    select: { id: true, status: true, roomId: true },
+    select: { id: true, status: true, roomId: true, refundableDeposit: true },
   });
 
   if (!booking) {
@@ -45,20 +46,28 @@ export async function PATCH(
 
   if (newStatus === "CHECKED_IN") {
     updateData.checkedInAt = now;
-    // Update room status to OCCUPIED
-    await prisma.room.update({
-      where: { id: booking.roomId },
-      data: { status: "OCCUPIED" },
-    });
+    // Only mark room occupied if one has been assigned
+    if (booking.roomId) {
+      await prisma.room.update({
+        where: { id: booking.roomId },
+        data: { status: "OCCUPIED" },
+      });
+    }
   }
 
   if (newStatus === "CHECKED_OUT") {
     updateData.checkedOutAt = now;
-    // Free up the room
-    await prisma.room.update({
-      where: { id: booking.roomId },
-      data: { status: "CLEANING" }, // Needs cleaning after checkout
-    });
+    // Deposit decision — must be provided by the frontend
+    updateData.depositRefunded = depositRefunded ?? true;
+    updateData.depositDeducted = typeof depositDeducted === "number" ? depositDeducted : 0;
+    if (depositNotes) updateData.depositNotes = depositNotes;
+    // Free up the room if one was assigned
+    if (booking.roomId) {
+      await prisma.room.update({
+        where: { id: booking.roomId },
+        data: { status: "CLEANING" },
+      });
+    }
   }
 
   await prisma.booking.update({

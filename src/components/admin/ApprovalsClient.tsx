@@ -8,9 +8,9 @@ import {
   Check,
   X,
   Copy,
-  Clock,
   IndianRupee,
   RefreshCw,
+  ExternalLink,
 } from "lucide-react";
 
 export interface OtpItem {
@@ -19,18 +19,18 @@ export interface OtpItem {
   description: string;
   amount: number | null;
   refId: string | null;
+  actionPayload: Record<string, unknown> | null;
   status: string;
   code: string | null;
   requestedBy: string | null;
   issuedBy: string | null;
-  expiresAt: string | null;
   createdAt: string;
 }
 
 const PURPOSE_LABEL: Record<string, string> = {
   CASH_COLLECTION: "Cash collection",
   EXPENSE_DEBIT: "Expense / debit",
-  DELETE_BOOKING: "Delete booking",
+  DELETE_BOOKING: "Cancel booking",
   DELETE_TRANSACTION: "Delete transaction",
   DEPOSIT_DEDUCTION: "Deposit deduction",
   REFUND: "Refund",
@@ -43,25 +43,6 @@ function timeAgo(iso: string) {
   if (s < 3600) return `${Math.floor(s / 60)}m ago`;
   if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
   return `${Math.floor(s / 86400)}d ago`;
-}
-
-function Countdown({ expiresAt }: { expiresAt: string }) {
-  const [left, setLeft] = useState(() =>
-    Math.max(0, Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000))
-  );
-  useEffect(() => {
-    const t = setInterval(() => {
-      setLeft(Math.max(0, Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000)));
-    }, 1000);
-    return () => clearInterval(t);
-  }, [expiresAt]);
-  const m = Math.floor(left / 60);
-  const s = left % 60;
-  return (
-    <span className={left < 60 ? "text-red-400" : "text-amber-300"}>
-      {m}:{String(s).padStart(2, "0")}
-    </span>
-  );
 }
 
 export default function ApprovalsClient({
@@ -130,6 +111,14 @@ export default function ApprovalsClient({
     );
   }
 
+  // Extract booking ref from payload or description
+  function getBookingRef(item: OtpItem): string | null {
+    if (item.purpose !== "DELETE_BOOKING") return null;
+    if (item.actionPayload?.bookingRef) return String(item.actionPayload.bookingRef);
+    if (item.description.includes("#")) return item.description.split("#")[1]?.trim() ?? null;
+    return null;
+  }
+
   return (
     <div className="px-4 sm:px-6 lg:px-10 py-6 lg:py-8 max-w-4xl mx-auto">
       <div className="flex items-start justify-between mb-6 gap-3">
@@ -141,8 +130,8 @@ export default function ApprovalsClient({
             <ShieldCheck className="w-6 h-6 text-red-400" /> Approvals
           </h1>
           <p className="text-white/40 text-sm mt-1">
-            Issue a one-time code to authorize a debit, deletion, or refund.
-            Codes expire in 10 minutes.
+            Issue a one-time code to authorise a debit, deletion, or refund.
+            Codes have <strong className="text-white/60">no expiry</strong> — they remain valid until used or rejected.
           </p>
         </div>
         <button
@@ -165,7 +154,8 @@ export default function ApprovalsClient({
         )}
         {pending.map((item) => {
           const issued = item.status === "ISSUED";
-          const expired = item.status === "EXPIRED";
+          const bookingRef = getBookingRef(item);
+
           return (
             <div
               key={item.id}
@@ -177,6 +167,7 @@ export default function ApprovalsClient({
             >
               <div className="flex items-start gap-3">
                 <div className="flex-1 min-w-0">
+                  {/* Purpose + amount */}
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-white font-bold text-sm">
                       {PURPOSE_LABEL[item.purpose] ?? item.purpose}
@@ -188,13 +179,30 @@ export default function ApprovalsClient({
                       </span>
                     )}
                   </div>
+
+                  {/* Description */}
                   <p className="text-white/60 text-sm mt-1">{item.description}</p>
+
+                  {/* Booking link for cancellation requests */}
+                  {item.purpose === "DELETE_BOOKING" && item.refId && (
+                    <a
+                      href={`/hotel-admin/bookings/${item.refId}`}
+                      className="inline-flex items-center gap-1.5 text-blue-400 hover:text-blue-300 text-xs mt-1.5 transition-colors"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      View booking{bookingRef ? ` #${bookingRef}` : ""}
+                    </a>
+                  )}
+
                   <p className="text-white/30 text-xs mt-1.5">
                     Requested by {item.requestedBy ?? "Staff"} · {timeAgo(item.createdAt)}
                   </p>
                 </div>
               </div>
 
+              {/* Issued code display */}
               {issued && item.code && (
                 <div className="mt-4 flex items-center gap-3 bg-black/30 rounded-xl px-4 py-3 border border-amber-500/20">
                   <div>
@@ -211,17 +219,13 @@ export default function ApprovalsClient({
                   >
                     <Copy className="w-4 h-4" />
                   </button>
-                  {item.expiresAt && (
-                    <span className="ml-auto flex items-center gap-1.5 text-sm font-bold">
-                      <Clock className="w-4 h-4 text-white/40" />
-                      <Countdown expiresAt={item.expiresAt} />
-                    </span>
-                  )}
+                  <span className="ml-auto text-xs text-white/30 font-medium">No expiry</span>
                 </div>
               )}
 
+              {/* Actions */}
               <div className="flex gap-2 mt-4">
-                {!issued && !expired && (
+                {!issued && (
                   <button
                     onClick={() => issue(item)}
                     disabled={busyId === item.id}
@@ -235,11 +239,11 @@ export default function ApprovalsClient({
                     Issue OTP
                   </button>
                 )}
-                {expired && (
+                {issued && (
                   <button
                     onClick={() => issue(item)}
                     disabled={busyId === item.id}
-                    className="flex items-center gap-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-60 text-black font-bold text-sm px-4 py-2 rounded-xl transition-all"
+                    className="flex items-center gap-2 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 text-amber-300 font-bold text-sm px-4 py-2 rounded-xl transition-all"
                   >
                     <RefreshCw className="w-4 h-4" /> Re-issue
                   </button>

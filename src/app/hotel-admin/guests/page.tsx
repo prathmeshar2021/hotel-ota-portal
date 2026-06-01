@@ -21,7 +21,7 @@ interface SearchParams {
 export default async function GuestsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const session = await auth();
   if (!session?.user?.hotelId) redirect("/auth/staff-login");
-  if (session.user.role !== "HOTEL_ADMIN" && session.user.role !== "HOTEL_STAFF") redirect("/");
+  if (session.user.role !== "HOTEL_ADMIN" && session.user.role !== "HOTEL_STAFF" && session.user.role !== "SUPER_ADMIN") redirect("/");
 
   const { q } = await searchParams;
   const query = q?.trim() ?? "";

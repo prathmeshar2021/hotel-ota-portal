@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { X, AlertTriangle, ShieldCheck, CheckCircle } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { X, AlertTriangle, ShieldCheck, CheckCircle, Loader2 } from "lucide-react";
 import { getCancellationPolicy, computeCancellationBreakdown, formatHoursUntilCheckIn } from "@/lib/utils/cancellation";
-import OtpGate from "@/components/hotel-admin/OtpGate";
 
 interface Props {
   bookingId: string;
@@ -18,8 +18,9 @@ export default function AdminCancelBookingButton({
   bookingId, bookingRef, checkInDate, totalAmount, depositAmount,
 }: Props) {
   const [open, setOpen] = useState(false);
-  const [otpOpen, setOtpOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [waiveCharge, setWaiveCharge] = useState(false);
+  const router = useRouter();
 
   const policy = getCancellationPolicy(new Date(checkInDate));
   const breakdown = computeCancellationBreakdown(totalAmount, depositAmount, policy.chargePercent);
@@ -31,18 +32,37 @@ export default function AdminCancelBookingButton({
     policy.tier === "HALF" ? "bg-amber-500/10 border-amber-500/20 text-amber-400" :
     "bg-red-500/10 border-red-500/20 text-red-400";
 
-  async function handleCancel(otpId: string, otpCode: string) {
-    const res = await fetch(`/api/hotel-admin/bookings/${bookingId}/cancel`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ overrideCharge: finalCharge, otpId, otpCode }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error ?? "Cancellation failed");
-    toast.success(`Booking #${bookingRef} cancelled`);
-    setOtpOpen(false);
-    setOpen(false);
-    window.location.reload();
+  // Non-blocking: create an OTP approval request and let admin continue.
+  // The actual cancellation is completed later in Pending Approvals.
+  async function requestCancellationApproval() {
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/hotel-admin/otp/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          purpose: "DELETE_BOOKING",
+          description: `Cancel booking #${bookingRef}`,
+          amount: finalCharge > 0 ? finalCharge : undefined,
+          refId: bookingId,
+          actionPayload: {
+            overrideCharge: finalCharge,
+            bookingRef,
+          },
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to submit request");
+      toast.success("Approval request sent — go to Pending Approvals to complete when the owner issues the code.", {
+        duration: 5000,
+      });
+      setOpen(false);
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Something went wrong");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -56,7 +76,7 @@ export default function AdminCancelBookingButton({
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setOpen(false)} />
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => !submitting && setOpen(false)} />
           <div className="relative bg-[#0d1a0e] border border-white/10 rounded-3xl p-6 w-full max-w-md shadow-2xl">
 
             {/* Header */}
@@ -70,7 +90,7 @@ export default function AdminCancelBookingButton({
                   <p className="text-white/35 text-xs">#{bookingRef}</p>
                 </div>
               </div>
-              <button onClick={() => setOpen(false)} className="text-white/30 hover:text-white/60 p-1 rounded-lg transition-colors">
+              <button onClick={() => !submitting && setOpen(false)} className="text-white/30 hover:text-white/60 p-1 rounded-lg transition-colors">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -131,35 +151,38 @@ export default function AdminCancelBookingButton({
               </label>
             )}
 
+            {/* Owner approval notice */}
+            <div className="bg-amber-500/8 border border-amber-500/20 rounded-xl px-4 py-3 mb-4 text-xs text-amber-300/80">
+              <ShieldCheck className="w-3.5 h-3.5 inline mr-1.5" />
+              This will send an approval request to the owner. Once approved, complete the cancellation from <strong>Pending Approvals</strong>.
+            </div>
+
             {/* Actions */}
             <div className="flex gap-3">
               <button
-                onClick={() => setOpen(false)}
-                className="flex-1 py-3 rounded-xl border border-white/10 text-white/50 hover:text-white hover:border-white/20 text-sm font-semibold transition-all"
+                onClick={() => !submitting && setOpen(false)}
+                disabled={submitting}
+                className="flex-1 py-3 rounded-xl border border-white/10 text-white/50 hover:text-white hover:border-white/20 text-sm font-semibold transition-all disabled:opacity-50"
               >
                 Keep Booking
               </button>
               <button
-                onClick={() => setOtpOpen(true)}
-                className="flex-1 py-3 rounded-xl bg-red-500/15 hover:bg-red-500/25 border border-red-500/25 text-red-400 hover:text-red-300 text-sm font-bold transition-all"
+                onClick={requestCancellationApproval}
+                disabled={submitting}
+                className="flex-1 py-3 rounded-xl bg-red-500/15 hover:bg-red-500/25 border border-red-500/25 text-red-400 hover:text-red-300 text-sm font-bold transition-all disabled:opacity-60"
               >
-                Confirm Cancellation
+                {submitting ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" /> Sending…
+                  </span>
+                ) : (
+                  "Request Cancellation Approval"
+                )}
               </button>
             </div>
           </div>
         </div>
       )}
-
-      <OtpGate
-        open={otpOpen}
-        onClose={() => setOtpOpen(false)}
-        purpose="DELETE_BOOKING"
-        description={`Cancel booking #${bookingRef}`}
-        amount={finalCharge > 0 ? finalCharge : undefined}
-        refId={bookingId}
-        onConfirm={handleCancel}
-        title="Owner Approval — Cancel Booking"
-      />
     </>
   );
 }

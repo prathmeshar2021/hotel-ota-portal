@@ -79,7 +79,7 @@ export async function syncBookingToAppSheet(bookingId: string) {
       booking.totalAmount,
       "Confirmed",                                 // Status
       booking.primaryGuest.idNumber ?? "",
-      booking.room.roomNumber,
+      booking.room?.roomNumber ?? "",
       booking.primaryGuest.phone,
       booking.primaryGuest.name,
       booking.coupon?.code ?? "",

@@ -77,7 +77,7 @@ export default function HeroSection({ heroImage, galleryImages, avgRating, revie
   useEffect(() => { setMounted(true); }, []);
 
   return (
-    <section ref={ref} className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden">
+    <section ref={ref} className="relative isolate min-h-screen flex flex-col items-center justify-center overflow-hidden">
 
       {/* ── Parallax background ─────────────────────────── */}
       <motion.div className="absolute inset-0 -z-10" style={{ y: bgY }}>

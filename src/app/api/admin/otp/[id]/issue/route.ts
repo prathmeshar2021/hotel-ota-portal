@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSuperAdmin } from "@/lib/auth/superAdmin";
 import { prisma } from "@/lib/db/prisma";
-import { generateOtpCode, OTP_TTL_MINUTES } from "@/lib/utils/otp";
+import { generateOtpCode } from "@/lib/utils/otp";
 
-// POST /api/admin/otp/[id]/issue — owner issues a 10-min code for a request
+// POST /api/admin/otp/[id]/issue — owner issues a permanent code for a request
+// OTPs no longer expire; they are valid until used or rejected.
 export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -20,7 +21,6 @@ export async function POST(
     return NextResponse.json({ error: "Already used" }, { status: 409 });
 
   const code = generateOtpCode();
-  const expiresAt = new Date(Date.now() + OTP_TTL_MINUTES * 60 * 1000);
 
   const updated = await prisma.adminOtp.update({
     where: { id },
@@ -29,13 +29,9 @@ export async function POST(
       status: "ISSUED",
       issuedBy: ctx.name,
       issuedAt: new Date(),
-      expiresAt,
+      expiresAt: null, // no expiry
     },
   });
 
-  return NextResponse.json({
-    id: updated.id,
-    code,
-    expiresAt: expiresAt.toISOString(),
-  });
+  return NextResponse.json({ id: updated.id, code });
 }

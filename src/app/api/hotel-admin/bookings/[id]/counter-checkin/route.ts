@@ -34,7 +34,7 @@ export async function POST(
   if (!session?.user?.hotelId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (session.user.role !== "HOTEL_ADMIN" && session.user.role !== "HOTEL_STAFF") {
+  if (session.user.role !== "HOTEL_ADMIN" && session.user.role !== "HOTEL_STAFF" && session.user.role !== "SUPER_ADMIN") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -169,17 +169,18 @@ export async function POST(
     });
   }
 
-  // 5. Transition booking + room
-  await Promise.all([
-    prisma.booking.update({
-      where: { id: booking.id },
-      data: { status: "CHECKED_IN", checkedInAt: now, onlineCheckinDone: true },
-    }),
-    prisma.room.update({
+  // 5. Transition booking; mark room occupied only if one has been assigned
+  await prisma.booking.update({
+    where: { id: booking.id },
+    data: { status: "CHECKED_IN", checkedInAt: now, onlineCheckinDone: true },
+  });
+
+  if (booking.roomId) {
+    await prisma.room.update({
       where: { id: booking.roomId },
       data: { status: "OCCUPIED" },
-    }),
-  ]);
+    });
+  }
 
   return NextResponse.json({ success: true, message: "Guest checked in successfully" });
 }

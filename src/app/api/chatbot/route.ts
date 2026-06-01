@@ -3,6 +3,7 @@ import { classifyIntent, getRuleBasedResponse } from "@/lib/chatbot/intentHandle
 import { callGemini } from "@/lib/chatbot/geminiService";
 import { prisma } from "@/lib/db/prisma";
 import { RESORT } from "@/lib/chatbot/resortData";
+import { getCategoryMeta } from "@/lib/utils/room-categories";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 interface ChatHistoryItem {
@@ -28,64 +29,58 @@ interface RoomOption {
   accent: string;
 }
 
-const ROOM_LABELS: Record<string, string> = {
-  LUXURY_COTTAGE: "Luxury Cottage",
-  AC_ROOM: "AC Room",
-  NON_AC_ROOM: "Non-AC Room",
-};
-const ROOM_ACCENTS: Record<string, string> = {
-  LUXURY_COTTAGE: "#F59E0B",
-  AC_ROOM: "#60A5FA",
-  NON_AC_ROOM: "#4ADE80",
-};
-
 // ─── Availability DB query ──────────────────────────────────────────────────────
 async function getAvailableRooms(checkIn: string, checkOut: string): Promise<RoomOption[]> {
   try {
     const hotel = await prisma.hotel.findUnique({
       where: { slug: RESORT.hotelSlug },
-      select: {
-        rooms: {
-          where: {
-            isActive: true,
-            status: { not: "MAINTENANCE" },
-            bookings: {
-              none: {
-                status: { in: ["CONFIRMED", "CHECKED_IN"] },
-                checkInDate: { lt: new Date(checkOut) },
-                checkOutDate: { gt: new Date(checkIn) },
-              },
-            },
-          },
-          select: {
-            id: true,
-            roomType: true,
-            basePrice: true,
-            capacity: true,
-          },
-          orderBy: { basePrice: "asc" },
-        },
-      },
+      select: { id: true },
     });
 
     if (!hotel) return [];
 
+    // Query rooms directly — avoids Prisma type issues with nested relation filters
+    const rooms = await prisma.room.findMany({
+      where: {
+        hotelId: hotel.id,
+        isActive: true,
+        status: { not: "MAINTENANCE" },
+        assignedBookings: {
+          none: {
+            status: { in: ["CONFIRMED", "CHECKED_IN"] },
+            checkInDate: { lt: new Date(checkOut) },
+            checkOutDate: { gt: new Date(checkIn) },
+          },
+        },
+      },
+      select: {
+        id: true,
+        roomType: true,
+        basePrice: true,
+        capacity: true,
+      },
+      orderBy: { basePrice: "asc" },
+    });
+
     // One representative room per type
     const seen = new Set<string>();
-    return hotel.rooms
+    return rooms
       .filter((r) => {
         if (seen.has(r.roomType)) return false;
         seen.add(r.roomType);
         return true;
       })
-      .map((r) => ({
-        id: r.id,
-        type: r.roomType,
-        label: ROOM_LABELS[r.roomType] ?? r.roomType,
-        price: r.basePrice,
-        capacity: r.capacity,
-        accent: ROOM_ACCENTS[r.roomType] ?? "#F59E0B",
-      }));
+      .map((r) => {
+        const meta = getCategoryMeta(r.roomType);
+        return {
+          id: r.id,
+          type: r.roomType,
+          label: meta.displayName,
+          price: r.basePrice,
+          capacity: r.capacity,
+          accent: meta.accentColor,
+        };
+      });
   } catch (err) {
     console.error("[Chatbot] DB availability error:", err);
     return [];

@@ -10,6 +10,7 @@ import ReviewMarquee from "@/components/customer/ReviewMarquee";
 import { prisma } from "@/lib/db/prisma";
 import { Mail, MapPin, Phone, Shield, Tv2, Wind, Zap, Droplets, Car, Wifi, Flame, ArrowRight } from "lucide-react";
 import type { ShowcaseRoom } from "@/components/customer/RoomShowcase";
+import { getCategoryImages } from "@/lib/utils/room-categories";
 
 async function getResort() {
   return prisma.hotel.findUnique({
@@ -27,36 +28,72 @@ const ROOM_CONFIG: Record<string, Omit<ShowcaseRoom, "price" | "capacity" | "ima
     label: "Luxury Cottage",
     tagline: "Pine Wood · Amber Soul",
     description:
-      "Handcrafted pine interiors with cathedral ceilings, warm amber LED strips running the length of the roof, and a floating bed with blue underglow — up to 5 guests in pure forest luxury.",
+      "Our finest cottages — handcrafted pine interiors, warm amber LED strips, premium furnishings and a private sit-out with breathtaking forest views. Up to 4 guests.",
     bgGradient: "linear-gradient(135deg, #2A1205 0%, #6B3410 60%, #1A0A02 100%)",
     accentColor: "#F59E0B",
     accentBg: "#F59E0B15",
     ledColor: "#F59E0B",
-    features: ["Pine Cathedral Ceiling", "Amber LED Strips", "Blue Bed Underglow", "Garden Sliding Door", "Air Conditioning", "Smart TV"],
+    features: ["Premium Furnishings", "Amber LED Strips", "Private Sit-out", "Forest Views", "Air Conditioning", "Smart TV"],
   },
-  AC_ROOM: {
-    type: "AC_ROOM",
-    label: "AC Room",
+  PINEWOOD_COTTAGE: {
+    type: "PINEWOOD_COTTAGE",
+    label: "Pinewood Cottage",
+    tagline: "Rustic Charm · Pine Nest",
+    description:
+      "Cozy cottages nestled among the pines with a warm, rustic charm, a private sit-out and all the modern comforts. The perfect woodland hideaway for up to 4.",
+    bgGradient: "linear-gradient(135deg, #0A2012 0%, #14502E 60%, #05140A 100%)",
+    accentColor: "#86EFAC",
+    accentBg: "#86EFAC15",
+    ledColor: "#34D399",
+    features: ["Pine Wood Interiors", "Private Sit-out", "Rustic Charm", "Forest Views", "Air Conditioning", "Smart TV"],
+  },
+  THEATRE_COTTAGE: {
+    type: "THEATRE_COTTAGE",
+    label: "Theatre Style Cottage",
+    tagline: "Private Screen · Exclusive Stay",
+    description:
+      "An exclusive private cottage with a theatre-style entertainment setup — the ideal special-occasion getaway for up to 4 guests.",
+    bgGradient: "linear-gradient(135deg, #2A0810 0%, #6B1024 60%, #150409 100%)",
+    accentColor: "#FCA5A5",
+    accentBg: "#FCA5A515",
+    ledColor: "#F87171",
+    features: ["Theatre Setup", "Private Cottage", "Exclusive Stay", "Premium Bedding", "Air Conditioning", "Smart TV"],
+  },
+  PREMIUM_AC_ROOM: {
+    type: "PREMIUM_AC_ROOM",
+    label: "Deluxe AC Room",
     tagline: "Slate Dark · Electric Blue",
     description:
-      "Bold dark-slate interiors, cool blue LED mood lighting, a hexagonal wall sculpture, and a full garden-view window that frames the forest. Modern luxury for 2.",
+      "Modern air-conditioned rooms with premium furnishings, cool blue LED mood lighting and scenic valley views. Contemporary comfort for 2.",
     bgGradient: "linear-gradient(135deg, #040D1E 0%, #0A1E42 60%, #03080F 100%)",
     accentColor: "#60A5FA",
     accentBg: "#60A5FA15",
     ledColor: "#3B82F6",
-    features: ["Blue LED Ambiance", "Hex Wall Sculpture", "Forest Window View", "Air Conditioning", "Smart TV", "Modern Design"],
+    features: ["Blue LED Ambiance", "Premium Furnishings", "Valley Views", "Air Conditioning", "Smart TV", "Modern Design"],
+  },
+  CAVE_AC_ROOM: {
+    type: "CAVE_AC_ROOM",
+    label: "Cave Theme AC Room",
+    tagline: "Stone Soul · Cave Vibes",
+    description:
+      "Unique cave-inspired interiors with full air conditioning — a truly one-of-a-kind themed stay you won't find anywhere else.",
+    bgGradient: "linear-gradient(135deg, #1A1024 0%, #3D1E5C 60%, #0D0814 100%)",
+    accentColor: "#A78BFA",
+    accentBg: "#A78BFA15",
+    ledColor: "#8B5CF6",
+    features: ["Cave Theme Interiors", "Ambient Lighting", "Unique Experience", "Air Conditioning", "Smart TV", "Cozy Retreat"],
   },
   NON_AC_ROOM: {
     type: "NON_AC_ROOM",
     label: "Non-AC Room",
     tagline: "Natural Light · Green Glow",
     description:
-      "Geometric white walls, bamboo-thatched ceiling, vibrant green LED accents, an optional loft — and nature's own air conditioning through the trees.",
+      "Comfortable, naturally ventilated rooms with forest views, vibrant green LED accents and all the basic comforts — nature's own air conditioning through the trees.",
     bgGradient: "linear-gradient(135deg, #081A06 0%, #1A3D12 60%, #05100A 100%)",
     accentColor: "#4ADE80",
     accentBg: "#4ADE8015",
     ledColor: "#22C55E",
-    features: ["Bamboo Thatched Roof", "Green LED Glow", "Optional Loft", "Geometric Walls", "Smart TV", "Natural Breeze"],
+    features: ["Forest Views", "Green LED Glow", "Natural Breeze", "Geometric Walls", "Smart TV", "All Essentials"],
   },
 };
 
@@ -83,7 +120,11 @@ export default async function HomePage() {
           ...cfg,
           price: room.basePrice,
           capacity: room.capacity,
-          imageSrc: room.images?.[0] ?? galleryImages[showcaseRooms.length] ?? null,
+          imageSrc:
+            getCategoryImages(room.roomType)[0] ??
+            room.images?.[0] ??
+            galleryImages[showcaseRooms.length] ??
+            null,
           hotelSlug: "the-urban-escape-bhilai",
         });
       }
@@ -93,13 +134,23 @@ export default async function HomePage() {
   // Fallback: if DB has no rooms yet, use static config
   if (showcaseRooms.length === 0) {
     const fallback = [
-      { type: "LUXURY_COTTAGE", price: 2500, capacity: 5 },
-      { type: "AC_ROOM", price: 1200, capacity: 2 },
-      { type: "NON_AC_ROOM", price: 800, capacity: 2 },
+      { type: "LUXURY_COTTAGE", price: 3500, capacity: 4 },
+      { type: "PINEWOOD_COTTAGE", price: 3000, capacity: 4 },
+      { type: "THEATRE_COTTAGE", price: 4500, capacity: 4 },
+      { type: "PREMIUM_AC_ROOM", price: 2000, capacity: 2 },
+      { type: "CAVE_AC_ROOM", price: 2200, capacity: 2 },
+      { type: "NON_AC_ROOM", price: 1200, capacity: 2 },
     ];
-    fallback.forEach(({ type, price, capacity }, i) => {
+    fallback.forEach(({ type, price, capacity }) => {
       const cfg = ROOM_CONFIG[type];
-      if (cfg) showcaseRooms.push({ ...cfg, price, capacity, imageSrc: galleryImages[i] ?? null, hotelSlug: "the-urban-escape-bhilai" });
+      if (cfg)
+        showcaseRooms.push({
+          ...cfg,
+          price,
+          capacity,
+          imageSrc: getCategoryImages(type)[0] ?? null,
+          hotelSlug: "the-urban-escape-bhilai",
+        });
     });
   }
 

@@ -17,12 +17,15 @@ import {
   PlusCircle,
   Wallet,
   BookOpenText,
+  Bell,
+  Crown,
 } from "lucide-react";
 
 interface AdminNavProps {
   staffName: string;
   staffRole: string;
   hotelName: string;
+  pendingOtps?: number;
 }
 
 const NAV_LINKS = [
@@ -34,7 +37,7 @@ const NAV_LINKS = [
   { href: "/hotel-admin/ledger", label: "Ledger", icon: BookOpenText },
 ];
 
-export default function AdminNav({ staffName, staffRole, hotelName }: AdminNavProps) {
+export default function AdminNav({ staffName, staffRole, hotelName, pendingOtps = 0 }: AdminNavProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -58,7 +61,7 @@ export default function AdminNav({ staffName, staffRole, hotelName }: AdminNavPr
       </div>
 
       {/* New Booking CTA */}
-      <div className="px-3 pt-3">
+      <div className="px-3 pt-3 space-y-2">
         <Link
           href="/hotel-admin/bookings/new"
           onClick={() => setMobileOpen(false)}
@@ -66,6 +69,17 @@ export default function AdminNav({ staffName, staffRole, hotelName }: AdminNavPr
         >
           <PlusCircle className="w-4 h-4" /> New Booking
         </Link>
+
+        {/* Back to Owner Console — only shown when super admin is viewing front desk */}
+        {staffRole === "SUPER_ADMIN" && (
+          <Link
+            href="/admin/dashboard"
+            onClick={() => setMobileOpen(false)}
+            className="flex items-center justify-center gap-2 w-full bg-amber-500/10 hover:bg-amber-500/20 text-amber-400/80 hover:text-amber-300 font-semibold text-sm px-4 py-2.5 rounded-xl transition-all border border-amber-500/20 hover:border-amber-500/35"
+          >
+            <Crown className="w-4 h-4" /> Owner Console
+          </Link>
+        )}
       </div>
 
       {/* Nav links */}
@@ -89,6 +103,35 @@ export default function AdminNav({ staffName, staffRole, hotelName }: AdminNavPr
             </Link>
           );
         })}
+
+        {/* Pending Approvals — always visible with badge when items exist */}
+        {(() => {
+          const active = isActive("/hotel-admin/pending-approvals");
+          return (
+            <Link
+              href="/hotel-admin/pending-approvals"
+              onClick={() => setMobileOpen(false)}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group ${
+                active
+                  ? "bg-amber-500/15 text-amber-300 border border-amber-500/25"
+                  : pendingOtps > 0
+                    ? "text-amber-400/80 hover:text-amber-300 hover:bg-amber-500/8 border border-amber-500/15"
+                    : "text-white/45 hover:text-white hover:bg-white/5"
+              }`}
+            >
+              <Bell className={`w-4 h-4 shrink-0 ${active ? "text-amber-400" : pendingOtps > 0 ? "text-amber-400" : "text-white/30 group-hover:text-white/60"}`} />
+              Pending Approvals
+              {pendingOtps > 0 && (
+                <span className="ml-auto flex items-center justify-center w-5 h-5 rounded-full bg-amber-500 text-black text-[10px] font-black shrink-0">
+                  {pendingOtps > 9 ? "9+" : pendingOtps}
+                </span>
+              )}
+              {active && pendingOtps === 0 && (
+                <ChevronRight className="w-3.5 h-3.5 ml-auto text-amber-400/60" />
+              )}
+            </Link>
+          );
+        })()}
       </nav>
 
       {/* Staff info + sign out */}

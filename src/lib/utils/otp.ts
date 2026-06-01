@@ -1,12 +1,11 @@
 import { prisma } from "@/lib/db/prisma";
 import type { OtpPurpose } from "@prisma/client";
-
-export const OTP_TTL_MINUTES = 10;
+import { Prisma } from "@prisma/client";
 
 export const OTP_PURPOSE_LABEL: Record<OtpPurpose, string> = {
   CASH_COLLECTION: "Cash collection",
   EXPENSE_DEBIT: "Expense / debit entry",
-  DELETE_BOOKING: "Delete booking",
+  DELETE_BOOKING: "Cancel booking",
   DELETE_TRANSACTION: "Delete transaction",
   DEPOSIT_DEDUCTION: "Deposit deduction",
   REFUND: "Refund",
@@ -20,6 +19,8 @@ export function generateOtpCode(): string {
 
 /**
  * Create a pending OTP request (admin side). The super admin later issues a code.
+ * `actionPayload` stores everything needed to re-execute the action once the OTP
+ * is entered in the Pending Approvals page.
  */
 export async function createOtpRequest(params: {
   hotelId: string;
@@ -28,6 +29,7 @@ export async function createOtpRequest(params: {
   amount?: number | null;
   refId?: string | null;
   requestedBy?: string | null;
+  actionPayload?: Record<string, unknown> | null;
 }) {
   return prisma.adminOtp.create({
     data: {
@@ -37,6 +39,9 @@ export async function createOtpRequest(params: {
       amount: params.amount ?? null,
       refId: params.refId ?? null,
       requestedBy: params.requestedBy ?? null,
+      actionPayload: params.actionPayload
+        ? (params.actionPayload as unknown as Prisma.InputJsonValue)
+        : undefined,
       status: "PENDING",
     },
   });
@@ -45,8 +50,10 @@ export async function createOtpRequest(params: {
 /**
  * Atomically validate and consume an issued OTP, then it can never be reused.
  *
- * Checks: belongs to hotel, status ISSUED, code matches, not expired, and
- * (when supplied) purpose + refId match the action being performed.
+ * Checks: belongs to hotel, status ISSUED, code matches, and (when supplied)
+ * purpose + refId match the action being performed.
+ *
+ * OTPs do NOT expire — they remain valid until used or rejected.
  *
  * @returns `{ ok: true }` on success, else `{ ok: false, error }`.
  */
@@ -66,8 +73,6 @@ export async function consumeOtp(params: {
   if (otp.status === "REJECTED") return { ok: false, error: "This request was rejected by the owner" };
   if (otp.status === "PENDING")
     return { ok: false, error: "Awaiting owner approval — no OTP issued yet" };
-  if (otp.status === "EXPIRED" || (otp.expiresAt && otp.expiresAt < new Date()))
-    return { ok: false, error: "OTP has expired. Please request a new one." };
   if (otp.status !== "ISSUED") return { ok: false, error: "OTP is not valid" };
   if (params.purpose && otp.purpose !== params.purpose)
     return { ok: false, error: "OTP does not match this action" };

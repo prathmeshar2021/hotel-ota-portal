@@ -11,51 +11,73 @@ export const RESORT = {
   checkOutTime: "11:00 AM",
   hotelSlug: "the-urban-escape-bhilai",
 
+  // The resort has 3 main categories (15 rooms total):
+  //   AC Cottages (6) · AC Rooms (5) · Non AC Rooms (4)
   rooms: [
     {
       type: "LUXURY_COTTAGE",
       label: "Luxury Cottage",
-      price: 2500,
-      capacity: 5,
+      group: "AC Cottages",
+      qty: 3,
+      price: 3500,
+      capacity: 4,
       accent: "#F59E0B",
-      features: [
-        "Pine Cathedral Ceiling",
-        "Amber LED Strips",
-        "Blue Bed Underglow",
-        "Air Conditioning",
-        "Smart TV",
-        "Garden Sliding Door",
-      ],
+      features: ["Premium Furnishings", "Private Sit-out", "Amber LED Strips", "Air Conditioning", "Smart TV", "Forest Views"],
       tagline: "Pine Wood · Amber Soul",
     },
     {
-      type: "AC_ROOM",
-      label: "AC Room",
-      price: 1200,
+      type: "PINEWOOD_COTTAGE",
+      label: "Pinewood Cottage",
+      group: "AC Cottages",
+      qty: 2,
+      price: 3000,
+      capacity: 4,
+      accent: "#86EFAC",
+      features: ["Pine Wood Interiors", "Private Sit-out", "Rustic Charm", "Air Conditioning", "Smart TV", "Forest Views"],
+      tagline: "Rustic Charm · Pine Nest",
+    },
+    {
+      type: "THEATRE_COTTAGE",
+      label: "Theatre Style Cottage",
+      group: "AC Cottages",
+      qty: 1,
+      price: 4500,
+      capacity: 4,
+      accent: "#FCA5A5",
+      features: ["Private Theatre Setup", "Exclusive Cottage", "Premium Bedding", "Air Conditioning", "Smart TV"],
+      tagline: "Private Screen · Exclusive Stay",
+    },
+    {
+      type: "PREMIUM_AC_ROOM",
+      label: "Deluxe AC Room",
+      group: "AC Rooms",
+      qty: 3,
+      price: 2000,
       capacity: 2,
       accent: "#60A5FA",
-      features: [
-        "Air Conditioning",
-        "Smart TV",
-        "Blue LED Ambiance",
-        "Forest Window View",
-        "Hex Wall Sculpture",
-      ],
+      features: ["Air Conditioning", "Premium Furnishings", "Blue LED Ambiance", "Valley Views", "Smart TV", "Modern Design"],
       tagline: "Slate Dark · Electric Blue",
+    },
+    {
+      type: "CAVE_AC_ROOM",
+      label: "Cave Theme AC Room",
+      group: "AC Rooms",
+      qty: 2,
+      price: 2200,
+      capacity: 2,
+      accent: "#A78BFA",
+      features: ["Cave Theme Interiors", "Air Conditioning", "Ambient Lighting", "Unique Experience", "Smart TV"],
+      tagline: "Stone Soul · Cave Vibes",
     },
     {
       type: "NON_AC_ROOM",
       label: "Non-AC Room",
-      price: 800,
+      group: "Non AC Rooms",
+      qty: 4,
+      price: 1200,
       capacity: 2,
       accent: "#4ADE80",
-      features: [
-        "Smart TV",
-        "Bamboo Thatched Ceiling",
-        "Green LED Glow",
-        "Natural Ventilation",
-        "Optional Loft",
-      ],
+      features: ["Natural Ventilation", "Forest Views", "Green LED Glow", "Smart TV", "All Essentials"],
       tagline: "Natural Light · Green Glow",
     },
   ],
@@ -95,11 +117,11 @@ export const GEMINI_SYSTEM_PROMPT = `You are **Sangwari** — a warm, friendly A
 - **Contact:** ${RESORT.phone} | ${RESORT.email}
 - **Check-in:** ${RESORT.checkInTime} | **Check-out:** ${RESORT.checkOutTime}
 
-## Room Types
+## Room Types (15 rooms across 3 categories: AC Cottages · AC Rooms · Non AC Rooms)
 ${RESORT.rooms
   .map(
     (r) =>
-      `- **${r.label}** (${r.tagline}) — ₹${r.price.toLocaleString("en-IN")}/night | Up to ${r.capacity} guests | ${r.features.slice(0, 3).join(", ")}`
+      `- **${r.label}** — ${r.group} | ${r.qty} room(s) | from ₹${r.price.toLocaleString("en-IN")}/night | Up to ${r.capacity} guests | ${r.features.slice(0, 3).join(", ")}`
   )
   .join("\n")}
 

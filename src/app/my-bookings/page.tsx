@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import CancelBookingButton from "@/components/customer/CancelBookingButton";
 import { format } from "date-fns";
+import { getCategoryMeta } from "@/lib/utils/room-categories";
 
 const STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
   PENDING_PAYMENT: {
@@ -45,17 +46,6 @@ const STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
   },
 };
 
-const ROOM_TYPE_LABELS: Record<string, string> = {
-  LUXURY_COTTAGE: "Luxury Cottage",
-  AC_ROOM: "AC Room",
-  NON_AC_ROOM: "Non-AC Room",
-};
-
-const ROOM_ACCENT: Record<string, string> = {
-  LUXURY_COTTAGE: "#F59E0B",
-  AC_ROOM: "#60A5FA",
-  NON_AC_ROOM: "#4ADE80",
-};
 
 export default async function MyBookingsPage() {
   const session = await auth();
@@ -105,7 +95,9 @@ export default async function MyBookingsPage() {
         ) : (
           <div className="space-y-4">
             {bookings.map((booking) => {
-              const accentColor = ROOM_ACCENT[booking.room.roomType] ?? "#F59E0B";
+              const categoryMeta = getCategoryMeta(booking.roomCategory as never);
+              const accentColor = categoryMeta?.accentColor ?? "#F59E0B";
+              const categoryLabel = categoryMeta?.displayName ?? booking.roomCategory;
               const status = STATUS_CONFIG[booking.status] ?? {
                 label: booking.status.replace(/_/g, " "),
                 cls: "bg-white/8 text-white/40 border-white/10",
@@ -148,9 +140,16 @@ export default async function MyBookingsPage() {
                         </div>
                         <div className="glass-card rounded-xl p-3">
                           <p className="text-xs text-white/35 mb-0.5">Room</p>
-                          <p className="font-medium text-white/75 text-xs">
-                            {ROOM_TYPE_LABELS[booking.room.roomType]} #{booking.room.roomNumber}
-                          </p>
+                          {booking.room ? (
+                            <p className="font-medium text-white/75 text-xs">
+                              {categoryLabel} #{booking.room.roomNumber}
+                            </p>
+                          ) : (
+                            <p className="font-medium text-white/75 text-xs">
+                              {categoryLabel}
+                              <span className="block text-[10px] text-white/35 italic mt-0.5">Assigned at hotel</span>
+                            </p>
+                          )}
                         </div>
                         <div className="glass-card rounded-xl p-3">
                           <p className="text-xs text-white/35 mb-0.5">Amount</p>

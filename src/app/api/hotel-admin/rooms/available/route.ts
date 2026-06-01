@@ -2,22 +2,29 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
 
-// GET /api/hotel-admin/rooms/available?checkIn=YYYY-MM-DD&checkOut=YYYY-MM-DD
+/**
+ * GET /api/hotel-admin/rooms/available
+ *   ?checkIn=YYYY-MM-DD&checkOut=YYYY-MM-DD
+ *   &category=LUXURY_COTTAGE   (optional — filter by room type / category)
+ *   &excludeBookingId=...      (optional — exclude current booking from conflict check)
+ */
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.hotelId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (session.user.role !== "HOTEL_ADMIN" && session.user.role !== "HOTEL_STAFF") {
+  if (session.user.role !== "HOTEL_ADMIN" && session.user.role !== "HOTEL_STAFF" && session.user.role !== "SUPER_ADMIN") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const checkIn = req.nextUrl.searchParams.get("checkIn");
+  const checkIn  = req.nextUrl.searchParams.get("checkIn");
   const checkOut = req.nextUrl.searchParams.get("checkOut");
+  const category = req.nextUrl.searchParams.get("category"); // optional
+  const excludeBookingId = req.nextUrl.searchParams.get("excludeBookingId"); // optional
 
   if (!checkIn || !checkOut) {
     return NextResponse.json({ error: "checkIn and checkOut required" }, { status: 400 });
   }
 
-  const checkInDate = new Date(checkIn);
+  const checkInDate  = new Date(checkIn);
   const checkOutDate = new Date(checkOut);
 
   if (isNaN(checkInDate.getTime()) || isNaN(checkOutDate.getTime())) {
@@ -32,8 +39,10 @@ export async function GET(req: NextRequest) {
       hotelId: session.user.hotelId,
       isActive: true,
       status: { not: "MAINTENANCE" },
-      bookings: {
+      ...(category ? { roomType: category as never } : {}),
+      assignedBookings: {
         none: {
+          ...(excludeBookingId ? { id: { not: excludeBookingId } } : {}),
           status: { in: ["CONFIRMED", "CHECKED_IN"] },
           checkInDate: { lt: checkOutDate },
           checkOutDate: { gt: checkInDate },
@@ -46,12 +55,9 @@ export async function GET(req: NextRequest) {
       roomType: true,
       capacity: true,
       basePrice: true,
-      description: true,
-      images: true,
-      amenities: true,
       status: true,
     },
-    orderBy: [{ roomType: "asc" }, { basePrice: "asc" }],
+    orderBy: [{ roomType: "asc" }, { roomNumber: "asc" }],
   });
 
   return NextResponse.json(rooms);

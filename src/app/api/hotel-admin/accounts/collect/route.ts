@@ -20,7 +20,10 @@ export async function POST(req: NextRequest) {
   const hotelId = session.user.hotelId;
   const body = await req.json();
   const parsed = Schema.safeParse(body);
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+  if (!parsed.success) {
+    const msgs = [...parsed.error.flatten().formErrors, ...Object.values(parsed.error.flatten().fieldErrors).flat()];
+    return NextResponse.json({ error: msgs[0] ?? "Invalid request" }, { status: 400 });
+  }
 
   const { amount, note, otpId, otpCode } = parsed.data;
 

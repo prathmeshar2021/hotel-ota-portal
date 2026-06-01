@@ -8,13 +8,13 @@ export default auth((req) => {
   const { pathname } = req.nextUrl;
   const session = req.auth;
 
-  // Hotel admin routes require HOTEL_ADMIN or HOTEL_STAFF role
+  // Hotel admin routes require HOTEL_ADMIN, HOTEL_STAFF, or SUPER_ADMIN role
   if (pathname.startsWith("/hotel-admin")) {
     if (!session) {
       return NextResponse.redirect(new URL("/auth/staff-login", req.url));
     }
     const role = session.user.role;
-    if (role !== "HOTEL_ADMIN" && role !== "HOTEL_STAFF") {
+    if (role !== "HOTEL_ADMIN" && role !== "HOTEL_STAFF" && role !== "SUPER_ADMIN") {
       return NextResponse.redirect(new URL("/", req.url));
     }
   }

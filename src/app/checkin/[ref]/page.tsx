@@ -7,22 +7,11 @@ import Navbar from "@/components/customer/Navbar";
 import OnlineCheckinForm from "@/components/customer/OnlineCheckinForm";
 import { CheckCircle, Calendar, Moon, MapPin } from "lucide-react";
 import { format } from "date-fns";
+import { getCategoryMeta } from "@/lib/utils/room-categories";
 
 interface Props {
   params: Promise<{ ref: string }>;
 }
-
-const ROOM_TYPE_LABELS: Record<string, string> = {
-  LUXURY_COTTAGE: "Luxury Cottage",
-  AC_ROOM: "AC Room",
-  NON_AC_ROOM: "Non-AC Room",
-};
-
-const ROOM_ACCENT: Record<string, string> = {
-  LUXURY_COTTAGE: "#F59E0B",
-  AC_ROOM: "#60A5FA",
-  NON_AC_ROOM: "#4ADE80",
-};
 
 export default async function OnlineCheckinPage({ params }: Props) {
   const { ref } = await params;
@@ -61,7 +50,8 @@ export default async function OnlineCheckinPage({ params }: Props) {
   if (!booking) notFound();
 
   const alreadyDone = !!booking.onlineCheckin?.completedAt;
-  const accentColor = ROOM_ACCENT[booking.room.roomType] ?? "#F59E0B";
+  const categoryMeta = getCategoryMeta(booking.roomCategory as never);
+  const accentColor = categoryMeta.accentColor;
 
   return (
     <div className="min-h-screen bg-[#071209]">
@@ -99,7 +89,8 @@ export default async function OnlineCheckinPage({ params }: Props) {
             </div>
             <div className="flex items-center gap-2 text-white/50 text-xs">
               <Moon className="w-3.5 h-3.5" style={{ color: accentColor }} />
-              {ROOM_TYPE_LABELS[booking.room.roomType]} #{booking.room.roomNumber}
+              {categoryMeta.displayName}
+              {booking.room && <span className="ml-1">#{booking.room.roomNumber}</span>}
             </div>
           </div>
         </div>

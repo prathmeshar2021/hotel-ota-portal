@@ -14,7 +14,9 @@ const VALID_PURPOSES: OtpPurpose[] = [
 ];
 
 // POST /api/hotel-admin/otp/request
-// body: { purpose, description, amount?, refId? }
+// body: { purpose, description, amount?, refId?, actionPayload? }
+// Creates a PENDING approval request and returns immediately.
+// Admin navigates away; completes the action later in Pending Approvals.
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.hotelId)
@@ -40,6 +42,7 @@ export async function POST(req: NextRequest) {
     amount: body.amount != null ? Number(body.amount) : null,
     refId: body.refId || null,
     requestedBy: session.user.name ?? "Staff",
+    actionPayload: body.actionPayload ?? null,
   });
 
   return NextResponse.json({ otpId: otp.id, status: otp.status }, { status: 201 });

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { requireSuperAdmin } from "@/lib/auth/superAdmin";
 import { prisma } from "@/lib/db/prisma";
 import ApprovalsClient, { type OtpItem } from "@/components/admin/ApprovalsClient";
+import { Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -21,21 +22,17 @@ export default async function ApprovalsPage() {
     }),
   ]);
 
-  const now = Date.now();
   const map = (o: (typeof pendingRaw)[number]): OtpItem => ({
     id: o.id,
     purpose: o.purpose,
     description: o.description,
     amount: o.amount,
     refId: o.refId,
-    status:
-      o.status === "ISSUED" && o.expiresAt && o.expiresAt.getTime() < now
-        ? "EXPIRED"
-        : o.status,
+    actionPayload: (o.actionPayload as Prisma.JsonValue as Record<string, unknown>) ?? null,
+    status: o.status,
     code: o.status === "ISSUED" ? o.code : null,
     requestedBy: o.requestedBy,
     issuedBy: o.issuedBy,
-    expiresAt: o.expiresAt?.toISOString() ?? null,
     createdAt: o.createdAt.toISOString(),
   });
 

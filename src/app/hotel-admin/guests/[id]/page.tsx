@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import EditGuestModal from "@/components/hotel-admin/EditGuestModal";
+import { getCategoryMeta } from "@/lib/utils/room-categories";
 
 export const metadata = { title: "Guest Profile – Front Desk" };
 
@@ -20,16 +21,6 @@ const STATUS_COLOR: Record<string, string> = {
   CANCELLED:       "text-red-300 bg-red-500/15 border-red-500/25",
   NO_SHOW:         "text-amber-300 bg-amber-500/15 border-amber-500/25",
   PENDING_PAYMENT: "text-yellow-300 bg-yellow-500/15 border-yellow-500/25",
-};
-
-const ROOM_ACCENT: Record<string, string> = {
-  LUXURY_COTTAGE: "#F59E0B",
-  AC_ROOM:        "#60A5FA",
-  NON_AC_ROOM:    "#4ADE80",
-};
-
-const ROOM_SHORT: Record<string, string> = {
-  LUXURY_COTTAGE: "LC", AC_ROOM: "AC", NON_AC_ROOM: "NAC",
 };
 
 const ID_LABEL: Record<string, string> = {
@@ -45,7 +36,7 @@ interface Params { id: string }
 export default async function GuestDetailPage({ params }: { params: Promise<Params> }) {
   const session = await auth();
   if (!session?.user?.hotelId) redirect("/auth/staff-login");
-  if (session.user.role !== "HOTEL_ADMIN" && session.user.role !== "HOTEL_STAFF") redirect("/");
+  if (session.user.role !== "HOTEL_ADMIN" && session.user.role !== "HOTEL_STAFF" && session.user.role !== "SUPER_ADMIN") redirect("/");
 
   const { id } = await params;
 
@@ -84,7 +75,8 @@ export default async function GuestDetailPage({ params }: { params: Promise<Para
     checkOutDate: Date;
     totalAmount: number;
     balanceDue: number;
-    room: { roomNumber: string; roomType: string };
+    roomCategory: string;
+    room: { roomNumber: string; roomType: string } | null;
     asCompanion: boolean;
     primaryGuestName?: string;
     relation?: string | null;
@@ -102,6 +94,7 @@ export default async function GuestDetailPage({ params }: { params: Promise<Para
       checkOutDate:     c.booking.checkOutDate,
       totalAmount:      c.booking.totalAmount,
       balanceDue:       c.booking.balanceDue,
+      roomCategory:     c.booking.roomCategory,
       room:             c.booking.room,
       asCompanion:      true,
       primaryGuestName: c.booking.primaryGuest.name,
@@ -109,15 +102,16 @@ export default async function GuestDetailPage({ params }: { params: Promise<Para
     }));
 
   const primaryRows: BookingRow[] = guest.bookings.map(b => ({
-    id:          b.id,
-    bookingRef:  b.bookingRef,
-    status:      b.status,
-    checkInDate: b.checkInDate,
+    id:           b.id,
+    bookingRef:   b.bookingRef,
+    status:       b.status,
+    checkInDate:  b.checkInDate,
     checkOutDate: b.checkOutDate,
-    totalAmount: b.totalAmount,
-    balanceDue:  b.balanceDue,
-    room:        b.room,
-    asCompanion: false,
+    totalAmount:  b.totalAmount,
+    balanceDue:   b.balanceDue,
+    roomCategory: b.roomCategory,
+    room:         b.room,
+    asCompanion:  false,
   }));
 
   const allBookings = [...primaryRows, ...companionRows].sort(
@@ -300,8 +294,8 @@ export default async function GuestDetailPage({ params }: { params: Promise<Para
             ) : (
               <div className="divide-y divide-white/5">
                 {allBookings.map(b => {
-                  const accent    = ROOM_ACCENT[b.room.roomType] ?? "#F59E0B";
-                  const short     = ROOM_SHORT[b.room.roomType] ?? "R";
+                  const catMeta   = getCategoryMeta(b.roomCategory);
+                  const accent    = catMeta.accentColor;
                   const statusCls = STATUS_COLOR[b.status] ?? "text-white/40 bg-white/5 border-white/10";
                   return (
                     <Link
@@ -309,10 +303,10 @@ export default async function GuestDetailPage({ params }: { params: Promise<Para
                       href={`/hotel-admin/bookings/${b.id}`}
                       className="flex items-center gap-4 px-5 py-4 hover:bg-white/3 transition-all group"
                     >
-                      {/* Room badge */}
-                      <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xs font-bold shrink-0"
+                      {/* Category badge */}
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center text-[10px] font-bold shrink-0"
                         style={{ background: `${accent}18`, border: `1px solid ${accent}30`, color: accent }}>
-                        {short}
+                        {catMeta.shortName.slice(0, 3).toUpperCase()}
                       </div>
 
                       <div className="flex-1 min-w-0">
@@ -331,7 +325,8 @@ export default async function GuestDetailPage({ params }: { params: Promise<Para
                         </div>
                         <div className="flex items-center gap-3 text-xs text-white/30 flex-wrap">
                           <span className="flex items-center gap-1">
-                            <BedDouble className="w-3 h-3" /> Room {b.room.roomNumber}
+                            <BedDouble className="w-3 h-3" />
+                            {b.room ? `Room ${b.room.roomNumber}` : catMeta.displayName}
                           </span>
                           <span className="flex items-center gap-1">
                             <Calendar className="w-3 h-3" />

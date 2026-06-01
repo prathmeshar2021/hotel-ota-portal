@@ -15,6 +15,7 @@ import {
   User,
 } from "lucide-react";
 import { format, startOfDay, endOfDay, startOfMonth } from "date-fns";
+import { getCategoryMeta } from "@/lib/utils/room-categories";
 
 function StatCard({
   label,
@@ -132,18 +133,6 @@ export default async function DashboardPage() {
   const occupancyPct = totalRooms > 0 ? Math.round((inHouse / totalRooms) * 100) : 0;
   const revenue = monthRevenue._sum.totalAmount ?? 0;
 
-  const ROOM_LABELS: Record<string, string> = {
-    LUXURY_COTTAGE: "LC",
-    AC_ROOM: "AC",
-    NON_AC_ROOM: "NAC",
-  };
-
-  const ROOM_ACCENT: Record<string, string> = {
-    LUXURY_COTTAGE: "#F59E0B",
-    AC_ROOM: "#60A5FA",
-    NON_AC_ROOM: "#4ADE80",
-  };
-
   return (
     <div className="p-6 max-w-6xl">
       {/* Header */}
@@ -218,7 +207,9 @@ export default async function DashboardPage() {
             </div>
           ) : (
             <div className="divide-y divide-white/5">
-              {recentArrivals.map((b) => (
+              {recentArrivals.map((b) => {
+                const cat = getCategoryMeta(b.roomCategory);
+                return (
                 <Link
                   key={b.id}
                   href={`/hotel-admin/bookings/${b.id}`}
@@ -226,14 +217,16 @@ export default async function DashboardPage() {
                 >
                   <div className="flex items-center gap-3">
                     <div
-                      className="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold text-black shrink-0"
-                      style={{ background: ROOM_ACCENT[b.room.roomType] ?? "#F59E0B" }}
+                      className="w-8 h-8 rounded-xl flex items-center justify-center text-[10px] font-bold text-black shrink-0"
+                      style={{ background: cat.accentColor }}
                     >
-                      {ROOM_LABELS[b.room.roomType]}
+                      {cat.shortName.slice(0, 3).toUpperCase()}
                     </div>
                     <div>
                       <p className="text-white/80 text-sm font-medium">{b.primaryGuest.name}</p>
-                      <p className="text-white/30 text-xs">#{b.room.roomNumber} · {b.primaryGuest.phone}</p>
+                      <p className="text-white/30 text-xs">
+                        {b.room ? `#${b.room.roomNumber} · ` : "TBA · "}{b.primaryGuest.phone}
+                      </p>
                     </div>
                   </div>
                   <div className="text-right">
@@ -249,7 +242,8 @@ export default async function DashboardPage() {
                     )}
                   </div>
                 </Link>
-              ))}
+              );
+              })}
             </div>
           )}
         </div>
@@ -280,7 +274,9 @@ export default async function DashboardPage() {
             </div>
           ) : (
             <div className="divide-y divide-white/5">
-              {recentDepartures.map((b) => (
+              {recentDepartures.map((b) => {
+                const cat = getCategoryMeta(b.roomCategory);
+                return (
                 <Link
                   key={b.id}
                   href={`/hotel-admin/bookings/${b.id}`}
@@ -288,19 +284,22 @@ export default async function DashboardPage() {
                 >
                   <div className="flex items-center gap-3">
                     <div
-                      className="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold text-black shrink-0"
-                      style={{ background: ROOM_ACCENT[b.room.roomType] ?? "#F59E0B" }}
+                      className="w-8 h-8 rounded-xl flex items-center justify-center text-[10px] font-bold text-black shrink-0"
+                      style={{ background: cat.accentColor }}
                     >
-                      {ROOM_LABELS[b.room.roomType]}
+                      {cat.shortName.slice(0, 3).toUpperCase()}
                     </div>
                     <div>
                       <p className="text-white/80 text-sm font-medium">{b.primaryGuest.name}</p>
-                      <p className="text-white/30 text-xs">#{b.room.roomNumber} · {b.primaryGuest.phone}</p>
+                      <p className="text-white/30 text-xs">
+                        {b.room ? `#${b.room.roomNumber} · ` : "TBA · "}{b.primaryGuest.phone}
+                      </p>
                     </div>
                   </div>
                   <Clock className="w-4 h-4 text-amber-400/60" />
                 </Link>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

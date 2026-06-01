@@ -16,7 +16,6 @@ import {
   IndianRupee, FileText, Receipt, AlertCircle, CheckCircle2,
 } from "lucide-react";
 import type { TransactionItem } from "@/app/api/hotel-admin/accounts/transactions/route";
-import OtpGate from "@/components/hotel-admin/OtpGate";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -300,29 +299,38 @@ function CollectCashModal({
 }) {
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
-  const [otpOpen, setOtpOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
 
   const parsed = Number(amount) || 0;
   const isOverdraw = parsed > cashInHand;
 
-  function handleSubmit() {
+  // Non-blocking: submit an OTP approval request and close the modal.
+  // Admin completes the collection later in Pending Approvals.
+  async function handleSubmit() {
     if (parsed <= 0) { toast.error("Enter a valid amount"); return; }
     if (isOverdraw) { toast.error("Cannot collect more than cash in hand"); return; }
-    setOtpOpen(true);
-  }
-
-  async function performCollect(otpId: string, otpCode: string) {
-    const res = await fetch("/api/hotel-admin/accounts/collect", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount: parsed, note: note || undefined, otpId, otpCode }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error ?? "Failed to record collection");
-    setOtpOpen(false);
-    setDone(true);
-    toast.success(data.message);
+    setLoading(true);
+    try {
+      const res = await fetch("/api/hotel-admin/otp/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          purpose: "CASH_COLLECTION",
+          description: note ? `Cash collection — ${note}` : `Cash collection of ₹${parsed.toLocaleString("en-IN")}`,
+          amount: parsed,
+          actionPayload: { amount: parsed, note: note || undefined },
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to submit request");
+      setDone(true);
+      toast.success("Approval request sent — complete in Pending Approvals once the owner issues a code.", {
+        duration: 5000,
+      });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Something went wrong");
+    } finally { setLoading(false); }
   }
 
   return (
@@ -349,11 +357,13 @@ function CollectCashModal({
         {done ? (
           /* Success state */
           <div className="text-center py-4">
-            <div className="w-14 h-14 rounded-full bg-green-500/15 border border-green-500/20 flex items-center justify-center mx-auto mb-4">
-              <CheckCircle2 className="w-7 h-7 text-green-400" />
+            <div className="w-14 h-14 rounded-full bg-amber-500/15 border border-amber-500/20 flex items-center justify-center mx-auto mb-4">
+              <CheckCircle2 className="w-7 h-7 text-amber-400" />
             </div>
-            <p className="text-white font-bold text-lg">{fmt(parsed)} Recorded</p>
-            <p className="text-white/40 text-sm mt-1">Cash withdrawal logged successfully</p>
+            <p className="text-white font-bold text-lg">Request Sent</p>
+            <p className="text-white/40 text-sm mt-1">
+              Approval request submitted. Go to <strong className="text-white/60">Pending Approvals</strong> to complete once the owner issues the OTP code.
+            </p>
             <button onClick={onSuccess}
               className="mt-5 w-full py-3 rounded-xl bg-white/8 hover:bg-white/12 border border-white/10 text-white/70 font-semibold text-sm transition-all">
               Done
@@ -414,24 +424,14 @@ function CollectCashModal({
                 className="flex-1 py-3 rounded-xl border border-white/10 text-white/50 hover:text-white hover:border-white/20 text-sm font-semibold transition-all">
                 Cancel
               </button>
-              <button onClick={handleSubmit} disabled={parsed <= 0 || isOverdraw}
-                className="flex-1 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black text-sm font-bold transition-all shadow-lg shadow-amber-500/20">
-                Confirm Collect
+              <button onClick={handleSubmit} disabled={loading || parsed <= 0 || isOverdraw}
+                className="flex-1 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black text-sm font-bold transition-all shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2">
+                {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Sending…</> : "Request Approval"}
               </button>
             </div>
           </>
         )}
       </div>
-
-      <OtpGate
-        open={otpOpen}
-        onClose={() => setOtpOpen(false)}
-        purpose="CASH_COLLECTION"
-        description={note ? `Cash collection — ${note}` : "Owner cash collection"}
-        amount={parsed}
-        onConfirm={performCollect}
-        title="Owner Approval — Collect Cash"
-      />
     </div>
   );
 }

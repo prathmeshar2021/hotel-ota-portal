@@ -4,11 +4,13 @@ import { auth } from "@/lib/auth/auth";
 import { generateBookingRef, computeTotals, applyCoupon } from "@/lib/utils/booking";
 import { REFUNDABLE_DEPOSIT } from "@/lib/utils/booking-calc";
 import { createOrder } from "@/lib/services/razorpay";
+import { gupshup } from "@/lib/services/gupshup";
+import { format } from "date-fns";
 import { z } from "zod";
 
 const CreateBookingSchema = z.object({
   hotelId: z.string(),
-  roomId: z.string(),
+  roomCategory: z.string(), // category type e.g. "LUXURY_COTTAGE"
   checkInDate: z.string(),
   checkOutDate: z.string(),
   noOfPersons: z.number().min(1),
@@ -34,6 +36,7 @@ export async function POST(req: NextRequest) {
   }
 
   const data = parsed.data;
+  const { CATEGORY_META, getCategoryMeta } = await import("@/lib/utils/room-categories");
 
   // Resolve or create guest
   let guestId: string;
@@ -60,19 +63,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Guest details required" }, { status: 400 });
   }
 
-  // Validate room availability
-  const room = await prisma.room.findUnique({
-    where: { id: data.roomId, hotelId: data.hotelId, isActive: true },
-  });
-  if (!room) return NextResponse.json({ error: "Room not found" }, { status: 404 });
-
-  // Reject booking if admin has blocked the room
-  if (room.status === "MAINTENANCE") {
-    return NextResponse.json(
-      { error: "This room is currently unavailable for booking" },
-      { status: 409 }
-    );
+  // Validate category
+  const categoryMeta = getCategoryMeta(data.roomCategory);
+  if (!categoryMeta || categoryMeta.totalRooms === 0) {
+    return NextResponse.json({ error: "Invalid room category" }, { status: 400 });
   }
+  void CATEGORY_META; // suppress unused import warning
 
   const checkIn = new Date(data.checkInDate);
   const checkOut = new Date(data.checkOutDate);
@@ -82,23 +78,43 @@ export async function POST(req: NextRequest) {
   }
 
   const noOfNights = Math.ceil((checkOut.getTime() - checkIn.getTime()) / 86400000);
-
   if (noOfNights < 1) {
     return NextResponse.json({ error: "Check-out must be after check-in." }, { status: 400 });
   }
 
-  // Check for conflicting booking
-  const conflict = await prisma.booking.findFirst({
+  // Category-level availability check: count active bookings in this category for the date range
+  const activeInCategory = await prisma.booking.count({
     where: {
-      roomId: data.roomId,
+      hotelId: data.hotelId,
+      roomCategory: data.roomCategory,
       status: { in: ["CONFIRMED", "CHECKED_IN"] },
       checkInDate: { lt: checkOut },
       checkOutDate: { gt: checkIn },
     },
   });
-  if (conflict) {
-    return NextResponse.json({ error: "Room not available for selected dates" }, { status: 409 });
+  // Effective capacity honours any super-admin inventory overrides for the dates
+  const { resolveCategoryCapacity } = await import("@/lib/utils/inventory");
+  const capacity = await resolveCategoryCapacity(
+    data.hotelId,
+    data.roomCategory as never,
+    checkIn,
+    checkOut
+  );
+  if (activeInCategory >= capacity) {
+    return NextResponse.json(
+      { error: `${categoryMeta.displayName} is fully booked for the selected dates` },
+      { status: 409 }
+    );
   }
+
+  // Resolve category price for the check-in date — honours any date-wise
+  // override set by the super admin, else falls back to the base price.
+  const { resolveCategoryPrice } = await import("@/lib/utils/pricing");
+  const pricePerNight = await resolveCategoryPrice(
+    data.hotelId,
+    data.roomCategory as never,
+    checkIn
+  );
 
   // Apply coupon
   let couponId: string | undefined;
@@ -116,12 +132,12 @@ export async function POST(req: NextRequest) {
     });
     if (coupon) {
       couponId = coupon.id;
-      couponDiscount = applyCoupon(coupon, room.basePrice * noOfNights);
+      couponDiscount = applyCoupon(coupon, pricePerNight * noOfNights);
     }
   }
 
   const totals = computeTotals({
-    roomRentPerNight: room.basePrice,
+    roomRentPerNight: pricePerNight,
     noOfNights,
     couponDiscount,
     refundableDeposit: REFUNDABLE_DEPOSIT, // always Rs 200, server-enforced
@@ -135,7 +151,8 @@ export async function POST(req: NextRequest) {
       data: {
         bookingRef,
         hotelId: data.hotelId,
-        roomId: data.roomId,
+        roomCategory: data.roomCategory,
+        roomId: null, // admin assigns physical room at check-in
         primaryGuestId: guestId,
         source: "PORTAL",
         status: "CONFIRMED",          // immediately confirmed, no payment yet
@@ -170,6 +187,29 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    // Send WhatsApp confirmation (fire-and-forget)
+    const guestPhone = (await prisma.guest.findUnique({
+      where: { id: guestId },
+      select: { phone: true, name: true },
+    }));
+    const hotelName = (await prisma.hotel.findUnique({
+      where: { id: data.hotelId },
+      select: { name: true },
+    }))?.name ?? "The Hotel";
+
+    if (guestPhone?.phone) {
+      gupshup.sendBookingConfirmation(guestPhone.phone, {
+        guestName: guestPhone.name,
+        bookingRef,
+        hotelName,
+        roomType: categoryMeta.displayName,
+        checkIn: format(checkIn, "dd MMM yyyy"),
+        checkOut: format(checkOut, "dd MMM yyyy"),
+        totalAmount: totals.totalAmount,
+        payAtHotel: true,
+      }).catch((e) => console.error("[WhatsApp] PAY_AT_HOTEL confirmation failed:", e));
+    }
+
     return NextResponse.json({
       bookingId: booking.id,
       bookingRef,
@@ -184,7 +224,8 @@ export async function POST(req: NextRequest) {
     data: {
       bookingRef,
       hotelId: data.hotelId,
-      roomId: data.roomId,
+      roomCategory: data.roomCategory,
+      roomId: null, // assigned by admin at check-in
       primaryGuestId: guestId,
       source: "PORTAL",
       status: "PENDING_PAYMENT",
@@ -247,7 +288,7 @@ export async function GET(req: NextRequest) {
         ? { primaryGuestId: session.user.id }
         : { hotelId: session.user.hotelId },
     include: {
-      room: { select: { roomNumber: true, roomType: true, images: true } },
+      room: { select: { roomNumber: true, roomType: true, images: true } }, // nullable — may be null until assigned
       hotel: { select: { name: true, city: true, images: true } },
       payment: { select: { status: true, razorpayPaymentId: true } },
       onlineCheckin: { select: { completedAt: true } },

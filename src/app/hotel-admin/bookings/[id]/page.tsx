@@ -24,6 +24,7 @@ import {
   LogOut,
   ShieldCheck,
   XCircle,
+  BedDouble,
 } from "lucide-react";
 import { format } from "date-fns";
 import BookingStatusButton, { NoShowButton } from "@/components/hotel-admin/BookingStatusButton";
@@ -32,18 +33,8 @@ import CollectPaymentModal from "@/components/hotel-admin/CollectPaymentModal";
 import AddChargeModal from "@/components/hotel-admin/AddChargeModal";
 import DeleteChargeButton from "@/components/hotel-admin/DeleteChargeButton";
 import AdminCancelBookingButton from "@/components/hotel-admin/CancelBookingButton";
-
-const ROOM_LABELS: Record<string, string> = {
-  LUXURY_COTTAGE: "Luxury Cottage",
-  AC_ROOM: "AC Room",
-  NON_AC_ROOM: "Non-AC Room",
-};
-
-const ROOM_ACCENT: Record<string, string> = {
-  LUXURY_COTTAGE: "#F59E0B",
-  AC_ROOM: "#60A5FA",
-  NON_AC_ROOM: "#4ADE80",
-};
+import AssignRoomButton from "@/components/hotel-admin/AssignRoomButton";
+import { getCategoryMeta, CATEGORY_ROOMS } from "@/lib/utils/room-categories";
 
 const STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
   PENDING_PAYMENT: { label: "Pending Payment", cls: "bg-yellow-500/15 text-yellow-400 border-yellow-500/25" },
@@ -91,7 +82,10 @@ export default async function BookingDetailPage({
 
   if (!booking) notFound();
 
-  const accent = ROOM_ACCENT[booking.room.roomType] ?? "#F59E0B";
+  const categoryMeta = getCategoryMeta(booking.roomCategory as never);
+  const accent = categoryMeta?.accentColor ?? "#F59E0B";
+  const categoryLabel = categoryMeta?.displayName ?? booking.roomCategory;
+  const categoryRooms = CATEGORY_ROOMS[booking.roomCategory as never] ?? [];
   const status = STATUS_CONFIG[booking.status] ?? { label: booking.status, cls: "bg-white/8 text-white/40 border-white/10" };
 
   const ID_LABELS: Record<string, string> = {
@@ -165,7 +159,11 @@ export default async function BookingDetailPage({
           )}
           {/* For post-CONFIRMED statuses (CHECKED_IN → CHECKED_OUT, etc.) */}
           {booking.status !== "CONFIRMED" && (
-            <BookingStatusButton bookingId={booking.id} currentStatus={booking.status} />
+            <BookingStatusButton
+              bookingId={booking.id}
+              currentStatus={booking.status}
+              depositAmount={booking.refundableDeposit}
+            />
           )}
         </div>
       </div>
@@ -357,17 +355,37 @@ export default async function BookingDetailPage({
             className="rounded-2xl p-5 border"
             style={{ background: `${accent}08`, borderColor: `${accent}20` }}
           >
-            <div className="flex items-center gap-3 mb-4">
-              <div
-                className="w-10 h-10 rounded-xl flex items-center justify-center text-xs font-bold text-black"
-                style={{ background: accent }}
-              >
-                #{booking.room.roomNumber}
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center text-xs font-bold text-black shrink-0"
+                  style={{ background: accent }}
+                >
+                  {booking.room ? `#${booking.room.roomNumber}` : <BedDouble className="w-4 h-4" />}
+                </div>
+                <div>
+                  <p className="text-white font-semibold">{categoryLabel}</p>
+                  {booking.room ? (
+                    <p className="text-white/40 text-xs">Room {booking.room.roomNumber}</p>
+                  ) : (
+                    <p className="text-amber-400/70 text-xs italic">No room assigned yet</p>
+                  )}
+                </div>
               </div>
-              <div>
-                <p className="text-white font-semibold">{ROOM_LABELS[booking.room.roomType]}</p>
-                <p className="text-white/40 text-xs">Room {booking.room.roomNumber}</p>
-              </div>
+              {/* Assign / Change room button */}
+              {(booking.status === "CONFIRMED" || booking.status === "CHECKED_IN") && (
+                <AssignRoomButton
+                  bookingId={booking.id}
+                  hotelId={session.user.hotelId!}
+                  roomCategory={booking.roomCategory}
+                  categoryLabel={categoryLabel}
+                  categoryRooms={categoryRooms}
+                  currentRoomId={booking.roomId ?? null}
+                  currentRoomNumber={booking.room?.roomNumber ?? null}
+                  checkInDate={booking.checkInDate.toISOString()}
+                  checkOutDate={booking.checkOutDate.toISOString()}
+                />
+              )}
             </div>
 
             <div className="space-y-2.5 text-sm">
@@ -464,6 +482,42 @@ export default async function BookingDetailPage({
                   <span>₹{booking.balanceDue.toLocaleString("en-IN")}</span>
                 </div>
               )}
+              {/* Checkout deposit outcome */}
+              {booking.status === "CHECKED_OUT" && booking.refundableDeposit > 0 && (
+                <div className="mt-3 pt-3 border-t border-white/8 space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-white/40 text-xs font-semibold mb-2">
+                    <ShieldCheck className="w-3.5 h-3.5" /> Deposit Outcome
+                  </div>
+                  {booking.depositDeducted === 0 ? (
+                    <div className="flex justify-between text-xs text-green-400/80">
+                      <span>Full deposit returned to guest</span>
+                      <span>₹{booking.refundableDeposit.toLocaleString("en-IN")}</span>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex justify-between text-xs text-red-400/70">
+                        <span>Deducted for damage/dirt</span>
+                        <span>−₹{booking.depositDeducted.toLocaleString("en-IN")}</span>
+                      </div>
+                      {booking.depositDeducted <= booking.refundableDeposit ? (
+                        <div className="flex justify-between text-xs text-green-400/70">
+                          <span>Returned to guest</span>
+                          <span>₹{(booking.refundableDeposit - booking.depositDeducted).toLocaleString("en-IN")}</span>
+                        </div>
+                      ) : (
+                        <div className="flex justify-between text-xs text-amber-400/70">
+                          <span>Extra damage charge billed</span>
+                          <span>₹{(booking.depositDeducted - booking.refundableDeposit).toLocaleString("en-IN")}</span>
+                        </div>
+                      )}
+                    </>
+                  )}
+                  {booking.depositNotes && (
+                    <p className="text-[10px] text-white/30 italic mt-1">Note: {booking.depositNotes}</p>
+                  )}
+                </div>
+              )}
+
               {/* Cancellation details */}
               {booking.status === "CANCELLED" && booking.cancellationCharge !== null && (
                 <div className="mt-3 pt-3 border-t border-red-500/15 space-y-1.5">

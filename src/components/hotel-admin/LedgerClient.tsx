@@ -9,7 +9,6 @@ import {
   Plus, ChevronDown,
 } from "lucide-react";
 import type { LedgerEntry } from "@/app/api/hotel-admin/ledger/route";
-import OtpGate from "@/components/hotel-admin/OtpGate";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -68,10 +67,8 @@ export default function LedgerClient() {
   const [toDate, setToDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  // ── OTP gate state ──
+  // Track which entry's delete is in-flight (for spinner)
   type DebitPayload = { category: string; description?: string; amount: number; mode: "CASH" | "ONLINE"; expenseDate: string };
-  const [debitOtp, setDebitOtp] = useState<DebitPayload | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<LedgerEntry | null>(null);
 
   const categories = entryType === "DEBIT" ? DEBIT_CATEGORIES : CREDIT_CATEGORIES;
 
@@ -104,23 +101,6 @@ export default function LedgerClient() {
     setExpenseDate(format(new Date(), "yyyy-MM-dd"));
   }
 
-  // Shared POST — `otp` only present for owner-approved debits
-  async function postEntry(
-    payload: DebitPayload & { entryType: "DEBIT" | "CREDIT" },
-    otp?: { otpId: string; otpCode: string },
-  ) {
-    const res = await fetch("/api/hotel-admin/ledger", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...payload, ...otp }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "Failed to save entry");
-    toast.success(data.message);
-    resetForm();
-    fetchEntries(range, fromDate, toDate);
-  }
-
   // ── Submit ──
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -137,33 +117,65 @@ export default function LedgerClient() {
       expenseDate,
     };
 
-    // Debits (money going out) require owner OTP approval; credits do not.
-    if (entryType === "DEBIT") {
-      setDebitOtp(payload);
-      return;
-    }
-
     setSubmitting(true);
     try {
-      await postEntry({ ...payload, entryType: "CREDIT" });
+      if (entryType === "CREDIT") {
+        // Credits don't need approval — post directly
+        const res = await fetch("/api/hotel-admin/ledger", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ entryType: "CREDIT", ...payload }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "Failed to save entry");
+        toast.success(data.message);
+        resetForm();
+        fetchEntries(range, fromDate, toDate);
+      } else {
+        // Debits require owner OTP approval — send a non-blocking request
+        const res = await fetch("/api/hotel-admin/otp/request", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            purpose: "EXPENSE_DEBIT",
+            description: `Expense — ${finalCategory}`,
+            amount: amt,
+            actionPayload: { ...payload },
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "Failed to submit request");
+        toast.success("Approval request sent — complete in Pending Approvals once the owner issues the code.", {
+          duration: 5000,
+        });
+        resetForm();
+      }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to save entry");
+      toast.error(err instanceof Error ? err.message : "Failed");
     } finally { setSubmitting(false); }
   }
 
-  // ── Delete ── (requires owner OTP approval)
-  async function performDelete(entry: LedgerEntry, otpId: string, otpCode: string) {
+  // ── Delete ── (requires owner OTP approval — send non-blocking request)
+  async function handleDelete(entry: LedgerEntry) {
+    if (!confirm("Request approval to delete this entry?")) return;
     setDeletingId(entry.id);
     try {
-      const params = new URLSearchParams({ id: entry.id, otpId, otpCode });
-      const res = await fetch(`/api/hotel-admin/ledger?${params}`, { method: "DELETE" });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(typeof err?.error === "string" ? err.error : "Delete failed");
-      }
-      toast.success("Entry deleted");
-      setEntries(prev => prev.filter(e => e.id !== entry.id));
-      setDeleteTarget(null);
+      const res = await fetch("/api/hotel-admin/otp/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          purpose: "DELETE_TRANSACTION",
+          description: `Delete ${entry.entryType.toLowerCase()} — ${entry.category} (₹${entry.amount.toLocaleString("en-IN")})`,
+          amount: entry.amount,
+          refId: entry.id,
+          actionPayload: {},
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to submit request");
+      toast.success("Approval request sent — complete in Pending Approvals.", { duration: 4000 });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed");
     } finally { setDeletingId(null); }
   }
 
@@ -472,7 +484,7 @@ export default function LedgerClient() {
 
                   {/* Delete */}
                   <button
-                    onClick={() => setDeleteTarget(entry)}
+                    onClick={() => handleDelete(entry)}
                     disabled={!!deletingId}
                     className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-white/20 hover:text-red-400 hover:bg-red-500/8 transition-all shrink-0 disabled:opacity-30">
                     {deletingId === entry.id
@@ -485,36 +497,6 @@ export default function LedgerClient() {
           )}
         </div>
       </div>
-
-      {/* ── Owner OTP gate — debit creation ── */}
-      <OtpGate
-        open={!!debitOtp}
-        onClose={() => { setDebitOtp(null); setSubmitting(false); }}
-        purpose="EXPENSE_DEBIT"
-        description={debitOtp ? `Expense — ${debitOtp.category}` : "Expense debit"}
-        amount={debitOtp?.amount}
-        onConfirm={async (otpId, otpCode) => {
-          if (!debitOtp) return;
-          await postEntry({ ...debitOtp, entryType: "DEBIT" }, { otpId, otpCode });
-          setDebitOtp(null);
-        }}
-        title="Owner Approval — Expense Debit"
-      />
-
-      {/* ── Owner OTP gate — delete entry ── */}
-      <OtpGate
-        open={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        purpose="DELETE_TRANSACTION"
-        description={deleteTarget ? `Delete ${deleteTarget.entryType.toLowerCase()} — ${deleteTarget.category}` : "Delete ledger entry"}
-        amount={deleteTarget?.amount}
-        refId={deleteTarget?.id}
-        onConfirm={async (otpId, otpCode) => {
-          if (!deleteTarget) return;
-          await performDelete(deleteTarget, otpId, otpCode);
-        }}
-        title="Owner Approval — Delete Entry"
-      />
     </div>
   );
 }

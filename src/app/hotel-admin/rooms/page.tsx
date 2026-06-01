@@ -4,18 +4,8 @@ import { auth } from "@/lib/auth/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db/prisma";
 import RoomStatusCard from "@/components/hotel-admin/RoomStatusCard";
-
-const ROOM_LABELS: Record<string, string> = {
-  LUXURY_COTTAGE: "Luxury Cottage",
-  AC_ROOM: "AC Room",
-  NON_AC_ROOM: "Non-AC Room",
-};
-
-const ROOM_ACCENT: Record<string, string> = {
-  LUXURY_COTTAGE: "#F59E0B",
-  AC_ROOM: "#60A5FA",
-  NON_AC_ROOM: "#4ADE80",
-};
+import SeedRoomsButton from "@/components/hotel-admin/SeedRoomsButton";
+import { getCategoryMeta } from "@/lib/utils/room-categories";
 
 const STATUS_LABELS: Record<string, string> = {
   AVAILABLE: "Available",
@@ -31,7 +21,7 @@ export default async function RoomsPage() {
   const rooms = await prisma.room.findMany({
     where: { hotelId: session.user.hotelId, isActive: true },
     include: {
-      bookings: {
+      assignedBookings: {
         where: { status: "CHECKED_IN" },
         include: {
           primaryGuest: { select: { name: true, phone: true } },
@@ -52,7 +42,7 @@ export default async function RoomsPage() {
 
   const statusCounts = {
     AVAILABLE: rooms.filter((r) => r.status === "AVAILABLE").length,
-    OCCUPIED: rooms.filter((r) => r.status === "OCCUPIED" || r.bookings.length > 0).length,
+    OCCUPIED: rooms.filter((r) => r.status === "OCCUPIED" || r.assignedBookings.length > 0).length,
     CLEANING: rooms.filter((r) => r.status === "CLEANING").length,
     MAINTENANCE: rooms.filter((r) => r.status === "MAINTENANCE").length,
   };
@@ -60,9 +50,12 @@ export default async function RoomsPage() {
   return (
     <div className="p-6 max-w-5xl">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white mb-1">Room Status Board</h1>
-        <p className="text-white/35 text-sm">{rooms.length} rooms · Live status</p>
+      <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold text-white mb-1">Room Status Board</h1>
+          <p className="text-white/35 text-sm">{rooms.length} rooms · Live status</p>
+        </div>
+        <SeedRoomsButton />
       </div>
 
       {/* Status summary */}
@@ -85,15 +78,17 @@ export default async function RoomsPage() {
 
       {/* Room groups */}
       <div className="space-y-7">
-        {Object.entries(grouped).map(([type, typeRooms]) => (
+        {Object.entries(grouped).map(([type, typeRooms]) => {
+          const catMeta = getCategoryMeta(type);
+          return (
           <div key={type}>
             <div className="flex items-center gap-2.5 mb-3">
               <span
                 className="w-2.5 h-2.5 rounded-full"
-                style={{ background: ROOM_ACCENT[type] ?? "#F59E0B" }}
+                style={{ background: catMeta.accentColor }}
               />
               <h2 className="font-semibold text-white/70 text-sm uppercase tracking-wider">
-                {ROOM_LABELS[type] ?? type}
+                {catMeta.displayName}
               </h2>
               <span className="text-white/25 text-xs">({typeRooms.length})</span>
             </div>
@@ -109,13 +104,14 @@ export default async function RoomsPage() {
                     capacity: room.capacity,
                     basePrice: room.basePrice,
                   }}
-                  occupiedBy={room.bookings[0]?.primaryGuest ?? null}
-                  accentColor={ROOM_ACCENT[room.roomType] ?? "#F59E0B"}
+                  occupiedBy={room.assignedBookings[0]?.primaryGuest ?? null}
+                  accentColor={catMeta.accentColor}
                 />
               ))}
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

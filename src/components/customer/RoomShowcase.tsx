@@ -38,7 +38,7 @@ export default function RoomShowcase({ rooms }: { rooms: ShowcaseRoom[] }) {
   function next() { go((active + 1) % rooms.length); }
 
   return (
-    <section id="rooms" className="relative min-h-screen overflow-hidden flex flex-col">
+    <section id="rooms" className="relative isolate min-h-screen overflow-hidden flex flex-col">
 
       {/* ── Crossfading background ─────────────────────────────── */}
       <AnimatePresence mode="sync">
