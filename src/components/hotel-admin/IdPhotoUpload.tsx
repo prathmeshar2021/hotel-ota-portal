@@ -35,7 +35,7 @@ export default function IdPhotoUpload({
 
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("upload_preset", "hotel_ota_uploads");
+    formData.append("upload_preset", "hotel_ota_upload");
     formData.append("folder", "guest_ids");
 
     if (side === "front") setUploadingFront(true);
@@ -48,7 +48,8 @@ export default function IdPhotoUpload({
       );
       const data = await res.json();
       if (!res.ok || !data.secure_url) {
-        toast.error("Upload failed. Check your Cloudinary preset settings.");
+        const reason = data?.error?.message || `HTTP ${res.status}`;
+        toast.error(`Upload failed: ${reason}`);
         return;
       }
       if (side === "front") onFrontChange(data.secure_url);

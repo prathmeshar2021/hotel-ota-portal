@@ -159,12 +159,12 @@ async function uploadToCloudinary(file: File): Promise<string> {
 
   const fd = new FormData();
   fd.append("file", file);
-  fd.append("upload_preset", "hotel_ota_uploads");
+  fd.append("upload_preset", "hotel_ota_upload");
   fd.append("folder", "guest_ids");
 
   const res  = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, { method: "POST", body: fd });
   const data = await res.json();
-  if (!res.ok || !data.secure_url) throw new Error("Upload failed. Try again.");
+  if (!res.ok || !data.secure_url) throw new Error(`Upload failed: ${data?.error?.message || `HTTP ${res.status}`}`);
   return data.secure_url as string;
 }
 

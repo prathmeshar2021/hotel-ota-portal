@@ -130,7 +130,7 @@ export default function OnlineCheckinForm({ bookingRef, noOfPersons, checkInDate
 
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("upload_preset", "hotel_ota_uploads");
+    formData.append("upload_preset", "hotel_ota_upload");
     formData.append("folder", "guest_ids");
 
     if (side === "front") setUploadingFront(true);
@@ -142,7 +142,7 @@ export default function OnlineCheckinForm({ bookingRef, noOfPersons, checkInDate
         { method: "POST", body: formData }
       );
       const data = await res.json();
-      if (!res.ok || !data.secure_url) { toast.error("Upload failed. Try again."); return; }
+      if (!res.ok || !data.secure_url) { toast.error(`Upload failed: ${data?.error?.message || `HTTP ${res.status}`}`); return; }
       if (side === "front") setIdFrontUrl(data.secure_url);
       else setIdBackUrl(data.secure_url);
       toast.success(`ID ${side} photo uploaded ✓`);
@@ -160,14 +160,14 @@ export default function OnlineCheckinForm({ bookingRef, noOfPersons, checkInDate
 
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("upload_preset", "hotel_ota_uploads");
+    formData.append("upload_preset", "hotel_ota_upload");
     formData.append("folder", "guest_ids");
 
     setCompUploading(p => ({ ...p, [idx]: { ...(p[idx] ?? { front: false, back: false }), [side]: true } }));
     try {
       const res  = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, { method: "POST", body: formData });
       const data = await res.json();
-      if (!res.ok || !data.secure_url) { toast.error("Upload failed. Try again."); return; }
+      if (!res.ok || !data.secure_url) { toast.error(`Upload failed: ${data?.error?.message || `HTTP ${res.status}`}`); return; }
       const field = side === "front" ? "idFrontUrl" : "idBackUrl";
       setCompanions(prev => prev.map((c, i) => i === idx ? { ...c, [field]: data.secure_url } : c));
       toast.success(`Guest ${idx + 2} ID ${side} photo uploaded ✓`);
