@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
 import { startOfDay, startOfMonth } from "date-fns";
+import { OTA_PREPAID_SOURCES } from "@/lib/ota/sources";
 
 export async function GET() {
   try {
@@ -33,29 +34,29 @@ export async function GET() {
     monthOnlineChargeAgg,
     monthExpenseAgg,
   ] = await Promise.all([
-    prisma.booking.aggregate({ where: { hotelId }, _sum: { cashPaid: true, onlinePaid: true } }),
-    prisma.additionalCharge.aggregate({ where: { booking: { hotelId }, mode: "CASH" }, _sum: { amount: true } }),
-    prisma.additionalCharge.aggregate({ where: { booking: { hotelId }, mode: "ONLINE" }, _sum: { amount: true } }),
+    prisma.booking.aggregate({ where: { hotelId, source: { notIn: OTA_PREPAID_SOURCES } }, _sum: { cashPaid: true, onlinePaid: true } }),
+    prisma.additionalCharge.aggregate({ where: { booking: { hotelId, source: { notIn: OTA_PREPAID_SOURCES } }, mode: "CASH" }, _sum: { amount: true } }),
+    prisma.additionalCharge.aggregate({ where: { booking: { hotelId, source: { notIn: OTA_PREPAID_SOURCES } }, mode: "ONLINE" }, _sum: { amount: true } }),
     prisma.cashCollection.aggregate({ where: { hotelId }, _sum: { amount: true } }),
     prisma.booking.aggregate({
-      where: { hotelId, status: { in: ["CONFIRMED", "CHECKED_IN"] } },
+      where: { hotelId, status: { in: ["CONFIRMED", "CHECKED_IN"] }, source: { notIn: OTA_PREPAID_SOURCES } },
       _sum: { balanceDue: true }, _count: { _all: true },
     }),
-    prisma.booking.aggregate({ where: { hotelId, createdAt: { gte: todayStart } }, _sum: { cashPaid: true, onlinePaid: true } }),
-    prisma.additionalCharge.aggregate({ where: { booking: { hotelId }, addedAt: { gte: todayStart }, mode: "CASH" }, _sum: { amount: true } }),
+    prisma.booking.aggregate({ where: { hotelId, createdAt: { gte: todayStart }, source: { notIn: OTA_PREPAID_SOURCES } }, _sum: { cashPaid: true, onlinePaid: true } }),
+    prisma.additionalCharge.aggregate({ where: { booking: { hotelId, source: { notIn: OTA_PREPAID_SOURCES } }, addedAt: { gte: todayStart }, mode: "CASH" }, _sum: { amount: true } }),
     prisma.cashCollection.findFirst({ where: { hotelId }, orderBy: { createdAt: "desc" } }),
-    prisma.booking.aggregate({ where: { hotelId, status: "CANCELLED", cancellationCharge: { gt: 0 } }, _sum: { cancellationCharge: true } }),
-    prisma.booking.aggregate({ where: { hotelId, status: "CHECKED_OUT", depositDeducted: { gt: 0 } }, _sum: { depositDeducted: true } }),
+    prisma.booking.aggregate({ where: { hotelId, status: "CANCELLED", cancellationCharge: { gt: 0 }, source: { notIn: OTA_PREPAID_SOURCES } }, _sum: { cancellationCharge: true } }),
+    prisma.booking.aggregate({ where: { hotelId, status: "CHECKED_OUT", depositDeducted: { gt: 0 }, source: { notIn: OTA_PREPAID_SOURCES } }, _sum: { depositDeducted: true } }),
     // All-time cash expenses (debits paid in cash) — used for Cash in Hand
     prisma.hotelExpense.aggregate({ where: { hotelId, entryType: "DEBIT", mode: "CASH" }, _sum: { amount: true } }),
     // All-time cash credits — used for Cash in Hand
     prisma.hotelExpense.aggregate({ where: { hotelId, entryType: "CREDIT", mode: "CASH" }, _sum: { amount: true } }),
     // This month's bookings revenue
-    prisma.booking.aggregate({ where: { hotelId, createdAt: { gte: monthStart } }, _sum: { cashPaid: true, onlinePaid: true } }),
+    prisma.booking.aggregate({ where: { hotelId, createdAt: { gte: monthStart }, source: { notIn: OTA_PREPAID_SOURCES } }, _sum: { cashPaid: true, onlinePaid: true } }),
     // This month's additional charges — cash
-    prisma.additionalCharge.aggregate({ where: { booking: { hotelId }, addedAt: { gte: monthStart }, mode: "CASH" }, _sum: { amount: true } }),
+    prisma.additionalCharge.aggregate({ where: { booking: { hotelId, source: { notIn: OTA_PREPAID_SOURCES } }, addedAt: { gte: monthStart }, mode: "CASH" }, _sum: { amount: true } }),
     // This month's additional charges — online
-    prisma.additionalCharge.aggregate({ where: { booking: { hotelId }, addedAt: { gte: monthStart }, mode: "ONLINE" }, _sum: { amount: true } }),
+    prisma.additionalCharge.aggregate({ where: { booking: { hotelId, source: { notIn: OTA_PREPAID_SOURCES } }, addedAt: { gte: monthStart }, mode: "ONLINE" }, _sum: { amount: true } }),
     // This month's ledger expenses (any mode)
     prisma.hotelExpense.aggregate({ where: { hotelId, entryType: "DEBIT", expenseDate: { gte: monthStart } }, _sum: { amount: true } }),
   ]);

@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
 import { startOfDay, endOfDay, subDays, startOfMonth, endOfMonth, subMonths, differenceInDays } from "date-fns";
 import { getCategoryMeta } from "@/lib/utils/room-categories";
+import { OTA_PREPAID_SOURCES } from "@/lib/ota/sources";
 
 const MAX_RANGE_DAYS = 180;
 
@@ -84,6 +85,9 @@ export async function GET(req: NextRequest) {
       where: {
         hotelId,
         createdAt: { gte: fromDate, lte: toDate },
+        // OTA-prepaid bookings are paid to the channel, not the hotel — they
+        // live in the GoMMT finance view, not the hotel's own statement.
+        source: { notIn: OTA_PREPAID_SOURCES },
       },
       select: {
         id: true,
@@ -108,7 +112,7 @@ export async function GET(req: NextRequest) {
 
     prisma.additionalCharge.findMany({
       where: {
-        booking: { hotelId },
+        booking: { hotelId, source: { notIn: OTA_PREPAID_SOURCES } },
         addedAt: { gte: fromDate, lte: toDate },
       },
       select: {

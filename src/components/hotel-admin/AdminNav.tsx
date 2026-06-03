@@ -19,6 +19,7 @@ import {
   BookOpenText,
   Bell,
   Crown,
+  Plane,
 } from "lucide-react";
 
 interface AdminNavProps {
@@ -34,6 +35,7 @@ const NAV_LINKS = [
   { href: "/hotel-admin/rooms", label: "Rooms", icon: BedDouble },
   { href: "/hotel-admin/guests", label: "Guests", icon: Users },
   { href: "/hotel-admin/accounts", label: "Accounts", icon: Wallet },
+  { href: "/hotel-admin/gommt-finance", label: "GoMMT Finance", icon: Plane },
   { href: "/hotel-admin/ledger", label: "Ledger", icon: BookOpenText },
 ];
 

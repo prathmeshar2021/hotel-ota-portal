@@ -45,6 +45,16 @@ const STATUS_CONFIG: Record<string, { label: string; dot: string; cardCls: strin
 
 const STATUS_OPTIONS = ["AVAILABLE", "CLEANING", "MAINTENANCE"] as const;
 
+// "Cottage5" → "5", "Cave1" → "1", "201" → "201" — just the digits for the small badge.
+function roomBadge(n: string): string {
+  return n.match(/\d+/)?.[0] ?? n;
+}
+
+// Display name: "Cottage5" → "Cottage 5", "Cave1" → "Cave 1"; plain numbers stay "Room 201".
+function roomLabel(n: string): string {
+  return /[A-Za-z]/.test(n) ? n.replace(/([A-Za-z])(\d)/g, "$1 $2") : `Room ${n}`;
+}
+
 export default function RoomStatusCard({ room, occupiedBy, accentColor }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -69,7 +79,7 @@ export default function RoomStatusCard({ room, occupiedBy, accentColor }: Props)
           newStatus === "MAINTENANCE" ? "blocked — hidden from customers" :
           newStatus === "AVAILABLE"   ? "unblocked — available to book" :
           newStatus.toLowerCase();
-        toast.success(`Room #${room.roomNumber} ${label}`);
+        toast.success(`${roomLabel(room.roomNumber)} ${label}`);
         router.refresh();
       } else {
         toast.error("Failed to update room status");
@@ -88,10 +98,10 @@ export default function RoomStatusCard({ room, occupiedBy, accentColor }: Props)
             className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold text-black shrink-0"
             style={{ background: accentColor }}
           >
-            #{room.roomNumber}
+            {roomBadge(room.roomNumber)}
           </div>
           <div>
-            <p className="text-white/70 text-sm font-semibold">Room {room.roomNumber}</p>
+            <p className="text-white/70 text-sm font-semibold">{roomLabel(room.roomNumber)}</p>
             <div className="flex items-center gap-1.5 mt-0.5">
               <span
                 className="w-1.5 h-1.5 rounded-full"

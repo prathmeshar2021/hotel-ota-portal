@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { requireSuperAdmin } from "@/lib/auth/superAdmin";
 import { prisma } from "@/lib/db/prisma";
+import { OTA_PREPAID_SOURCES } from "@/lib/ota/sources";
 import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -54,6 +55,7 @@ export default async function SuperAdminDashboard() {
         hotelId: ctx.hotelId,
         createdAt: { gte: monthStart },
         status: { notIn: ["CANCELLED", "PENDING_PAYMENT"] },
+        source: { notIn: OTA_PREPAID_SOURCES }, // OTA-prepaid handled in GoMMT Finance
       },
       _sum: { totalAmount: true },
     }),

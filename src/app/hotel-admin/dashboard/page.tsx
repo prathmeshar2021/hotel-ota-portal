@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { auth } from "@/lib/auth/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db/prisma";
+import { OTA_PREPAID_SOURCES } from "@/lib/ota/sources";
 import Link from "next/link";
 import {
   LogIn,
@@ -90,12 +91,13 @@ export default async function DashboardPage() {
     prisma.room.count({
       where: { hotelId, isActive: true },
     }),
-    // This month's revenue
+    // This month's revenue — exclude OTA-prepaid bookings (paid to the channel)
     prisma.booking.aggregate({
       where: {
         hotelId,
         status: { in: ["CONFIRMED", "CHECKED_IN", "CHECKED_OUT"] },
         createdAt: { gte: monthStart },
+        source: { notIn: OTA_PREPAID_SOURCES },
       },
       _sum: { totalAmount: true },
     }),

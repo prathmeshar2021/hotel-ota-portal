@@ -35,6 +35,7 @@ import DeleteChargeButton from "@/components/hotel-admin/DeleteChargeButton";
 import AdminCancelBookingButton from "@/components/hotel-admin/CancelBookingButton";
 import AssignRoomButton from "@/components/hotel-admin/AssignRoomButton";
 import { getCategoryMeta, CATEGORY_ROOMS } from "@/lib/utils/room-categories";
+import { isOtaPrepaid, otaSourceLabel } from "@/lib/ota/sources";
 
 const STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
   PENDING_PAYMENT: { label: "Pending Payment", cls: "bg-yellow-500/15 text-yellow-400 border-yellow-500/25" },
@@ -94,6 +95,7 @@ export default async function BookingDetailPage({
   const categoryLabel = categoryMeta?.displayName ?? booking.roomCategory;
   const categoryRooms = CATEGORY_ROOMS[booking.roomCategory as never] ?? [];
   const status = STATUS_CONFIG[booking.status] ?? { label: booking.status, cls: "bg-white/8 text-white/40 border-white/10" };
+  const isOta = isOtaPrepaid(booking.source);
 
   const ID_LABELS: Record<string, string> = {
     AADHAR: "Aadhar Card",
@@ -488,7 +490,15 @@ export default async function BookingDetailPage({
                 <span>Total Amount</span>
                 <span style={{ color: accent }}>₹{booking.totalAmount.toLocaleString("en-IN")}</span>
               </div>
-              {booking.balanceDue > 0 && (
+              {isOta && (
+                <div className="mt-2 flex items-center justify-between gap-2 rounded-xl border border-red-500/20 bg-red-500/8 px-3 py-2">
+                  <span className="flex items-center gap-1.5 text-red-300 text-xs font-semibold">
+                    <CheckCircle className="w-3.5 h-3.5" /> Paid to {otaSourceLabel(booking.source)}
+                  </span>
+                  <span className="text-red-300/60 text-[10px]">No payment collected at hotel</span>
+                </div>
+              )}
+              {!isOta && booking.balanceDue > 0 && (
                 <div className="flex justify-between font-semibold text-red-400 text-sm">
                   <span>Balance Due</span>
                   <span>₹{booking.balanceDue.toLocaleString("en-IN")}</span>
@@ -557,8 +567,8 @@ export default async function BookingDetailPage({
               )}
             </div>
 
-            {/* Cash/UPI collection button — only when balance is outstanding */}
-            {booking.balanceDue > 0 && (
+            {/* Cash/UPI collection button — only when balance is outstanding (never for OTA-prepaid) */}
+            {!isOta && booking.balanceDue > 0 && (
               <CollectPaymentModal
                 bookingId={booking.id}
                 balanceDue={booking.balanceDue}
