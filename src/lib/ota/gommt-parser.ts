@@ -97,18 +97,34 @@ function money(s: string | undefined): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
-/** Map an OTA room/rate name to our internal category. Cottages first so that
- *  "Deluxe Pinewood Cottage…" maps to PINEWOOD, not the "Deluxe AC" room. */
+/**
+ * Map an OTA room/rate name to our internal category.
+ *
+ * GoMMT cottage names (full, as they appear in the booking mail — the shortened
+ * forms without the "King Bed … Forest View" bed description map the same way):
+ *   • "Deluxe Cottage King Bed with Bunk Bed Forest View"               → LUXURY_COTTAGE   (cottages 1, 5, 6)
+ *   • "Deluxe Cottage King Bed with Home Theater and Bunk Bed Forest View" → THEATRE_COTTAGE (cottage 2)
+ *   • "Deluxe Pinewood Cottage King Bed with Bunk Bed Forest View"      → PINEWOOD_COTTAGE (cottages 3, 4)
+ *
+ * Order matters: the two distinguishing keywords ("pinewood", "home theater")
+ * are checked before the plain-"cottage" fallback so a "Deluxe Cottage" with
+ * neither keyword lands on LUXURY_COTTAGE.
+ *
+ * AC rooms: GoMMT lists every AC room under a single name "Deluxe AC Rooms"
+ * (no separate Cave listing), so any "… AC Room …" maps to PREMIUM_AC_ROOM.
+ * Non-AC rooms are NOT listed on GoMMT, so they never arrive via this channel.
+ */
 export function mapOtaRoomName(name: string | undefined): RoomCategoryType | undefined {
   if (!name) return undefined;
   const n = name.toLowerCase();
+  // Cottages — most specific keyword first.
   if (n.includes("pinewood")) return "PINEWOOD_COTTAGE";
-  if (n.includes("theatre") || n.includes("theater")) return "THEATRE_COTTAGE";
+  if (n.includes("home theater") || n.includes("home theatre") || n.includes("theatre") || n.includes("theater"))
+    return "THEATRE_COTTAGE";
   if (n.includes("luxury")) return "LUXURY_COTTAGE";
-  if (n.includes("cave")) return "CAVE_AC_ROOM";
-  if (n.includes("cottage")) return "LUXURY_COTTAGE"; // generic cottage fallback
-  if (n.includes("deluxe") || n.includes("premium")) return "PREMIUM_AC_ROOM";
-  if (n.includes("non ac") || n.includes("non-ac")) return "NON_AC_ROOM";
+  if (n.includes("cottage")) return "LUXURY_COTTAGE"; // plain "Deluxe Cottage …"
+  // AC rooms — all GoMMT AC rooms share the name "Deluxe AC Rooms".
+  if (n.includes("ac room") || n.includes("deluxe ac")) return "PREMIUM_AC_ROOM";
   return undefined;
 }
 
