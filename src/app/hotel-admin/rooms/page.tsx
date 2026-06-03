@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db/prisma";
 import RoomStatusCard from "@/components/hotel-admin/RoomStatusCard";
 import SeedRoomsButton from "@/components/hotel-admin/SeedRoomsButton";
-import { getCategoryMeta } from "@/lib/utils/room-categories";
+import { getCategoryMeta, ALL_MAIN_CATEGORIES } from "@/lib/utils/room-categories";
 
 const STATUS_LABELS: Record<string, string> = {
   AVAILABLE: "Available",
@@ -76,40 +76,63 @@ export default async function RoomsPage() {
         ))}
       </div>
 
-      {/* Room groups */}
-      <div className="space-y-7">
-        {Object.entries(grouped).map(([type, typeRooms]) => {
-          const catMeta = getCategoryMeta(type);
+      {/* Room groups — Category (main) → Sub-category (if >1) → rooms */}
+      <div className="space-y-10">
+        {ALL_MAIN_CATEGORIES.map((group) => {
+          const subTypes = group.subcategories.filter((t) => grouped[t]?.length);
+          if (subTypes.length === 0) return null;
+          const groupCount = subTypes.reduce((n, t) => n + grouped[t].length, 0);
+          const showSub = subTypes.length > 1; // only sub-divide when there's more than one
+
           return (
-          <div key={type}>
-            <div className="flex items-center gap-2.5 mb-3">
-              <span
-                className="w-2.5 h-2.5 rounded-full"
-                style={{ background: catMeta.accentColor }}
-              />
-              <h2 className="font-semibold text-white/70 text-sm uppercase tracking-wider">
-                {catMeta.displayName}
-              </h2>
-              <span className="text-white/25 text-xs">({typeRooms.length})</span>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {typeRooms.map((room) => (
-                <RoomStatusCard
-                  key={room.id}
-                  room={{
-                    id: room.id,
-                    roomNumber: room.roomNumber,
-                    roomType: room.roomType,
-                    status: room.status,
-                    capacity: room.capacity,
-                    basePrice: room.basePrice,
-                  }}
-                  occupiedBy={room.assignedBookings[0]?.primaryGuest ?? null}
-                  accentColor={catMeta.accentColor}
-                />
-              ))}
-            </div>
-          </div>
+            <section key={group.key}>
+              {/* Main category heading */}
+              <div className="flex items-center gap-3 mb-4 pb-2 border-b border-white/10">
+                <span className="w-3 h-3 rounded-full shrink-0" style={{ background: group.accentColor }} />
+                <h2 className="font-bold text-white text-lg tracking-tight">{group.displayName}</h2>
+                <span className="text-white/30 text-xs">
+                  {groupCount} room{groupCount !== 1 ? "s" : ""}
+                </span>
+              </div>
+
+              <div className="space-y-6">
+                {subTypes.map((type) => {
+                  const catMeta = getCategoryMeta(type);
+                  const typeRooms = grouped[type];
+                  return (
+                    <div key={type}>
+                      {/* Sub-category heading (only when the group has more than one) */}
+                      {showSub && (
+                        <div className="flex items-center gap-2.5 mb-3 pl-0.5">
+                          <span className="w-2 h-2 rounded-full shrink-0" style={{ background: catMeta.accentColor }} />
+                          <h3 className="font-semibold text-white/55 text-xs uppercase tracking-wider">
+                            {catMeta.displayName}
+                          </h3>
+                          <span className="text-white/25 text-xs">({typeRooms.length})</span>
+                        </div>
+                      )}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {typeRooms.map((room) => (
+                          <RoomStatusCard
+                            key={room.id}
+                            room={{
+                              id: room.id,
+                              roomNumber: room.roomNumber,
+                              roomType: room.roomType,
+                              status: room.status,
+                              capacity: room.capacity,
+                              basePrice: room.basePrice,
+                            }}
+                            occupiedBy={room.assignedBookings[0]?.primaryGuest ?? null}
+                            accentColor={catMeta.accentColor}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
           );
         })}
       </div>
