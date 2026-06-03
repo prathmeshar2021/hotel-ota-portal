@@ -9,9 +9,11 @@ import { Calendar, User, ArrowRight, Phone, Search, LogIn, LogOut } from "lucide
 import { getCategoryMeta } from "@/lib/utils/room-categories";
 
 type Filter = "all" | "arrivals-today" | "departures-today" | "in-house" | "upcoming" | "checked-out";
+type SortKey = "checkin-desc" | "checkin-asc" | "created-desc" | "checkout-asc";
+type SourceKey = "all" | "direct" | "MMT" | "GOIBIBO";
 
 interface Props {
-  searchParams: Promise<{ filter?: string; q?: string }>;
+  searchParams: Promise<{ filter?: string; q?: string; sort?: string; source?: string }>;
 }
 
 const STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
@@ -40,6 +42,40 @@ const FILTERS: { key: Filter; label: string }[] = [
   { key: "checked-out", label: "Checked Out" },
 ];
 
+const SOURCE_FILTERS: { key: SourceKey; label: string }[] = [
+  { key: "all", label: "All Channels" },
+  { key: "direct", label: "Direct" },
+  { key: "MMT", label: "MakeMyTrip" },
+  { key: "GOIBIBO", label: "Goibibo" },
+];
+
+const SORTS: { key: SortKey; label: string }[] = [
+  { key: "checkin-desc", label: "Check-in · newest" },
+  { key: "checkin-asc", label: "Check-in · oldest" },
+  { key: "created-desc", label: "Recently booked" },
+  { key: "checkout-asc", label: "Check-out · soonest" },
+];
+
+const ORDER_BY: Record<SortKey, Record<string, "asc" | "desc">> = {
+  "checkin-desc": { checkInDate: "desc" },
+  "checkin-asc": { checkInDate: "asc" },
+  "created-desc": { createdAt: "desc" },
+  "checkout-asc": { checkOutDate: "asc" },
+};
+
+const DIRECT_SOURCES = ["PORTAL", "WALK_IN", "PHONE", "OTHER"];
+
+// Build a clean bookings URL, omitting default values.
+function bookingsHref(p: { filter: Filter; q: string; sort: SortKey; source: SourceKey }) {
+  const sp = new URLSearchParams();
+  if (p.filter !== "all") sp.set("filter", p.filter);
+  if (p.q) sp.set("q", p.q);
+  if (p.sort !== "checkin-desc") sp.set("sort", p.sort);
+  if (p.source !== "all") sp.set("source", p.source);
+  const qs = sp.toString();
+  return `/hotel-admin/bookings${qs ? `?${qs}` : ""}`;
+}
+
 export default async function BookingsPage({ searchParams }: Props) {
   const session = await auth();
   if (!session?.user?.hotelId) redirect("/auth/staff-login");
@@ -48,6 +84,10 @@ export default async function BookingsPage({ searchParams }: Props) {
 
   const filter = (sp.filter ?? "all") as Filter;
   const query = sp.q?.trim() ?? "";
+  const sort: SortKey = (sp.sort && sp.sort in ORDER_BY ? sp.sort : "checkin-desc") as SortKey;
+  const source: SourceKey = (["all", "direct", "MMT", "GOIBIBO"].includes(sp.source ?? "")
+    ? sp.source
+    : "all") as SourceKey;
 
   const today = new Date();
   const todayStart = startOfDay(today);
@@ -63,6 +103,9 @@ export default async function BookingsPage({ searchParams }: Props) {
       { primaryGuest: { phone: { contains: query } } },
     ];
   }
+
+  if (source === "direct") where.source = { in: DIRECT_SOURCES };
+  else if (source !== "all") where.source = source;
 
   switch (filter) {
     case "arrivals-today":
@@ -93,9 +136,7 @@ export default async function BookingsPage({ searchParams }: Props) {
       room: { select: { roomNumber: true, roomType: true } },
       onlineCheckin: { select: { completedAt: true } },
     },
-    orderBy: [
-      { checkInDate: filter === "checked-out" ? "desc" : "asc" },
-    ],
+    orderBy: [ORDER_BY[sort]],
     take: 50,
   });
 
@@ -107,12 +148,12 @@ export default async function BookingsPage({ searchParams }: Props) {
         <p className="text-white/35 text-sm">{bookings.length} booking{bookings.length !== 1 ? "s" : ""} found</p>
       </div>
 
-      {/* Filter tabs */}
-      <div className="flex flex-wrap gap-2 mb-5">
+      {/* Status filter tabs */}
+      <div className="flex flex-wrap gap-2 mb-3">
         {FILTERS.map(({ key, label }) => (
           <Link
             key={key}
-            href={`/hotel-admin/bookings?filter=${key}${query ? `&q=${encodeURIComponent(query)}` : ""}`}
+            href={bookingsHref({ filter: key, q: query, sort, source })}
             className={`text-xs font-semibold px-3.5 py-2 rounded-xl border transition-all ${
               filter === key
                 ? "bg-blue-500/20 text-blue-300 border-blue-500/30"
@@ -124,9 +165,47 @@ export default async function BookingsPage({ searchParams }: Props) {
         ))}
       </div>
 
+      {/* Channel filter */}
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <span className="text-[10px] uppercase tracking-wider text-white/25 font-semibold mr-1">Channel</span>
+        {SOURCE_FILTERS.map(({ key, label }) => (
+          <Link
+            key={key}
+            href={bookingsHref({ filter, q: query, sort, source: key })}
+            className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all ${
+              source === key
+                ? "bg-red-500/15 text-red-300 border-red-500/30"
+                : "bg-white/3 text-white/40 border-white/8 hover:bg-white/6 hover:text-white/60"
+            }`}
+          >
+            {label}
+          </Link>
+        ))}
+      </div>
+
+      {/* Sort */}
+      <div className="flex flex-wrap items-center gap-2 mb-5">
+        <span className="text-[10px] uppercase tracking-wider text-white/25 font-semibold mr-1">Sort</span>
+        {SORTS.map(({ key, label }) => (
+          <Link
+            key={key}
+            href={bookingsHref({ filter, q: query, sort: key, source })}
+            className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all ${
+              sort === key
+                ? "bg-violet-500/15 text-violet-300 border-violet-500/30"
+                : "bg-white/3 text-white/40 border-white/8 hover:bg-white/6 hover:text-white/60"
+            }`}
+          >
+            {label}
+          </Link>
+        ))}
+      </div>
+
       {/* Search */}
       <form method="get" className="mb-5">
-        <input type="hidden" name="filter" value={filter} />
+        {filter !== "all" && <input type="hidden" name="filter" value={filter} />}
+        {sort !== "checkin-desc" && <input type="hidden" name="sort" value={sort} />}
+        {source !== "all" && <input type="hidden" name="source" value={source} />}
         <div className="relative max-w-sm">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/25" />
           <input
