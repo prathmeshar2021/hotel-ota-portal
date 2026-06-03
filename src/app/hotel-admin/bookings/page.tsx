@@ -24,6 +24,13 @@ const STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
 };
 
 
+// OTA channels get a highlighted source tag; direct sources stay untagged.
+const SOURCE_CONFIG: Record<string, { label: string; cls: string }> = {
+  MMT: { label: "MakeMyTrip", cls: "bg-red-500/15 text-red-300 border-red-500/30" },
+  GOIBIBO: { label: "Goibibo", cls: "bg-orange-500/15 text-orange-300 border-orange-500/30" },
+  BOOKING_COM: { label: "Booking.com", cls: "bg-indigo-500/15 text-indigo-300 border-indigo-500/30" },
+};
+
 const FILTERS: { key: Filter; label: string }[] = [
   { key: "all", label: "All Bookings" },
   { key: "arrivals-today", label: "Arrivals Today" },
@@ -161,6 +168,11 @@ export default async function BookingsPage({ searchParams }: Props) {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5">
                     <p className="font-semibold text-white/85 text-sm truncate">{b.primaryGuest.name}</p>
+                    {SOURCE_CONFIG[b.source] && (
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border shrink-0 ${SOURCE_CONFIG[b.source].cls}`}>
+                        {SOURCE_CONFIG[b.source].label}
+                      </span>
+                    )}
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-full border shrink-0 ${status.cls}`}>
                       {status.label}
                     </span>

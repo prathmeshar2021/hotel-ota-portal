@@ -120,17 +120,57 @@ export async function POST(req: NextRequest) {
           cancellationCharge: d.cancellationCharge ?? 0,
         },
       });
-      await log(
-        res.count > 0 ? "ota_cancellation" : "ota_cancellation_unmatched",
-        res.count > 0 ? "SUCCESS" : "FAILED",
-      );
-      return NextResponse.json({ ok: true, event: "cancellation", matched: res.count });
+      if (res.count > 0) {
+        await log("ota_cancellation", "SUCCESS");
+        return NextResponse.json({ ok: true, event: "cancellation", matched: res.count });
+      }
+
+      // No matching booking — the cancellation arrived before its NEW_BOOKING
+      // email (Gmail/forwarder can deliver out of order). Write a CANCELLED
+      // tombstone so the room is never held and a later NEW_BOOKING for the same
+      // ref won't revive it (see the already-cancelled guard below).
+      if (!d.checkIn || !d.checkOut) {
+        await log("ota_cancellation_unmatched", "FAILED");
+        return NextResponse.json({ ok: true, event: "cancellation", matched: 0, warn: "no dates to tombstone" });
+      }
+      const tomb = await prisma.booking.create({
+        data: {
+          bookingRef,
+          hotel: { connect: { id: hotel.id } },
+          source: d.source,
+          status: "CANCELLED",
+          roomCategory: d.roomCategory ?? "LUXURY_COTTAGE",
+          checkInDate: d.checkIn,
+          checkOutDate: d.checkOut,
+          noOfNights: d.nights ?? 1,
+          noOfPersons: d.guests ?? d.adults ?? 1,
+          roomRent: 0,
+          totalAmount: 0,
+          cancelledAt: new Date(),
+          cancellationCharge: d.cancellationCharge ?? 0,
+          specialRequests: `OTA ${d.source} · cancelled${d.pnr ? ` · PNR ${d.pnr}` : ""}`.trim(),
+          primaryGuest: { create: { name: d.guestName?.trim() || "OTA Guest" } },
+        },
+      });
+      await log("ota_cancellation_tombstone", "SUCCESS", undefined, tomb.id);
+      return NextResponse.json({ ok: true, event: "cancellation", matched: 0, tombstoned: true });
     }
 
     // NEW_BOOKING or MODIFICATION (treat unknown-but-parsed as a booking)
     if (!d.checkIn || !d.checkOut) {
       await log("ota_booking_missing_dates", "FAILED");
       return NextResponse.json({ ok: true, parsed: true, warn: "missing dates" });
+    }
+
+    // If a cancellation already landed for this ref (out-of-order delivery),
+    // keep it cancelled — do not revive the room.
+    const existing = await prisma.booking.findUnique({
+      where: { bookingRef },
+      select: { id: true, status: true },
+    });
+    if (existing?.status === "CANCELLED") {
+      await log("ota_new_booking_after_cancel", "SUCCESS", undefined, existing.id);
+      return NextResponse.json({ ok: true, event: d.eventType, bookingRef, kept: "CANCELLED" });
     }
 
     const amount = d.propertyGrossCharges ?? 0;

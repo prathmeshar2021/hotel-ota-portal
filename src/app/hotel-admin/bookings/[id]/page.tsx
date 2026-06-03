@@ -45,6 +45,13 @@ const STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
   NO_SHOW: { label: "No Show", cls: "bg-orange-500/15 text-orange-400 border-orange-500/25" },
 };
 
+// OTA channels get a highlighted source tag; direct sources stay untagged.
+const SOURCE_CONFIG: Record<string, { label: string; cls: string }> = {
+  MMT: { label: "MakeMyTrip", cls: "bg-red-500/15 text-red-300 border-red-500/30" },
+  GOIBIBO: { label: "Goibibo", cls: "bg-orange-500/15 text-orange-300 border-orange-500/30" },
+  BOOKING_COM: { label: "Booking.com", cls: "bg-indigo-500/15 text-indigo-300 border-indigo-500/30" },
+};
+
 function InfoRow({ label, value, icon }: { label: string; value?: string | null; icon?: React.ReactNode }) {
   if (!value) return null;
   return (
@@ -111,6 +118,11 @@ export default async function BookingDetailPage({
         <div>
           <div className="flex items-center gap-3 mb-1 flex-wrap">
             <h1 className="text-xl font-bold text-white">{booking.primaryGuest.name}</h1>
+            {SOURCE_CONFIG[booking.source] && (
+              <span className={`text-xs font-bold px-3 py-1 rounded-full border ${SOURCE_CONFIG[booking.source].cls}`}>
+                {SOURCE_CONFIG[booking.source].label}
+              </span>
+            )}
             <span className={`text-xs font-bold px-3 py-1 rounded-full border ${status.cls}`}>
               {status.label}
             </span>
