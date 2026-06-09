@@ -390,14 +390,21 @@ export default function CounterCheckinModal({
 
         {/* ── Notices ─────────────────────────────────────────────────────── */}
         <div className="px-6 pt-5 space-y-3">
-          {existingData?.comingFrom && (
+          {existingData?.comingFrom ? (
             <div className="flex items-start gap-3 bg-green-500/8 border border-green-500/20 rounded-2xl px-4 py-3">
               <ShieldCheck className="w-4 h-4 text-green-400 shrink-0 mt-0.5" />
               <p className="text-green-300 text-xs leading-relaxed">
                 <span className="font-bold">Online check-in done</span> — details pre-filled. Verify original ID document before confirming.
               </p>
             </div>
-          )}
+          ) : existingData?.idFrontUrl ? (
+            <div className="flex items-start gap-3 bg-blue-500/8 border border-blue-500/20 rounded-2xl px-4 py-3">
+              <ShieldCheck className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+              <p className="text-blue-300 text-xs leading-relaxed">
+                <span className="font-bold">ID already on file</span> — pre-filled from the guest profile. Just add travel details. Verify against the original before confirming.
+              </p>
+            </div>
+          ) : null}
           {noOfPersons > 1 && (
             <div className="flex items-start gap-3 bg-amber-500/8 border border-amber-500/20 rounded-2xl px-4 py-3">
               <Users className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />

@@ -144,21 +144,24 @@ export default async function BookingDetailPage({
                 depositAmount={booking.refundableDeposit}
               />
               <NoShowButton bookingId={booking.id} />
-              {/* Counter check-in opens the full form modal — pre-fills from web check-in if done */}
+              {/* Counter check-in opens the full form modal. Always pre-fill from
+                  whatever we already hold: the primary guest's stored ID (captured
+                  at booking / a previous stay) and any companions added at booking,
+                  plus online-check-in travel details when the guest completed it. */}
               <CounterCheckinButton
                 bookingId={booking.id}
                 bookingRef={booking.bookingRef}
                 guestName={booking.primaryGuest.name}
                 noOfPersons={booking.noOfPersons}
-                existingData={booking.onlineCheckin ? {
+                existingData={{
                   idType: booking.primaryGuest.idType,
                   idNumber: booking.primaryGuest.idNumber,
                   idFrontUrl: booking.primaryGuest.idFrontUrl,
                   idBackUrl: booking.primaryGuest.idBackUrl,
-                  comingFrom: booking.onlineCheckin.comingFrom,
-                  goingTo: booking.onlineCheckin.goingTo,
-                  purpose: booking.onlineCheckin.purpose,
-                  vehicleNo: booking.onlineCheckin.vehicleNo,
+                  comingFrom: booking.onlineCheckin?.comingFrom,
+                  goingTo: booking.onlineCheckin?.goingTo,
+                  purpose: booking.onlineCheckin?.purpose,
+                  vehicleNo: booking.onlineCheckin?.vehicleNo,
                   companions: booking.companions.map(c => ({
                     name: c.name,
                     relation: c.relation,
@@ -167,7 +170,7 @@ export default async function BookingDetailPage({
                     idFrontUrl: c.idFrontUrl,
                     idBackUrl: c.idBackUrl,
                   })),
-                } : undefined}
+                }}
               />
             </>
           )}
