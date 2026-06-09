@@ -1,6 +1,39 @@
 import { prisma } from "@/lib/db/prisma";
 import { CATEGORY_META, type RoomCategoryType } from "@/lib/utils/room-categories";
-import type { RoomType } from "@prisma/client";
+import type { RoomType, Prisma } from "@prisma/client";
+
+/**
+ * How long an unpaid online booking (PENDING_PAYMENT) holds inventory while the
+ * guest completes payment. After this window the hold self-releases, so an
+ * abandoned checkout never permanently blocks a room.
+ */
+export const PAYMENT_HOLD_MINUTES = 15;
+
+/** PENDING_PAYMENT bookings created before this no longer occupy inventory. */
+export function paymentHoldCutoff(): Date {
+  return new Date(Date.now() - PAYMENT_HOLD_MINUTES * 60_000);
+}
+
+/**
+ * Prisma `where` fragment matching every booking that currently *occupies*
+ * inventory for a date range:
+ *   • CONFIRMED / CHECKED_IN     — firm holds
+ *   • PENDING_PAYMENT (recent)   — transient payment holds, so two guests can't
+ *                                  both pay for the last room; auto-released
+ *                                  once PAYMENT_HOLD_MINUTES elapse.
+ *
+ * Spread alongside the date-overlap filters, e.g.:
+ *   where: { hotelId, roomCategory, ...inventoryHoldFilter(),
+ *            checkInDate: { lt: checkOut }, checkOutDate: { gt: checkIn } }
+ */
+export function inventoryHoldFilter(): Prisma.BookingWhereInput {
+  return {
+    OR: [
+      { status: { in: ["CONFIRMED", "CHECKED_IN"] } },
+      { status: "PENDING_PAYMENT", createdAt: { gte: paymentHoldCutoff() } },
+    ],
+  };
+}
 
 /** List of date strings (YYYY-MM-DD at UTC midnight) for each night of a stay. */
 function nightsBetween(checkIn: Date, checkOut: Date): Date[] {

@@ -72,12 +72,13 @@ async function getCategoryAvailability(
   const checkInDate  = new Date(checkIn);
   const checkOutDate = new Date(checkOut);
 
-  // Count active bookings per category in date range
+  // Count active bookings per category in date range (incl. recent payment holds)
+  const { inventoryHoldFilter } = await import("@/lib/utils/inventory");
   const rows = await prisma.booking.groupBy({
     by: ["roomCategory"],
     where: {
       hotelId,
-      status: { in: ["CONFIRMED", "CHECKED_IN"] },
+      ...inventoryHoldFilter(),
       checkInDate: { lt: checkOutDate },
       checkOutDate: { gt: checkInDate },
     },

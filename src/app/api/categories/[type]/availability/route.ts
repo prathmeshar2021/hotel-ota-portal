@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import { CATEGORY_META, slugToCategory } from "@/lib/utils/room-categories";
-import { resolveCategoryCapacity } from "@/lib/utils/inventory";
+import { resolveCategoryCapacity, inventoryHoldFilter } from "@/lib/utils/inventory";
 import type { RoomType } from "@prisma/client";
 
 export async function GET(
@@ -43,7 +43,7 @@ export async function GET(
     where: {
       hotelId,
       roomCategory: categoryType,
-      status: { in: ["CONFIRMED", "CHECKED_IN"] },
+      ...inventoryHoldFilter(),
       checkInDate: { lt: checkOut },
       checkOutDate: { gt: checkIn },
     },

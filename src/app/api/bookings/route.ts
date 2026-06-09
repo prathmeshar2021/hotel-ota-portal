@@ -83,17 +83,17 @@ export async function POST(req: NextRequest) {
   }
 
   // Category-level availability check: count active bookings in this category for the date range
+  const { resolveCategoryCapacity, inventoryHoldFilter } = await import("@/lib/utils/inventory");
   const activeInCategory = await prisma.booking.count({
     where: {
       hotelId: data.hotelId,
       roomCategory: data.roomCategory,
-      status: { in: ["CONFIRMED", "CHECKED_IN"] },
+      ...inventoryHoldFilter(),
       checkInDate: { lt: checkOut },
       checkOutDate: { gt: checkIn },
     },
   });
   // Effective capacity honours any super-admin inventory overrides for the dates
-  const { resolveCategoryCapacity } = await import("@/lib/utils/inventory");
   const capacity = await resolveCategoryCapacity(
     data.hotelId,
     data.roomCategory as never,
