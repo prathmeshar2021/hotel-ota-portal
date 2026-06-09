@@ -301,10 +301,34 @@ export async function POST(req: NextRequest) {
     totals,
   });
   } catch (err) {
-    console.error("[POST /api/bookings]", err);
-    const message = err instanceof Error ? err.message : "Unexpected server error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    // Log the full object — Razorpay/Prisma errors carry detail beyond `.message`.
+    console.error("[POST /api/bookings]", JSON.stringify(err, Object.getOwnPropertyNames(err ?? {})), err);
+    return NextResponse.json({ error: extractErrorMessage(err) }, { status: 500 });
   }
+}
+
+/**
+ * Pull a human-readable reason out of whatever was thrown. The Razorpay SDK
+ * rejects with a plain object like `{ statusCode, error: { description } }`
+ * (NOT an Error), which would otherwise surface as a useless generic message.
+ */
+function extractErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (err && typeof err === "object") {
+    const e = err as {
+      error?: { description?: string; reason?: string };
+      description?: string;
+      message?: string;
+    };
+    return (
+      e.error?.description ??
+      e.error?.reason ??
+      e.description ??
+      e.message ??
+      "Payment could not be initiated — please check the payment gateway configuration."
+    );
+  }
+  return "Unexpected server error";
 }
 
 export async function GET(req: NextRequest) {
