@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   Loader2, LogIn, LogOut, XCircle, ShieldCheck, ShieldX,
-  AlertTriangle, X, IndianRupee,
+  AlertTriangle, X, IndianRupee, CheckCircle2,
 } from "lucide-react";
 
 interface Props {
@@ -21,8 +21,30 @@ export default function BookingStatusButton({ bookingId, currentStatus, depositA
   const [loading, setLoading] = useState(false);
   const [checkoutModalOpen, setCheckoutModalOpen] = useState(false);
 
-  // Only render for CONFIRMED and CHECKED_IN
-  if (currentStatus !== "CONFIRMED" && currentStatus !== "CHECKED_IN") return null;
+  // Render for PENDING_PAYMENT (manual confirm), CONFIRMED and CHECKED_IN
+  if (currentStatus !== "PENDING_PAYMENT" && currentStatus !== "CONFIRMED" && currentStatus !== "CHECKED_IN") return null;
+
+  // ── Confirm a still-pending booking (e.g. paid externally / pay-at-hotel) ──
+  async function handleConfirm() {
+    if (!window.confirm("Confirm this booking? It will hold the room and unlock check-in.")) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/hotel-admin/bookings/${bookingId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "CONFIRMED" }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(data.message ?? "Booking confirmed");
+        router.refresh();
+      } else {
+        toast.error(data.error ?? "Failed to confirm booking");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
 
   // ── Check In (no deposit prompt) ──────────────────────────────────────────
   async function handleCheckIn() {
@@ -44,6 +66,19 @@ export default function BookingStatusButton({ bookingId, currentStatus, depositA
     } finally {
       setLoading(false);
     }
+  }
+
+  if (currentStatus === "PENDING_PAYMENT") {
+    return (
+      <button
+        onClick={handleConfirm}
+        disabled={loading}
+        className="flex items-center gap-2 font-bold px-6 py-3 rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60 shadow-lg bg-blue-500 hover:bg-blue-400 text-white shadow-blue-500/20"
+      >
+        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+        {loading ? "Confirming…" : "Confirm Booking"}
+      </button>
+    );
   }
 
   if (currentStatus === "CONFIRMED") {

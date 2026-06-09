@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
+  PENDING_PAYMENT: ["CONFIRMED", "CANCELLED"],
   CONFIRMED: ["CHECKED_IN", "NO_SHOW", "CANCELLED"],
   CHECKED_IN: ["CHECKED_OUT"],
 };
@@ -76,6 +77,7 @@ export async function PATCH(
   });
 
   const messages: Record<string, string> = {
+    CONFIRMED: "Booking confirmed",
     CHECKED_IN: "Guest checked in successfully",
     CHECKED_OUT: "Guest checked out. Room marked for cleaning.",
     NO_SHOW: "Booking marked as No Show",

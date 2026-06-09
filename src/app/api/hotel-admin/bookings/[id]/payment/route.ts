@@ -64,6 +64,10 @@ export async function PATCH(
   const timestamp   = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
   const noteEntry   = `[${timestamp}] ₹${collected.toLocaleString("en-IN")} collected ${mode === "CASH" ? "in cash" : "via UPI/Card"} by ${collectedBy}${notes ? ` — ${notes}` : ""}`;
 
+  // Collecting payment at the counter confirms a still-pending booking,
+  // so it holds inventory and front-desk actions (assign room / check-in) unlock.
+  const willConfirm = booking.status === "PENDING_PAYMENT";
+
   // Update booking amounts
   await prisma.booking.update({
     where: { id },
@@ -71,6 +75,7 @@ export async function PATCH(
       cashPaid: newCashPaid,
       onlinePaid: newOnlinePaid,
       balanceDue: newBalance,
+      ...(willConfirm ? { status: "CONFIRMED" } : {}),
     },
   });
 
@@ -107,8 +112,9 @@ export async function PATCH(
     collected,
     newBalance,
     isFullyPaid,
+    confirmed: willConfirm,
     message: isFullyPaid
-      ? `₹${collected.toLocaleString("en-IN")} collected — booking fully settled`
-      : `₹${collected.toLocaleString("en-IN")} collected — ₹${newBalance.toLocaleString("en-IN")} still due`,
+      ? `₹${collected.toLocaleString("en-IN")} collected — booking ${willConfirm ? "confirmed & " : ""}fully settled`
+      : `₹${collected.toLocaleString("en-IN")} collected${willConfirm ? " — booking confirmed" : ""} — ₹${newBalance.toLocaleString("en-IN")} still due`,
   });
 }
