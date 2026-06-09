@@ -11,7 +11,8 @@ export type ShowcaseRoom = {
   label: string;
   tagline: string;
   description: string;
-  price: number;
+  price: number;               // price after the marketing discount
+  originalPrice?: number;      // pre-discount price, for struck-through display
   capacity: number;
   imageSrc: string | null;
   bgGradient: string;
@@ -120,7 +121,12 @@ export default function RoomShowcase({ rooms }: { rooms: ShowcaseRoom[] }) {
               <div className="flex items-center gap-6 flex-wrap">
                 <div>
                   <p className="text-white/35 text-[10px] uppercase tracking-widest mb-0.5">Starting from</p>
-                  <p className="text-3xl font-bold">
+                  <p className="text-3xl font-bold flex items-baseline gap-2">
+                    {room.originalPrice != null && room.originalPrice > room.price && (
+                      <span className="text-lg font-normal text-white/30 line-through">
+                        ₹{room.originalPrice.toLocaleString("en-IN")}
+                      </span>
+                    )}
                     ₹{room.price.toLocaleString("en-IN")}
                     <span className="text-sm font-normal text-white/35 ml-1">/night</span>
                   </p>
@@ -191,7 +197,12 @@ export default function RoomShowcase({ rooms }: { rooms: ShowcaseRoom[] }) {
                 className="absolute -bottom-5 -left-6 bg-white/10 backdrop-blur-lg border border-white/15 rounded-2xl px-5 py-4 shadow-2xl"
               >
                 <p className="text-white/40 text-[10px] uppercase tracking-wider mb-0.5">Best Price</p>
-                <p className="text-white font-bold text-xl">
+                <p className="text-white font-bold text-xl flex items-baseline gap-1.5">
+                  {room.originalPrice != null && room.originalPrice > room.price && (
+                    <span className="text-sm font-normal text-white/30 line-through">
+                      ₹{room.originalPrice.toLocaleString("en-IN")}
+                    </span>
+                  )}
                   ₹{room.price.toLocaleString("en-IN")}
                   <span className="text-xs font-normal text-white/35">/night</span>
                 </p>

@@ -15,7 +15,8 @@ interface HotelCardProps {
     starRating: number;
     avgRating: number | null;
     reviewCount: number;
-    minPrice: number | null;
+    minPrice: number | null;          // price after the marketing discount
+    originalMinPrice?: number | null; // pre-discount price, for struck-through display
     availableRooms: number;
   };
   searchParams?: {
@@ -94,10 +95,20 @@ export default function HotelCard({ hotel, searchParams }: HotelCardProps) {
             {hotel.minPrice ? (
               <div>
                 <p className="text-xs text-white/35">Starts from</p>
-                <p className="text-lg font-bold text-amber-400">
+                <p className="text-lg font-bold text-amber-400 flex items-baseline gap-1.5">
+                  {hotel.originalMinPrice != null && hotel.originalMinPrice > hotel.minPrice && (
+                    <span className="text-xs font-normal text-white/30 line-through">
+                      ₹{hotel.originalMinPrice.toLocaleString("en-IN")}
+                    </span>
+                  )}
                   ₹{hotel.minPrice.toLocaleString("en-IN")}
                   <span className="text-xs font-normal text-white/35">/night</span>
                 </p>
+                {hotel.originalMinPrice != null && hotel.originalMinPrice > hotel.minPrice && (
+                  <p className="text-[10px] font-bold text-violet-300">
+                    Save ₹{(hotel.originalMinPrice - hotel.minPrice).toLocaleString("en-IN")}/night
+                  </p>
+                )}
                 {hotel.reviewCount > 0 && (
                   <p className="text-xs text-white/30">{hotel.reviewCount} reviews</p>
                 )}

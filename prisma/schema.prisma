@@ -470,6 +470,17 @@ model Coupon {
   createdBy     String? // super admin name
   promotionId   String?
 
+  // ── Marketing / universal discount ──
+  // isUniversal: the single hotel-wide "marketing" discount, auto-applied to every
+  // guest and shown as a struck-through base price. Only one should be active per hotel.
+  // autoApply:   applied automatically without the guest entering a code.
+  // stacksOnUniversal: for regular coupons — when true (default), the coupon discount
+  //   stacks on TOP of the universal discount (computed on the already-discounted price);
+  //   when false, the coupon applies to the base price only and the universal is ignored.
+  isUniversal       Boolean @default(false)
+  autoApply         Boolean @default(false)
+  stacksOnUniversal Boolean @default(true)
+
   createdAt DateTime @default(now())
 
   hotel     Hotel?           @relation(fields: [hotelId], references: [id])

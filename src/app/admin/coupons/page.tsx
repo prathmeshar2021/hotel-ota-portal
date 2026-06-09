@@ -35,6 +35,8 @@ export default async function CouponsPage() {
     usedCount: c.usedCount,
     label: c.label,
     isActive: c.isActive,
+    isUniversal: c.isUniversal,
+    stacksOnUniversal: c.stacksOnUniversal,
     expiryDate: c.expiryDate ? c.expiryDate.toISOString() : null,
     createdAt: c.createdAt.toISOString(),
     promotionName: c.promotion?.name ?? null,
@@ -45,5 +47,13 @@ export default async function CouponsPage() {
     name: p.name,
   }));
 
-  return <CouponsClient initialCoupons={rows} promotions={promoOptions} />;
+  const universal = rows.find((r) => r.isUniversal && r.isActive) ?? null;
+
+  return (
+    <CouponsClient
+      initialCoupons={rows}
+      promotions={promoOptions}
+      initialUniversal={universal}
+    />
+  );
 }

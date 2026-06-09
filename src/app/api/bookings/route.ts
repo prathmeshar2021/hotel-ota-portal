@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import { auth } from "@/lib/auth/auth";
-import { generateBookingRef, computeTotals, applyCoupon } from "@/lib/utils/booking";
+import { generateBookingRef, computeTotals, getUniversalDiscount, resolveBookingDiscount } from "@/lib/utils/booking";
 import { REFUNDABLE_DEPOSIT } from "@/lib/utils/booking-calc";
 import { createOrder } from "@/lib/services/razorpay";
 import { gupshup } from "@/lib/services/gupshup";
@@ -116,14 +116,26 @@ export async function POST(req: NextRequest) {
     checkIn
   );
 
-  // Apply coupon
-  let couponId: string | undefined;
-  let couponDiscount = 0;
+  // Resolve discounts: the always-on hotel-wide marketing discount + an optional
+  // guest coupon (which either stacks on top of, or replaces, the universal one).
+  const roomRentBeforeDiscount = pricePerNight * noOfNights;
+  const universal = await getUniversalDiscount(data.hotelId);
+
+  let guestCoupon: {
+    id: string;
+    discountType: string;
+    discountValue: number;
+    maxDiscount: number | null;
+    minAmount: number;
+    stacksOnUniversal: boolean;
+  } | null = null;
+
   if (data.couponCode) {
     const coupon = await prisma.coupon.findFirst({
       where: {
         code: data.couponCode.toUpperCase(),
         isActive: true,
+        isUniversal: false,
         AND: [
           { OR: [{ hotelId: data.hotelId }, { hotelId: null }] },
           { OR: [{ expiryDate: null }, { expiryDate: { gte: new Date() } }] },
@@ -131,10 +143,27 @@ export async function POST(req: NextRequest) {
       },
     });
     if (coupon) {
-      couponId = coupon.id;
-      couponDiscount = applyCoupon(coupon, pricePerNight * noOfNights);
+      guestCoupon = {
+        id: coupon.id,
+        discountType: coupon.discountType,
+        discountValue: coupon.discountValue,
+        maxDiscount: coupon.maxDiscount,
+        minAmount: coupon.minAmount,
+        stacksOnUniversal: coupon.stacksOnUniversal,
+      };
     }
   }
+
+  const breakdown = resolveBookingDiscount({
+    roomRent: roomRentBeforeDiscount,
+    universal,
+    coupon: guestCoupon,
+  });
+  const couponDiscount = breakdown.totalDiscount;
+  // Link the guest coupon when one was used; otherwise link the universal discount
+  // so the saving is still traceable on the booking record.
+  const couponId: string | undefined =
+    guestCoupon?.id ?? (breakdown.universalDiscount > 0 ? universal?.id : undefined);
 
   const totals = computeTotals({
     roomRentPerNight: pricePerNight,

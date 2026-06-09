@@ -8,7 +8,7 @@ import {
   Loader2, Tag, CheckCircle, XCircle, User, Phone, Mail, Users, MessageSquare,
   CreditCard, Banknote, ArrowRight, Wifi, Calendar, ShieldCheck, Info,
 } from "lucide-react";
-import { computeTotals, REFUNDABLE_DEPOSIT } from "@/lib/utils/booking-calc";
+import { computeTotals, REFUNDABLE_DEPOSIT, universalDiscountAmount, discountedNightlyPrice, type UniversalDiscount } from "@/lib/utils/booking-calc";
 import { signIn } from "next-auth/react";
 
 interface BookingFormProps {
@@ -24,6 +24,8 @@ interface BookingFormProps {
   nights: number;
   guests: number;
   totals: { roomRent: number; cgst: number; sgst: number; cgstRate: number; sgstRate: number; totalAmount: number };
+  /** Active hotel-wide marketing discount, auto-applied to every guest. */
+  universal?: UniversalDiscount | null;
   accentColor?: string;
 }
 
@@ -48,7 +50,7 @@ function FieldIcon({ icon }: { icon: React.ReactNode }) {
 type PayMode = "PAY_NOW" | "PAY_AT_HOTEL";
 
 export default function BookingForm({
-  hotel, room, checkIn, checkOut, guests, totals, accentColor = "#F59E0B",
+  hotel, room, checkIn, checkOut, guests, totals, universal = null, accentColor = "#F59E0B",
 }: BookingFormProps) {
   const { data: session } = useSession();
   const router = useRouter();
@@ -122,18 +124,36 @@ export default function BookingForm({
   const [couponCode, setCouponCode] = useState("");
   const [couponApplied, setCouponApplied] = useState(false);
   const [couponDiscount, setCouponDiscount] = useState(0);
+  const [couponStacks, setCouponStacks] = useState(true);
   const [couponMessage, setCouponMessage] = useState("");
   const [couponLoading, setCouponLoading] = useState(false);
 
   // Payment mode
   const [payMode, setPayMode] = useState<PayMode>("PAY_NOW");
 
+  // Per-night marketing discount (struck-through display) + this booking's rent saving.
+  const nightlyDiscount = universalDiscountAmount(universal, room.basePrice);
+  const discountedNightly = discountedNightlyPrice(universal, room.basePrice);
+  const roomRentBeforeDiscount = room.basePrice * Math.max(0, localNights);
+  const universalRentDiscount = universalDiscountAmount(universal, roomRentBeforeDiscount);
+
+  // When a guest coupon is applied, the server returns the *combined* discount
+  // (marketing + coupon, per its stacking rule); otherwise just the marketing one.
+  const effectiveDiscount = couponApplied ? couponDiscount : universalRentDiscount;
+
   // Recompute totals dynamically from selected dates (always includes Rs 200 deposit)
   const liveTotals = localNights > 0
-    ? computeTotals({ roomRentPerNight: room.basePrice, noOfNights: localNights, couponDiscount: couponApplied ? couponDiscount : 0, refundableDeposit: REFUNDABLE_DEPOSIT })
+    ? computeTotals({ roomRentPerNight: room.basePrice, noOfNights: localNights, couponDiscount: effectiveDiscount, refundableDeposit: REFUNDABLE_DEPOSIT })
     : totals;
 
   const totalAfterCoupon = liveTotals.totalAmount;
+  // A non-stacking coupon replaces the marketing discount for this booking.
+  const marketingApplies = !couponApplied || couponStacks;
+  const shownMarketingDiscount = marketingApplies ? universalRentDiscount : 0;
+  // Portion of the saving attributable to the entered code, on top of marketing.
+  const extraCouponDiscount = couponApplied
+    ? Math.max(0, couponDiscount - shownMarketingDiscount)
+    : 0;
 
   const maxGuests = Math.min(room.capacity, 5);
 
@@ -161,7 +181,7 @@ export default function BookingForm({
       });
       const data = await res.json();
       if (data.valid) {
-        setCouponApplied(true); setCouponDiscount(data.discount); setCouponMessage(data.message);
+        setCouponApplied(true); setCouponDiscount(data.discount); setCouponStacks(data.stacksOnUniversal !== false); setCouponMessage(data.message);
         toast.success(data.message);
       } else {
         setCouponApplied(false); setCouponDiscount(0); setCouponMessage(data.message);
@@ -330,9 +350,35 @@ export default function BookingForm({
           <div className="mt-3 rounded-xl px-4 py-3 text-xs space-y-1"
             style={{ background: `${accentColor}12` }}>
             <div className="flex justify-between" style={{ color: accentColor }}>
-              <span>{localNights} night{localNights > 1 ? "s" : ""} × ₹{room.basePrice.toLocaleString("en-IN")}</span>
+              <span className="flex items-center gap-1.5">
+                {localNights} night{localNights > 1 ? "s" : ""} ×{" "}
+                {nightlyDiscount > 0 ? (
+                  <>
+                    <span className="line-through opacity-50">₹{room.basePrice.toLocaleString("en-IN")}</span>
+                    <span className="font-semibold">₹{discountedNightly.toLocaleString("en-IN")}</span>
+                  </>
+                ) : (
+                  <>₹{room.basePrice.toLocaleString("en-IN")}</>
+                )}
+              </span>
               <span>₹{liveTotals.roomRent.toLocaleString("en-IN")}</span>
             </div>
+            {shownMarketingDiscount > 0 && (
+              <div className="flex justify-between text-violet-300">
+                <span className="flex items-center gap-1">
+                  <Tag className="w-3 h-3" /> {universal?.label || "Marketing discount"}
+                </span>
+                <span>-₹{shownMarketingDiscount.toLocaleString("en-IN")}</span>
+              </div>
+            )}
+            {couponApplied && extraCouponDiscount > 0 && (
+              <div className="flex justify-between text-green-400">
+                <span className="flex items-center gap-1">
+                  <Tag className="w-3 h-3" /> Coupon {couponCode}
+                </span>
+                <span>-₹{extraCouponDiscount.toLocaleString("en-IN")}</span>
+              </div>
+            )}
             {liveTotals.cgst > 0 && (
               <div className="flex justify-between opacity-70" style={{ color: accentColor }}>
                 <span>GST (CGST + SGST)</span>
@@ -479,6 +525,29 @@ export default function BookingForm({
           <h2 className="font-semibold text-white text-base">Coupon / Discount</h2>
         </div>
 
+        {/* Always-on marketing discount — so the coupon box never feels empty */}
+        {universal && nightlyDiscount > 0 && marketingApplies && (
+          <div className="mb-3 flex items-center gap-3 rounded-xl bg-violet-500/10 border border-violet-500/25 px-4 py-3">
+            <div className="w-8 h-8 rounded-lg bg-violet-500/20 border border-violet-500/30 flex items-center justify-center shrink-0">
+              <CheckCircle className="w-4 h-4 text-violet-300" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-violet-200 text-sm font-bold">
+                {universal.label || "Marketing Discount"} applied
+              </p>
+              <p className="text-violet-300/60 text-xs">
+                {universal.discountType === "PERCENT"
+                  ? `${universal.discountValue}% off`
+                  : `₹${universal.discountValue.toLocaleString("en-IN")} off`}{" "}
+                every night · auto-applied
+              </p>
+            </div>
+            <span className="font-mono text-[11px] font-bold text-violet-200 bg-violet-500/15 border border-violet-500/25 px-2 py-1 rounded-lg shrink-0">
+              {universal.code}
+            </span>
+          </div>
+        )}
+
         <div className="flex gap-2">
           <div className="relative flex-1">
             <Tag className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/25" />
@@ -506,7 +575,7 @@ export default function BookingForm({
         {couponApplied && (
           <div className="mt-3 bg-green-500/8 border border-green-500/20 rounded-xl p-4">
             <div className="flex justify-between text-green-400 text-sm">
-              <span>Coupon discount</span>
+              <span>Total discount</span>
               <span>-₹{couponDiscount.toLocaleString("en-IN")}</span>
             </div>
             <div className="flex justify-between font-bold text-green-300 text-base mt-1.5">

@@ -16,7 +16,8 @@ export interface SubCategoryView {
   maxGuests: number;
   totalRooms: number;
   available: number;
-  price: number;
+  price: number;          // price after the marketing discount (what the guest pays)
+  originalPrice: number;  // pre-discount price, for struck-through display
   images: string[];
 }
 
@@ -29,7 +30,8 @@ export interface MainCategoryView {
   heroImage: string;
   totalRooms: number;
   available: number;
-  minPrice: number;
+  minPrice: number;          // discounted "from" price
+  originalMinPrice: number;  // pre-discount "from" price
   subcategories: SubCategoryView[];
 }
 
@@ -106,7 +108,12 @@ export default function CategoryBrowser({
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-white/30 text-[10px] uppercase tracking-wider">From</p>
-                        <p className="font-bold" style={{ color: m.accentColor }}>
+                        <p className="font-bold flex items-baseline gap-1.5" style={{ color: m.accentColor }}>
+                          {m.originalMinPrice > m.minPrice && (
+                            <span className="text-white/30 text-xs font-normal line-through">
+                              ₹{m.originalMinPrice.toLocaleString("en-IN")}
+                            </span>
+                          )}
                           ₹{m.minPrice.toLocaleString("en-IN")}
                           <span className="text-white/30 text-xs font-normal">/night</span>
                         </p>
@@ -212,10 +219,20 @@ export default function CategoryBrowser({
                     {/* Price + CTA */}
                     <div className="flex sm:flex-col items-end justify-between gap-3 shrink-0">
                       <div className="text-right">
+                        {s.originalPrice > s.price && (
+                          <p className="text-sm text-white/30 line-through leading-none mb-0.5">
+                            ₹{s.originalPrice.toLocaleString("en-IN")}
+                          </p>
+                        )}
                         <p className="text-2xl font-bold" style={{ color: s.accentColor }}>
                           ₹{s.price.toLocaleString("en-IN")}
                         </p>
                         <p className="text-xs text-white/30">per night + taxes</p>
+                        {s.originalPrice > s.price && (
+                          <p className="text-[10px] font-bold text-violet-300 mt-0.5">
+                            Save ₹{(s.originalPrice - s.price).toLocaleString("en-IN")}/night
+                          </p>
+                        )}
                         {nights && !soldOut && (
                           <p className="text-xs font-semibold text-white/55 mt-1">
                             ₹{(s.price * nights).toLocaleString("en-IN")} for {nights}N

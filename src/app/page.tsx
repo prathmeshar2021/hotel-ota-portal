@@ -11,6 +11,8 @@ import { prisma } from "@/lib/db/prisma";
 import { Mail, MapPin, Phone, Shield, Tv2, Wind, Zap, Droplets, Car, Wifi, Flame, ArrowRight } from "lucide-react";
 import type { ShowcaseRoom } from "@/components/customer/RoomShowcase";
 import { getCategoryImages } from "@/lib/utils/room-categories";
+import { getUniversalDiscount } from "@/lib/utils/booking";
+import { discountedNightlyPrice } from "@/lib/utils/booking-calc";
 import HeroZoomOverlay from "@/components/customer/HeroZoomOverlay";
 
 async function getResort() {
@@ -101,6 +103,10 @@ const ROOM_CONFIG: Record<string, Omit<ShowcaseRoom, "price" | "capacity" | "ima
 export default async function HomePage() {
   const resort = await getResort();
 
+  // Active hotel-wide marketing discount — shown as struck-through pricing.
+  const universal = resort ? await getUniversalDiscount(resort.id) : null;
+  const discounted = (base: number) => discountedNightlyPrice(universal, base);
+
   const avgRating =
     resort && resort.reviews.length > 0
       ? resort.reviews.reduce((s, r) => s + r.rating, 0) / resort.reviews.length
@@ -119,7 +125,8 @@ export default async function HomePage() {
       if (cfg) {
         showcaseRooms.push({
           ...cfg,
-          price: room.basePrice,
+          price: discounted(room.basePrice),
+          originalPrice: room.basePrice,
           capacity: room.capacity,
           imageSrc:
             getCategoryImages(room.roomType)[0] ??
@@ -147,7 +154,8 @@ export default async function HomePage() {
       if (cfg)
         showcaseRooms.push({
           ...cfg,
-          price,
+          price: discounted(price),
+          originalPrice: price,
           capacity,
           imageSrc: getCategoryImages(type)[0] ?? null,
           hotelSlug: "the-urban-escape-bhilai",

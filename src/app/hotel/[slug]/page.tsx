@@ -103,6 +103,11 @@ export default async function HotelDetailPage({ params, searchParams }: Props) {
     }
   }
 
+  // Active hotel-wide marketing discount — shown as struck-through pricing.
+  const { getUniversalDiscount } = await import("@/lib/utils/booking");
+  const { discountedNightlyPrice } = await import("@/lib/utils/booking-calc");
+  const universal = await getUniversalDiscount(hotel.id);
+
   // Get availability counts if dates are provided
   const hasDateFilter = !!(sp.checkIn && sp.checkOut);
   const bookedCounts: Record<string, number> = hasDateFilter
@@ -146,7 +151,8 @@ export default async function HotelDetailPage({ params, searchParams }: Props) {
     const subcategories = main.subcategories
       .map((type) => {
         const meta = CATEGORY_META[type];
-        const price = categoryPrices[type] ?? 0;
+        const originalPrice = categoryPrices[type] ?? 0;
+        const price = originalPrice > 0 ? discountedNightlyPrice(universal, originalPrice) : 0;
         const booked = bookedCounts[type] ?? 0;
         const capacity = capacities[type] ?? meta.totalRooms;
         const available = hasDateFilter
@@ -164,6 +170,7 @@ export default async function HotelDetailPage({ params, searchParams }: Props) {
           totalRooms: meta.totalRooms,
           available,
           price,
+          originalPrice,
           images: CATEGORY_IMAGES[type] ?? [],
         };
       })
@@ -173,6 +180,9 @@ export default async function HotelDetailPage({ params, searchParams }: Props) {
     const available = subcategories.reduce((sum, s) => sum + s.available, 0);
     const minPrice = subcategories.length
       ? Math.min(...subcategories.map((s) => s.price))
+      : 0;
+    const originalMinPrice = subcategories.length
+      ? Math.min(...subcategories.map((s) => s.originalPrice))
       : 0;
 
     return {
@@ -185,6 +195,7 @@ export default async function HotelDetailPage({ params, searchParams }: Props) {
       totalRooms: main.totalRooms,
       available,
       minPrice,
+      originalMinPrice,
       subcategories,
     };
   }).filter((m) => m.subcategories.length > 0);

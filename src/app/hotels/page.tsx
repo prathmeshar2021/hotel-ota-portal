@@ -4,7 +4,38 @@ import Navbar from "@/components/customer/Navbar";
 import SearchBar from "@/components/customer/SearchBar";
 import HotelCard from "@/components/customer/HotelCard";
 import { prisma } from "@/lib/db/prisma";
+import { discountedNightlyPrice, type UniversalDiscount } from "@/lib/utils/booking-calc";
 import { MapPin, SlidersHorizontal } from "lucide-react";
+
+/** Map of hotelId → active marketing discount, for struck-through "from" pricing. */
+async function getUniversalDiscounts(
+  hotelIds: string[]
+): Promise<Record<string, UniversalDiscount>> {
+  if (hotelIds.length === 0) return {};
+  const rows = await prisma.coupon.findMany({
+    where: {
+      hotelId: { in: hotelIds },
+      isUniversal: true,
+      isActive: true,
+      OR: [{ expiryDate: null }, { expiryDate: { gte: new Date() } }],
+    },
+    orderBy: { createdAt: "desc" },
+  });
+  const map: Record<string, UniversalDiscount> = {};
+  for (const c of rows) {
+    if (c.hotelId && !map[c.hotelId]) {
+      map[c.hotelId] = {
+        id: c.id,
+        code: c.code,
+        label: c.label,
+        discountType: c.discountType,
+        discountValue: c.discountValue,
+        maxDiscount: c.maxDiscount,
+      };
+    }
+  }
+  return map;
+}
 
 interface Props {
   searchParams: Promise<{
@@ -79,6 +110,7 @@ async function getHotels(params: Awaited<Props["searchParams"]>) {
 export default async function HotelsPage({ searchParams }: Props) {
   const params = await searchParams;
   const hotels = await getHotels(params);
+  const universalByHotel = await getUniversalDiscounts(hotels.map((h) => h.id));
 
   return (
     <div className="min-h-screen bg-[#071209]">
@@ -138,7 +170,12 @@ export default async function HotelsPage({ searchParams }: Props) {
                 hotel.reviews.length > 0
                   ? hotel.reviews.reduce((s, r) => s + r.rating, 0) / hotel.reviews.length
                   : null;
-              const minPrice = hotel.rooms[0]?.basePrice ?? null;
+              const originalMinPrice = hotel.rooms[0]?.basePrice ?? null;
+              const universal = universalByHotel[hotel.id] ?? null;
+              const minPrice =
+                originalMinPrice != null
+                  ? discountedNightlyPrice(universal, originalMinPrice)
+                  : null;
 
               return (
                 <HotelCard
@@ -155,6 +192,7 @@ export default async function HotelsPage({ searchParams }: Props) {
                     avgRating,
                     reviewCount: hotel._count.reviews,
                     minPrice,
+                    originalMinPrice,
                     availableRooms: hotel.rooms.length,
                   }}
                   searchParams={{

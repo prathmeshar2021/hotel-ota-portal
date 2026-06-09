@@ -5,8 +5,8 @@ import Image from "next/image";
 import Navbar from "@/components/customer/Navbar";
 import BookingForm from "@/components/customer/BookingForm";
 import { prisma } from "@/lib/db/prisma";
-import { computeTotals } from "@/lib/utils/booking";
-import { REFUNDABLE_DEPOSIT } from "@/lib/utils/booking-calc";
+import { computeTotals, getUniversalDiscount } from "@/lib/utils/booking";
+import { REFUNDABLE_DEPOSIT, universalDiscountAmount, discountedNightlyPrice } from "@/lib/utils/booking-calc";
 import { getCategoryImages, getCategoryMeta, slugToCategory } from "@/lib/utils/room-categories";
 import { resolveCategoryPrice } from "@/lib/utils/pricing";
 import { Calendar, Users, Moon, ShieldCheck } from "lucide-react";
@@ -49,7 +49,12 @@ export default async function BookingPage({ params, searchParams }: Props) {
     checkInDate
   );
 
-  const totals = computeTotals({ roomRentPerNight: pricePerNight, noOfNights: nights });
+  // Active hotel-wide marketing discount (auto-applied to every guest).
+  const universal = await getUniversalDiscount(hotel.id);
+  const rentDiscount = universalDiscountAmount(universal, pricePerNight * nights);
+  const discountedNightly = discountedNightlyPrice(universal, pricePerNight);
+
+  const totals = computeTotals({ roomRentPerNight: pricePerNight, noOfNights: nights, couponDiscount: rentDiscount });
   // Prefer the category-specific gallery; fall back to the hotel cover image.
   const categoryImages = getCategoryImages(categoryType);
   const heroImage = categoryImages[0] ?? hotel.images[0] ?? null;
@@ -97,6 +102,7 @@ export default async function BookingPage({ params, searchParams }: Props) {
               nights={nights}
               guests={parseInt(sp.guests ?? "2")}
               totals={totals}
+              universal={universal}
               accentColor={meta.accentColor}
             />
           </div>
@@ -155,9 +161,26 @@ export default async function BookingPage({ params, searchParams }: Props) {
                 {/* Price breakdown */}
                 <div className="border-t border-white/8 pt-4 space-y-2 text-sm">
                   <div className="flex justify-between text-white/50">
-                    <span>Room ({nights}N × ₹{pricePerNight.toLocaleString("en-IN")})</span>
+                    <span className="flex items-center gap-1.5">
+                      Room ({nights}N ×{" "}
+                      {rentDiscount > 0 ? (
+                        <>
+                          <span className="line-through text-white/30">₹{pricePerNight.toLocaleString("en-IN")}</span>
+                          <span className="text-white/70">₹{discountedNightly.toLocaleString("en-IN")}</span>
+                        </>
+                      ) : (
+                        <>₹{pricePerNight.toLocaleString("en-IN")}</>
+                      )}
+                      )
+                    </span>
                     <span>₹{totals.roomRent.toLocaleString("en-IN")}</span>
                   </div>
+                  {rentDiscount > 0 && (
+                    <div className="flex justify-between text-violet-300 text-xs">
+                      <span>{universal?.label || "Marketing discount"}</span>
+                      <span>-₹{rentDiscount.toLocaleString("en-IN")}</span>
+                    </div>
+                  )}
                   {totals.cgst > 0 && (
                     <>
                       <div className="flex justify-between text-white/30 text-xs">

@@ -43,6 +43,9 @@ export async function POST(req: NextRequest) {
   const discountType = body.discountType as DiscountType;
   const discountValue = Number(body.discountValue);
   const kind = (body.kind as CouponKind) ?? "INSTANT";
+  const isUniversal = Boolean(body.isUniversal);
+  // Default true — regular coupons stack on top of the universal discount.
+  const stacksOnUniversal = body.stacksOnUniversal !== false;
 
   if (discountType !== "FLAT" && discountType !== "PERCENT")
     return NextResponse.json({ error: "Invalid discountType" }, { status: 400 });
@@ -51,6 +54,51 @@ export async function POST(req: NextRequest) {
   if (discountType === "PERCENT" && discountValue > 100)
     return NextResponse.json({ error: "Percent discount cannot exceed 100" }, { status: 400 });
 
+  // ── Universal (hotel-wide marketing) discount ──
+  // Only one may be active per hotel — retire any existing ones first, then create
+  // a fresh auto-applied row with a friendly, marketing-friendly code.
+  if (isUniversal) {
+    await prisma.coupon.updateMany({
+      where: { hotelId: ctx.hotelId, isUniversal: true, isActive: true },
+      data: { isActive: false },
+    });
+
+    const expiry = body.expiryDate ? new Date(body.expiryDate) : null;
+    let ucode = (body.code || generateCouponCode("WELCOME")).toUpperCase();
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const exists = await prisma.coupon.findUnique({ where: { code: ucode } });
+      if (!exists) break;
+      ucode = generateCouponCode("WELCOME");
+    }
+
+    const universal = await prisma.coupon.create({
+      data: {
+        hotelId: ctx.hotelId,
+        code: ucode,
+        kind: "INSTANT",
+        discountType,
+        discountValue,
+        minAmount: 0,
+        maxDiscount:
+          body.maxDiscount != null && Number.isFinite(Number(body.maxDiscount))
+            ? Number(body.maxDiscount)
+            : null,
+        maxUses: null,
+        isUniversal: true,
+        autoApply: true,
+        stacksOnUniversal: true,
+        label: body.label || "Marketing Discount",
+        validFrom: new Date(),
+        expiryDate: expiry,
+        createdBy: ctx.name,
+      },
+      include: { promotion: { select: { id: true, name: true } } },
+    });
+
+    return NextResponse.json({ coupon: universal }, { status: 201 });
+  }
+
+  // ── Regular guest coupon ──
   // Resolve expiry
   let expiryDate: Date | null = null;
   if (body.expiryDate) {
@@ -86,6 +134,7 @@ export async function POST(req: NextRequest) {
         body.maxUses != null && Number.isFinite(Number(body.maxUses))
           ? Number(body.maxUses)
           : null,
+      stacksOnUniversal,
       label: body.label || null,
       referrerName: body.referrerName || null,
       validFrom: body.validFrom ? new Date(body.validFrom) : new Date(),

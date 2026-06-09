@@ -13,6 +13,9 @@ import {
   IndianRupee,
   Percent,
   Sparkles,
+  Megaphone,
+  Layers,
+  Tag,
 } from "lucide-react";
 
 export interface CouponRow {
@@ -27,6 +30,8 @@ export interface CouponRow {
   usedCount: number;
   label: string | null;
   isActive: boolean;
+  isUniversal: boolean;
+  stacksOnUniversal: boolean;
   expiryDate: string | null;
   createdAt: string;
   promotionName: string | null;
@@ -59,9 +64,11 @@ function discountText(c: { discountType: string; discountValue: number }) {
 export default function CouponsClient({
   initialCoupons,
   promotions,
+  initialUniversal = null,
 }: {
   initialCoupons: CouponRow[];
   promotions: PromotionOption[];
+  initialUniversal?: CouponRow | null;
 }) {
   const [coupons, setCoupons] = useState<CouponRow[]>(initialCoupons);
 
@@ -76,7 +83,71 @@ export default function CouponsClient({
   const [maxDiscount, setMaxDiscount] = useState("");
   const [maxUses, setMaxUses] = useState("");
   const [promotionId, setPromotionId] = useState("");
+  // true = coupon stacks on top of the universal discount (default); false = base price only
+  const [stacksOnUniversal, setStacksOnUniversal] = useState(true);
   const [generating, setGenerating] = useState(false);
+
+  // ── Universal / marketing discount config ──
+  const [universal, setUniversal] = useState<CouponRow | null>(initialUniversal);
+  const [uType, setUType] = useState<"FLAT" | "PERCENT">(initialUniversal?.discountType ?? "FLAT");
+  const [uValue, setUValue] = useState<string>(initialUniversal ? String(initialUniversal.discountValue) : "200");
+  const [uLabel, setULabel] = useState<string>(initialUniversal?.label ?? "Marketing Discount");
+  const [savingUniversal, setSavingUniversal] = useState(false);
+
+  async function saveUniversal() {
+    const val = Number(uValue);
+    if (!Number.isFinite(val) || val <= 0) {
+      toast.error("Enter a valid discount value");
+      return;
+    }
+    if (uType === "PERCENT" && val > 100) {
+      toast.error("Percent discount cannot exceed 100");
+      return;
+    }
+    setSavingUniversal(true);
+    try {
+      const res = await fetch("/api/admin/coupons", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          isUniversal: true,
+          discountType: uType,
+          discountValue: val,
+          label: uLabel || "Marketing Discount",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to save");
+      // Retire the old universal in the list, add the new one
+      setCoupons((prev) =>
+        [data.coupon, ...prev.map((c) => (c.isUniversal ? { ...c, isActive: false } : c))]
+      );
+      setUniversal(data.coupon);
+      toast.success("Marketing discount is now live for all guests!");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to save");
+    } finally {
+      setSavingUniversal(false);
+    }
+  }
+
+  async function disableUniversal() {
+    if (!universal) return;
+    if (!confirm("Turn off the hotel-wide marketing discount?")) return;
+    try {
+      const res = await fetch(`/api/admin/coupons/${universal.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: false }),
+      });
+      if (!res.ok) throw new Error();
+      setCoupons((prev) => prev.map((c) => (c.id === universal.id ? { ...c, isActive: false } : c)));
+      setUniversal(null);
+      toast.success("Marketing discount turned off");
+    } catch {
+      toast.error("Failed to turn off");
+    }
+  }
 
   // last generated
   const [generated, setGenerated] = useState<CouponRow | null>(null);
@@ -111,6 +182,7 @@ export default function CouponsClient({
           maxDiscount: maxDiscount || undefined,
           maxUses: maxUses || undefined,
           promotionId: promotionId || undefined,
+          stacksOnUniversal,
           kind: promotionId ? "SEASONAL" : "INSTANT",
         }),
       });
@@ -196,6 +268,7 @@ export default function CouponsClient({
   }
 
   const quickAmounts = discountType === "PERCENT" ? QUICK_PERCENT : QUICK_FLAT;
+  const regularCoupons = coupons.filter((c) => !c.isUniversal);
 
   return (
     <div className="px-4 sm:px-6 lg:px-10 py-6 lg:py-8 max-w-5xl mx-auto">
@@ -209,6 +282,95 @@ export default function CouponsClient({
         <p className="text-white/40 text-sm mt-1">
           Generate instant discount codes and share them on WhatsApp.
         </p>
+      </div>
+
+      {/* ── Marketing (universal) discount card ── */}
+      <div className="rounded-2xl border border-violet-500/25 bg-violet-500/[0.06] p-5 lg:p-6 mb-6">
+        <div className="flex items-start gap-3 mb-4">
+          <div className="w-9 h-9 rounded-xl bg-violet-500/15 border border-violet-500/30 flex items-center justify-center shrink-0">
+            <Megaphone className="w-4.5 h-4.5 text-violet-300" />
+          </div>
+          <div className="flex-1">
+            <h2 className="text-white font-bold text-base">Marketing Discount</h2>
+            <p className="text-white/45 text-xs mt-0.5 leading-relaxed">
+              A hotel-wide discount auto-applied to every guest. Prices show the original
+              struck-through with the lower price — so no one&apos;s coupon box ever feels empty.
+            </p>
+          </div>
+        </div>
+
+        {universal && (
+          <div className="flex items-center gap-2 flex-wrap mb-4 rounded-xl bg-violet-500/10 border border-violet-500/20 px-3 py-2">
+            <span className="text-violet-200 text-sm font-bold">
+              {universal.discountType === "PERCENT"
+                ? `${universal.discountValue}% off`
+                : `₹${universal.discountValue.toLocaleString("en-IN")} off`}
+            </span>
+            <span className="text-violet-300/60 text-xs">· code</span>
+            <span className="font-mono font-bold text-violet-200 text-xs">{universal.code}</span>
+            <span className="ml-auto flex items-center gap-1 text-[10px] font-bold text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> LIVE
+            </span>
+          </div>
+        )}
+
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex gap-2">
+            <button
+              onClick={() => setUType("FLAT")}
+              className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-semibold border transition-all ${
+                uType === "FLAT"
+                  ? "bg-violet-500/20 border-violet-500/40 text-violet-200"
+                  : "bg-white/5 border-white/10 text-white/50 hover:text-white"
+              }`}
+            >
+              <IndianRupee className="w-4 h-4" /> Flat
+            </button>
+            <button
+              onClick={() => setUType("PERCENT")}
+              className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-semibold border transition-all ${
+                uType === "PERCENT"
+                  ? "bg-violet-500/20 border-violet-500/40 text-violet-200"
+                  : "bg-white/5 border-white/10 text-white/50 hover:text-white"
+              }`}
+            >
+              <Percent className="w-4 h-4" /> Percent
+            </button>
+          </div>
+          <input
+            type="number"
+            placeholder={uType === "PERCENT" ? "e.g. 10" : "e.g. 200"}
+            value={uValue}
+            onChange={(e) => setUValue(e.target.value)}
+            className="w-full sm:w-32 bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder:text-white/25 text-sm focus:outline-none focus:border-violet-400/50"
+          />
+          <input
+            type="text"
+            placeholder="Label (e.g. Summer Sale)"
+            value={uLabel}
+            onChange={(e) => setULabel(e.target.value)}
+            className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder:text-white/25 text-sm focus:outline-none focus:border-violet-400/50"
+          />
+        </div>
+
+        <div className="flex gap-2 mt-3">
+          <button
+            onClick={saveUniversal}
+            disabled={savingUniversal}
+            className="flex items-center justify-center gap-2 bg-violet-500 hover:bg-violet-400 disabled:opacity-60 text-white font-bold px-5 py-2.5 rounded-xl transition-all"
+          >
+            {savingUniversal ? <Loader2 className="w-4 h-4 animate-spin" /> : <Megaphone className="w-4 h-4" />}
+            {universal ? "Update Discount" : "Go Live"}
+          </button>
+          {universal && (
+            <button
+              onClick={disableUniversal}
+              className="flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 text-white/60 hover:text-white font-semibold px-4 py-2.5 rounded-xl transition-all"
+            >
+              <Power className="w-4 h-4" /> Turn Off
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Generator card */}
@@ -378,6 +540,63 @@ export default function CouponsClient({
           </div>
         </div>
 
+        {/* Stacking with the marketing discount */}
+        <div className="mt-5">
+          <label className="block text-[11px] font-semibold text-white/40 uppercase tracking-wider mb-2">
+            Applies on
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setStacksOnUniversal(true)}
+              className={`flex flex-col items-start gap-1 px-3.5 py-3 rounded-xl border text-left transition-all ${
+                stacksOnUniversal
+                  ? "bg-violet-500/15 border-violet-500/40"
+                  : "bg-white/5 border-white/10 hover:border-white/20"
+              }`}
+            >
+              <span className={`flex items-center gap-1.5 text-sm font-bold ${stacksOnUniversal ? "text-violet-200" : "text-white/60"}`}>
+                <Layers className="w-3.5 h-3.5" /> Discounted price
+              </span>
+              <span className="text-[11px] text-white/40 leading-snug">
+                Stacks on top of the marketing discount (default)
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setStacksOnUniversal(false)}
+              className={`flex flex-col items-start gap-1 px-3.5 py-3 rounded-xl border text-left transition-all ${
+                !stacksOnUniversal
+                  ? "bg-amber-500/15 border-amber-500/40"
+                  : "bg-white/5 border-white/10 hover:border-white/20"
+              }`}
+            >
+              <span className={`flex items-center gap-1.5 text-sm font-bold ${!stacksOnUniversal ? "text-amber-300" : "text-white/60"}`}>
+                <Tag className="w-3.5 h-3.5" /> Base price
+              </span>
+              <span className="text-[11px] text-white/40 leading-snug">
+                Replaces the marketing discount for this coupon
+              </span>
+            </button>
+          </div>
+          {universal && (
+            <p className="text-[11px] text-white/35 mt-2 leading-relaxed">
+              {stacksOnUniversal ? (
+                <>
+                  Total saving = <span className="text-violet-300 font-semibold">marketing discount + this coupon</span>.
+                  {discountType === "FLAT" && (
+                    <> A ₹{effAmount || 0} coupon on top of the current ₹
+                    {universal.discountType === "FLAT" ? universal.discountValue : `${universal.discountValue}%`} marketing
+                    discount.</>
+                  )}
+                </>
+              ) : (
+                <>Guest gets <span className="text-amber-300 font-semibold">only this coupon</span> off the original price.</>
+              )}
+            </p>
+          )}
+        </div>
+
         <button
           onClick={handleGenerate}
           disabled={generating}
@@ -447,15 +666,15 @@ export default function CouponsClient({
         </div>
       )}
 
-      {/* Coupon list */}
+      {/* Coupon list (universal/marketing discount shown separately above) */}
       <h2 className="text-white/60 text-sm font-semibold uppercase tracking-wider mb-3">
-        All Coupons ({coupons.length})
+        All Coupons ({regularCoupons.length})
       </h2>
       <div className="space-y-2">
-        {coupons.length === 0 && (
+        {regularCoupons.length === 0 && (
           <p className="text-white/30 text-sm py-8 text-center">No coupons yet.</p>
         )}
-        {coupons.map((c) => {
+        {regularCoupons.map((c) => {
           const expired = c.expiryDate && new Date(c.expiryDate) < new Date();
           return (
             <div
