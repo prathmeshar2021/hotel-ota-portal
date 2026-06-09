@@ -17,6 +17,7 @@ interface Room {
 interface Props {
   room: Room;
   occupiedBy: { name: string; phone: string | null } | null;
+  bookedBy?: { name: string; phone: string | null } | null;
   accentColor: string;
 }
 
@@ -25,6 +26,11 @@ const STATUS_CONFIG: Record<string, { label: string; dot: string; cardCls: strin
     label: "Available",
     dot: "#4ADE80",
     cardCls: "border-green-500/15 bg-green-500/5",
+  },
+  BOOKED: {
+    label: "Booked · arriving today",
+    dot: "#A78BFA",
+    cardCls: "border-violet-500/20 bg-violet-500/5",
   },
   OCCUPIED: {
     label: "Occupied",
@@ -55,13 +61,13 @@ function roomLabel(n: string): string {
   return /[A-Za-z]/.test(n) ? n.replace(/([A-Za-z])(\d)/g, "$1 $2") : `Room ${n}`;
 }
 
-export default function RoomStatusCard({ room, occupiedBy, accentColor }: Props) {
+export default function RoomStatusCard({ room, occupiedBy, bookedBy, accentColor }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [localStatus, setLocalStatus] = useState(room.status);
 
-  // If a guest is checked in, status is effectively occupied
-  const displayStatus = occupiedBy ? "OCCUPIED" : localStatus;
+  // Precedence: a checked-in guest = occupied; else a confirmed arrival today = booked.
+  const displayStatus = occupiedBy ? "OCCUPIED" : bookedBy ? "BOOKED" : localStatus;
   const config = STATUS_CONFIG[displayStatus] ?? STATUS_CONFIG.AVAILABLE;
 
   async function changeStatus(newStatus: string) {
@@ -132,8 +138,16 @@ export default function RoomStatusCard({ room, occupiedBy, accentColor }: Props)
         </div>
       )}
 
-      {/* Status controls — only when no guest is checked in */}
-      {!occupiedBy && (
+      {/* Booked by — confirmed arrival today, not yet checked in */}
+      {!occupiedBy && bookedBy && (
+        <div className="bg-violet-500/10 border border-violet-500/15 rounded-xl px-3 py-2 mb-3">
+          <p className="text-violet-300 text-xs font-semibold">{bookedBy.name}</p>
+          <p className="text-violet-300/60 text-[10px]">{bookedBy.phone} · awaiting check-in</p>
+        </div>
+      )}
+
+      {/* Status controls — only when the room is neither occupied nor booked today */}
+      {!occupiedBy && !bookedBy && (
         <div className="space-y-1.5">
           {/* Free / Cleaning quick-toggle row */}
           {localStatus !== "MAINTENANCE" && (

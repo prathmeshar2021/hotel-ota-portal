@@ -6,27 +6,46 @@ import { prisma } from "@/lib/db/prisma";
 import RoomStatusCard from "@/components/hotel-admin/RoomStatusCard";
 import SeedRoomsButton from "@/components/hotel-admin/SeedRoomsButton";
 import { getCategoryMeta, ALL_MAIN_CATEGORIES } from "@/lib/utils/room-categories";
+import { startOfDay, endOfDay } from "date-fns";
 
 const STATUS_LABELS: Record<string, string> = {
   AVAILABLE: "Available",
+  BOOKED: "Booked",
   OCCUPIED: "Occupied",
   CLEANING: "Cleaning",
   MAINTENANCE: "Maintenance",
 };
 
+// Derived board state for a room. Precedence: occupied > booked-today > DB status.
+function deriveRoomState(room: { status: string; assignedBookings: { status: string }[] }): string {
+  const checkedIn = room.assignedBookings.some((b) => b.status === "CHECKED_IN");
+  if (checkedIn || room.status === "OCCUPIED") return "OCCUPIED";
+  if (room.assignedBookings.some((b) => b.status === "CONFIRMED")) return "BOOKED";
+  return room.status;
+}
+
 export default async function RoomsPage() {
   const session = await auth();
   if (!session?.user?.hotelId) redirect("/auth/staff-login");
+
+  const today = new Date();
+  const todayStart = startOfDay(today);
+  const todayEnd = endOfDay(today);
 
   const rooms = await prisma.room.findMany({
     where: { hotelId: session.user.hotelId, isActive: true },
     include: {
       assignedBookings: {
-        where: { status: "CHECKED_IN" },
+        where: {
+          OR: [
+            { status: "CHECKED_IN" },
+            { status: "CONFIRMED", checkInDate: { gte: todayStart, lte: todayEnd } },
+          ],
+        },
         include: {
           primaryGuest: { select: { name: true, phone: true } },
         },
-        take: 1,
+        orderBy: { checkInDate: "asc" },
       },
     },
     orderBy: [{ roomType: "asc" }, { roomNumber: "asc" }],
@@ -40,11 +59,13 @@ export default async function RoomsPage() {
     return acc;
   }, {});
 
+  const derivedStates = rooms.map(deriveRoomState);
   const statusCounts = {
-    AVAILABLE: rooms.filter((r) => r.status === "AVAILABLE").length,
-    OCCUPIED: rooms.filter((r) => r.status === "OCCUPIED" || r.assignedBookings.length > 0).length,
-    CLEANING: rooms.filter((r) => r.status === "CLEANING").length,
-    MAINTENANCE: rooms.filter((r) => r.status === "MAINTENANCE").length,
+    AVAILABLE: derivedStates.filter((s) => s === "AVAILABLE").length,
+    BOOKED: derivedStates.filter((s) => s === "BOOKED").length,
+    OCCUPIED: derivedStates.filter((s) => s === "OCCUPIED").length,
+    CLEANING: derivedStates.filter((s) => s === "CLEANING").length,
+    MAINTENANCE: derivedStates.filter((s) => s === "MAINTENANCE").length,
   };
 
   return (
@@ -59,9 +80,10 @@ export default async function RoomsPage() {
       </div>
 
       {/* Status summary */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-7">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-7">
         {[
           { key: "AVAILABLE", color: "#4ADE80" },
+          { key: "BOOKED", color: "#A78BFA" },
           { key: "OCCUPIED", color: "#60A5FA" },
           { key: "CLEANING", color: "#F59E0B" },
           { key: "MAINTENANCE", color: "#F87171" },
@@ -112,21 +134,26 @@ export default async function RoomsPage() {
                         </div>
                       )}
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {typeRooms.map((room) => (
-                          <RoomStatusCard
-                            key={room.id}
-                            room={{
-                              id: room.id,
-                              roomNumber: room.roomNumber,
-                              roomType: room.roomType,
-                              status: room.status,
-                              capacity: room.capacity,
-                              basePrice: room.basePrice,
-                            }}
-                            occupiedBy={room.assignedBookings[0]?.primaryGuest ?? null}
-                            accentColor={catMeta.accentColor}
-                          />
-                        ))}
+                        {typeRooms.map((room) => {
+                          const checkedIn = room.assignedBookings.find((b) => b.status === "CHECKED_IN");
+                          const bookedToday = room.assignedBookings.find((b) => b.status === "CONFIRMED");
+                          return (
+                            <RoomStatusCard
+                              key={room.id}
+                              room={{
+                                id: room.id,
+                                roomNumber: room.roomNumber,
+                                roomType: room.roomType,
+                                status: room.status,
+                                capacity: room.capacity,
+                                basePrice: room.basePrice,
+                              }}
+                              occupiedBy={checkedIn?.primaryGuest ?? null}
+                              bookedBy={!checkedIn ? bookedToday?.primaryGuest ?? null : null}
+                              accentColor={catMeta.accentColor}
+                            />
+                          );
+                        })}
                       </div>
                     </div>
                   );
