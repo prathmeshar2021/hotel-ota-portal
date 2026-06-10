@@ -17,6 +17,7 @@ import {
   Crown,
   ChevronRight,
   LayoutGrid,
+  FileSpreadsheet,
 } from "lucide-react";
 
 interface SuperAdminNavProps {
@@ -31,6 +32,7 @@ const NAV_LINKS = [
   { href: "/admin/inventory", label: "Inventory", icon: CalendarRange },
   { href: "/admin/coupons", label: "Coupons", icon: TicketPercent },
   { href: "/admin/promotions", label: "Promotions", icon: Sparkles },
+  { href: "/admin/gst-report", label: "GST Report", icon: FileSpreadsheet },
   { href: "/admin/approvals", label: "Approvals", icon: ShieldCheck, badge: true },
 ];
 
