@@ -26,7 +26,8 @@ const SHEETS = [
   ["B2C Small", "Unregistered-guest sales summarised by rate"],
   ["Exempt", "Rooms ≤ ₹1,000/night (nil-rated)"],
   ["HSN Summary", "By SAC 996311 and rate"],
-  ["Sales Register", "Every booking, line by line"],
+  ["Documents", "Invoice/document series issued (GSTR-1 Table 13)"],
+  ["Sales Register", "Every booking, line by line — invoiced or not"],
 ];
 
 export default function GstReportClient({ gstin, legalName }: { gstin: string; legalName: string }) {
@@ -135,14 +136,31 @@ export default function GstReportClient({ gstin, legalName }: { gstin: string; l
         </div>
       </div>
 
-      <div className="flex items-start gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/[0.06] px-4 py-3.5">
-        <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-        <p className="text-amber-200/80 text-xs leading-relaxed">
-          <span className="font-bold">Basis:</span> bookings with check-out in the selected month
-          (Confirmed / Checked-in / Checked-out). The ₹200 refundable deposit is excluded from
-          taxable value. This report mirrors the GSTR-1 sections in editable Excel — please review
-          it (and reconcile advances) with your CA before filing on the GST portal.
-        </p>
+      <div className="space-y-3">
+        <div className="flex items-start gap-3 rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.06] px-4 py-3.5">
+          <Info className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+          <p className="text-emerald-200/80 text-xs leading-relaxed">
+            <span className="font-bold">Every booking in the month is included</span> — you do
+            <span className="font-bold"> not</span> need to generate invoice PDFs first. Bookings
+            without a generated invoice appear with their booking reference.
+            <br />
+            <span className="font-bold">Reporting each invoice:</span> for guests who gave a{" "}
+            <span className="font-semibold">GSTIN (B2B)</span>, each invoice is listed individually
+            in the B2B sheet — that&apos;s how GSTR-1 needs it. For ordinary{" "}
+            <span className="font-semibold">unregistered guests (B2C)</span>, GSTR-1 wants a
+            <span className="font-semibold"> consolidated rate-wise summary</span>, not invoice-by-invoice
+            — that&apos;s the B2C Small sheet.
+          </p>
+        </div>
+        <div className="flex items-start gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/[0.06] px-4 py-3.5">
+          <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+          <p className="text-amber-200/80 text-xs leading-relaxed">
+            <span className="font-bold">Basis:</span> bookings with check-out in the selected month
+            (Confirmed / Checked-in / Checked-out; Cancelled / No-show excluded). The ₹200 refundable
+            deposit is excluded from taxable value. Review with your CA (especially advance-payment
+            timing) before filing on the GST portal.
+          </p>
+        </div>
       </div>
     </div>
   );

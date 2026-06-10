@@ -236,6 +236,35 @@ export async function generateGstReport(opts: {
   }
   ["val", "taxable", "cgst", "sgst"].forEach((k) => (hsn.getColumn(k).numFmt = MONEY));
 
+  // ── Documents issued (GSTR-1 Table 13) ──
+  const docs = wb.addWorksheet("Documents");
+  docs.columns = [
+    { header: "Nature of Document", key: "nature", width: 42 },
+    { header: "Sr. No. From", key: "from", width: 18 },
+    { header: "Sr. No. To", key: "to", width: 18 },
+    { header: "Total Number", key: "total", width: 14 },
+  ];
+  styleHeader(docs.getRow(1));
+  const formalNos = rows.filter((r) => r.hasFormalInvoice).map((r) => r.invoiceNo).sort();
+  docs.addRow({
+    nature: "Tax invoices issued (formal invoice no.)",
+    from: formalNos[0] ?? "—",
+    to: formalNos[formalNos.length - 1] ?? "—",
+    total: formalNos.length,
+  });
+  const refOnly = rows.length - formalNos.length;
+  if (refOnly > 0) {
+    docs.addRow({
+      nature: "Supplies on booking reference (formal invoice not generated)",
+      from: "—",
+      to: "—",
+      total: refOnly,
+    });
+  }
+  docs.addRow({ nature: "Total outward supplies in period", from: "", to: "", total: rows.length }).font = {
+    bold: true,
+  };
+
   // ── Detailed sales register ──
   const reg = wb.addWorksheet("Sales Register");
   reg.columns = [
