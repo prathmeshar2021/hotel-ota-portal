@@ -30,6 +30,7 @@ import { format } from "date-fns";
 import BookingStatusButton, { NoShowButton } from "@/components/hotel-admin/BookingStatusButton";
 import CounterCheckinButton from "@/components/hotel-admin/CounterCheckinButton";
 import RefundStatus from "@/components/hotel-admin/RefundStatus";
+import GstInvoiceButton from "@/components/hotel-admin/GstInvoiceButton";
 import CollectPaymentModal from "@/components/hotel-admin/CollectPaymentModal";
 import AddChargeModal from "@/components/hotel-admin/AddChargeModal";
 import DeleteChargeButton from "@/components/hotel-admin/DeleteChargeButton";
@@ -86,6 +87,7 @@ export default async function BookingDetailPage({
       companions: true,
       payment: true,
       charges: { orderBy: { id: "asc" } },
+      gstInvoice: { select: { invoiceNumber: true } },
     },
   });
 
@@ -585,6 +587,17 @@ export default async function BookingDetailPage({
                 guestName={booking.primaryGuest.name}
                 bookingRef={booking.bookingRef}
               />
+            )}
+
+            {/* GST invoice — generate, download, send on WhatsApp */}
+            {["CONFIRMED", "CHECKED_IN", "CHECKED_OUT"].includes(booking.status) && (
+              <div className="mt-3">
+                <GstInvoiceButton
+                  bookingId={booking.id}
+                  invoiceNumber={booking.gstInvoice?.invoiceNumber ?? null}
+                  guestPhone={booking.primaryGuest.phone}
+                />
+              </div>
             )}
 
             {/* Payment record details — moved outside the space-y div */}

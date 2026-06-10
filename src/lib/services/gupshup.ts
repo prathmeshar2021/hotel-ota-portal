@@ -137,4 +137,21 @@ export const gupshup = {
       caption: `Dear ${data.guestName}, please read the attached declaration. Reply *I Agree* to confirm.`,
       filename: "Guest_Consent.pdf",
     }),
+
+  sendInvoiceDocument: (phone: string, data: {
+    guestName: string;
+    hotelName: string;
+    invoiceNumber: string;
+    pdfUrl: string;
+  }) =>
+    send({
+      to: phone,
+      type: "document",
+      documentUrl: data.pdfUrl,
+      caption:
+        `🧾 *Tax Invoice from ${data.hotelName}*\n\n` +
+        `Dear ${data.guestName}, please find your GST invoice (${data.invoiceNumber}) attached. ` +
+        `Thank you for staying with us! 🌿`,
+      filename: `Invoice_${data.invoiceNumber}.pdf`,
+    }),
 };

@@ -7,6 +7,7 @@ export const BUSINESS = {
   brand: "The Urban Escape",
   legalName: "Saubhagya Mangalam",
   entityType: "Sole Proprietorship",
+  gstin: "22AHKPG7852M1Z0",
   addressLines: ["Kohka, Bhilai", "Chhattisgarh, India"],
   city: "Bhilai",
   state: "Chhattisgarh",

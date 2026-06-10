@@ -3,11 +3,13 @@
  * Server-only helpers (generateBookingRef etc.) live in booking.ts.
  */
 
-// GST calculation — Indian hotel tax slabs
+// GST calculation — Indian hotel tax slabs (per-night room tariff)
+//   ≤ ₹1,000        → 0% (exempt)
+//   ₹1,001–₹7,500   → 5%  (2.5% CGST + 2.5% SGST)
+//   > ₹7,500        → 18% (9% CGST + 9% SGST)
 export function calculateGST(roomRentPerNight: number) {
-  // < ₹1000: no GST, ₹1000-7500: 12% (6% CGST + 6% SGST), > ₹7500: 18% (9% CGST + 9% SGST)
-  if (roomRentPerNight < 1000) return { cgstRate: 0, sgstRate: 0 };
-  if (roomRentPerNight <= 7500) return { cgstRate: 6, sgstRate: 6 };
+  if (roomRentPerNight <= 1000) return { cgstRate: 0, sgstRate: 0 };
+  if (roomRentPerNight <= 7500) return { cgstRate: 2.5, sgstRate: 2.5 };
   return { cgstRate: 9, sgstRate: 9 };
 }
 
