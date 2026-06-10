@@ -310,6 +310,16 @@ model Booking {
   cancelledAt        DateTime?
   cancellationCharge Float?    // null = not cancelled; 0 = free; >0 = charged amount
 
+  // Refund (post-cancellation). refundStatus: NONE | PENDING | PROCESSED | FAILED
+  //   NONE      = nothing to refund (unpaid / pay-at-hotel)
+  //   PENDING   = refund owed but not yet settled (auto-refund failed, or cash refund to hand back at desk)
+  //   PROCESSED = refund completed (Razorpay refund issued, or staff marked a cash refund done)
+  //   FAILED    = an auto-refund attempt errored; admin can retry
+  refundStatus String    @default("NONE")
+  refundAmount Float     @default(0)
+  refundId     String?   // Razorpay refund id, when auto-refunded
+  refundedAt   DateTime?
+
   appsheetBookingNo Int?
   appsheetConsentId String?
 

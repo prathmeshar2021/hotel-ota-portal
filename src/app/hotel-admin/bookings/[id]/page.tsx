@@ -29,6 +29,7 @@ import {
 import { format } from "date-fns";
 import BookingStatusButton, { NoShowButton } from "@/components/hotel-admin/BookingStatusButton";
 import CounterCheckinButton from "@/components/hotel-admin/CounterCheckinButton";
+import RefundStatus from "@/components/hotel-admin/RefundStatus";
 import CollectPaymentModal from "@/components/hotel-admin/CollectPaymentModal";
 import AddChargeModal from "@/components/hotel-admin/AddChargeModal";
 import DeleteChargeButton from "@/components/hotel-admin/DeleteChargeButton";
@@ -566,6 +567,12 @@ export default async function BookingDetailPage({
                       Cancelled {format(booking.cancelledAt, "dd MMM yyyy, hh:mm a")}
                     </p>
                   )}
+                  <RefundStatus
+                    bookingId={booking.id}
+                    refundStatus={booking.refundStatus}
+                    refundAmount={booking.refundAmount}
+                    refundId={booking.refundId}
+                  />
                 </div>
               )}
             </div>

@@ -255,6 +255,11 @@ export default async function BookingsPage({ searchParams }: Props) {
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-full border shrink-0 ${status.cls}`}>
                       {status.label}
                     </span>
+                    {(b.refundStatus === "PENDING" || b.refundStatus === "FAILED") && (
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full border shrink-0 bg-amber-500/15 text-amber-300 border-amber-500/30">
+                        Refund pending
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-3 text-xs text-white/35">
                     <span className="flex items-center gap-1">

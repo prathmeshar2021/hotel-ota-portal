@@ -15,6 +15,23 @@ export async function createOrder(amountInPaise: number, bookingRef: string) {
   });
 }
 
+/**
+ * Issue a refund against a captured payment. Amount is in paise; omit for a
+ * full refund. `speed: "normal"` settles via the standard refund cycle.
+ * Returns the Razorpay refund object (its `id` should be stored).
+ */
+export async function createRefund(
+  paymentId: string,
+  amountInPaise?: number,
+  notes?: Record<string, string>
+) {
+  return razorpay.payments.refund(paymentId, {
+    ...(amountInPaise != null ? { amount: amountInPaise } : {}),
+    speed: "normal",
+    ...(notes ? { notes } : {}),
+  });
+}
+
 export function verifyPaymentSignature(params: {
   orderId: string;
   paymentId: string;

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
 import { getCancellationPolicy, computeCancellationBreakdown, DEPOSIT_AMOUNT } from "@/lib/utils/cancellation";
+import { processBookingRefund } from "@/lib/services/refund";
 
 export async function POST(
   _req: NextRequest,
@@ -53,17 +54,23 @@ export async function POST(
     },
   });
 
+  // Issue the refund (auto via Razorpay where possible; otherwise flagged for the desk).
+  const refund = await processBookingRefund(booking.id, breakdown.totalRefund, {
+    reason: `Guest cancellation (${policy.tier})`,
+  });
+
   return NextResponse.json({
     success: true,
     bookingRef: booking.bookingRef,
     cancellationCharge: breakdown.cancellationCharge,
     totalRefund: breakdown.totalRefund,
     tier: policy.tier,
+    refundStatus: refund.refundStatus,
     message:
-      policy.tier === "FREE"
-        ? "Booking cancelled. Full refund will be processed within 5–7 business days."
-        : policy.tier === "HALF"
-        ? `Booking cancelled. ₹${breakdown.totalRefund.toLocaleString("en-IN")} will be refunded within 5–7 business days.`
-        : `Booking cancelled. Deposit of ₹${breakdown.depositRefund.toLocaleString("en-IN")} will be refunded within 5–7 business days.`,
+      refund.refundStatus === "PROCESSED"
+        ? `Booking cancelled. ₹${breakdown.totalRefund.toLocaleString("en-IN")} refunded to your original payment method — it may take 5–7 business days to reflect.`
+        : refund.refundStatus === "NONE"
+        ? "Booking cancelled."
+        : `Booking cancelled. ₹${breakdown.totalRefund.toLocaleString("en-IN")} refund is being processed and will reflect within 5–7 business days.`,
   });
 }

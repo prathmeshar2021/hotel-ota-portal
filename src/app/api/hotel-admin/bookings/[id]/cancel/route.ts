@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
 import { getCancellationPolicy, computeCancellationBreakdown, DEPOSIT_AMOUNT } from "@/lib/utils/cancellation";
 import { consumeOtp } from "@/lib/utils/otp";
+import { processBookingRefund } from "@/lib/services/refund";
 import { z } from "zod";
 
 const Schema = z.object({
@@ -85,11 +86,19 @@ export async function POST(
     },
   });
 
+  // Issue the refund (auto via Razorpay where possible; otherwise flagged for the desk).
+  const totalRefund = booking.totalAmount - finalCharge;
+  const refund = await processBookingRefund(booking.id, totalRefund, {
+    reason: `Admin cancellation (${policy.tier})`,
+  });
+
   return NextResponse.json({
     success: true,
     bookingRef: booking.bookingRef,
     cancellationCharge: finalCharge,
-    totalRefund: booking.totalAmount - finalCharge,
+    totalRefund,
     tier: policy.tier,
+    refundStatus: refund.refundStatus,
+    refundMessage: refund.message,
   });
 }
