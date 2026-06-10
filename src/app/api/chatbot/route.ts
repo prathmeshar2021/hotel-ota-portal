@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { enforceRateLimit } from "@/lib/ratelimit";
 import { classifyIntent, getRuleBasedResponse } from "@/lib/chatbot/intentHandler";
 import { callGemini } from "@/lib/chatbot/geminiService";
 import { prisma } from "@/lib/db/prisma";
@@ -89,6 +90,10 @@ async function getAvailableRooms(checkIn: string, checkOut: string): Promise<Roo
 
 // ─── POST handler ───────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
+  // Public + hits a paid AI API — rate limit hard to prevent cost abuse.
+  const limited = await enforceRateLimit(req, { name: "chatbot", limit: 15, windowSec: 60 });
+  if (limited) return limited;
+
   try {
     const body = await req.json();
     const message: string = body.message ?? "";

@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import { getUniversalDiscount, resolveBookingDiscount } from "@/lib/utils/booking";
+import { enforceRateLimit } from "@/lib/ratelimit";
 
 export async function POST(req: NextRequest) {
+  // Public — rate limit to prevent coupon-code brute forcing.
+  const limited = await enforceRateLimit(req, { name: "coupon-validate", limit: 20, windowSec: 60 });
+  if (limited) return limited;
+
   const { code, hotelId, amount } = await req.json();
 
   // The hotel-wide marketing discount is always on (independent of the code).

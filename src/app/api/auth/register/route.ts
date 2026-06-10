@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
+import { enforceRateLimit } from "@/lib/ratelimit";
 
 const RegisterSchema = z.object({
   name: z.string().min(2),
@@ -11,6 +12,10 @@ const RegisterSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
+  // Public — rate limit to prevent fake-account spam.
+  const limited = await enforceRateLimit(req, { name: "register", limit: 5, windowSec: 300 });
+  if (limited) return limited;
+
   const body = await req.json();
   const parsed = RegisterSchema.safeParse(body);
   if (!parsed.success) {

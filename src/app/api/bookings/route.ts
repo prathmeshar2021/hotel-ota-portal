@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth/auth";
 import { generateBookingRef, computeTotals, getUniversalDiscount, resolveBookingDiscount } from "@/lib/utils/booking";
 import { REFUNDABLE_DEPOSIT } from "@/lib/utils/booking-calc";
 import { createOrder } from "@/lib/services/razorpay";
+import { enforceRateLimit } from "@/lib/ratelimit";
 import { gupshup } from "@/lib/services/gupshup";
 import { format } from "date-fns";
 import { z } from "zod";
@@ -26,6 +27,10 @@ const CreateBookingSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
+  // Public guest checkout — rate limit to prevent booking/order spam.
+  const limited = await enforceRateLimit(req, { name: "booking-create", limit: 8, windowSec: 60 });
+  if (limited) return limited;
+
   try {
   const session = await auth();
   const body = await req.json();
