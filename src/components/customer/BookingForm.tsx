@@ -131,6 +131,9 @@ export default function BookingForm({
   // Payment mode
   const [payMode, setPayMode] = useState<PayMode>("PAY_NOW");
 
+  // Terms acceptance (required before booking)
+  const [agreed, setAgreed] = useState(false);
+
   // Per-night marketing discount (struck-through display) + this booking's rent saving.
   const nightlyDiscount = universalDiscountAmount(universal, room.basePrice);
   const discountedNightly = discountedNightlyPrice(universal, room.basePrice);
@@ -204,6 +207,9 @@ export default function BookingForm({
       toast.error("Enter a valid 10-digit phone number"); return;
     }
     if (!guestName.trim()) { toast.error("Enter your full name"); return; }
+    if (!agreed) {
+      toast.error("Please accept the Terms, Privacy & Cancellation Policy to continue."); return;
+    }
 
     setLoading(true);
     try {
@@ -696,11 +702,28 @@ export default function BookingForm({
         </div>
       </div>
 
+      {/* ── Terms acceptance ──────────────────────── */}
+      <label className="flex items-start gap-3 px-1 cursor-pointer select-none">
+        <input
+          type="checkbox"
+          checked={agreed}
+          onChange={(e) => setAgreed(e.target.checked)}
+          className="mt-0.5 w-4 h-4 shrink-0 accent-amber-500 cursor-pointer"
+        />
+        <span className="text-xs text-white/50 leading-relaxed">
+          I have read and agree to the{" "}
+          <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-amber-400 hover:text-amber-300 underline">Terms &amp; Conditions</a>,{" "}
+          <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-amber-400 hover:text-amber-300 underline">Privacy Policy</a>{" "}
+          and{" "}
+          <a href="/refund-policy" target="_blank" rel="noopener noreferrer" className="text-amber-400 hover:text-amber-300 underline">Cancellation &amp; Refund Policy</a>.
+        </span>
+      </label>
+
       {/* ── CTA ───────────────────────────────────── */}
       <div>
         <button
           onClick={handleBooking}
-          disabled={loading || localNights === 0 || availStatus === "checking" || availStatus === "unavailable"}
+          disabled={loading || localNights === 0 || availStatus === "checking" || availStatus === "unavailable" || !agreed}
           className="w-full flex items-center justify-center gap-2 font-bold py-4 rounded-2xl text-base transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60 shadow-xl text-black"
           style={{ background: availStatus === "unavailable" ? "#6b7280" : accentColor, boxShadow: `0 12px 40px ${accentColor}35` }}>
           {loading ? (
