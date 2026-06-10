@@ -76,6 +76,18 @@ export async function PATCH(
     data: updateData,
   });
 
+  // Issue the GST tax invoice at check-out so every completed stay gets a
+  // sequential invoice number automatically. Idempotent; never blocks check-out.
+  // (Delivery stays manual — the invoice is only sent on WhatsApp when staff press Send.)
+  if (newStatus === "CHECKED_OUT") {
+    try {
+      const { ensureGstInvoice } = await import("@/lib/services/invoice");
+      await ensureGstInvoice(id);
+    } catch (e) {
+      console.error("[status] auto-issue invoice failed:", e);
+    }
+  }
+
   const messages: Record<string, string> = {
     CONFIRMED: "Booking confirmed",
     CHECKED_IN: "Guest checked in successfully",
