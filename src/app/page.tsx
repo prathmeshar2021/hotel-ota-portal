@@ -518,7 +518,7 @@ export default async function HomePage() {
             {[
               { label: "Rooms", href: "#rooms" },
               { label: "Amenities", href: "#amenities" },
-              { label: "Contact", href: "#contact" },
+              { label: "Contact", href: "/contact" },
               { label: "My Bookings", href: "/my-bookings" },
               { label: "Login", href: "/auth/login" },
               { label: "Register", href: "/auth/register" },
@@ -526,6 +526,17 @@ export default async function HomePage() {
               <Link key={l.label} href={l.href} className="hover:text-white/70 transition-colors">{l.label}</Link>
             ))}
           </div>
+        </div>
+        {/* Legal links — required for payment-gateway compliance */}
+        <div className="max-w-5xl mx-auto mt-6 flex flex-wrap gap-x-5 gap-y-2 justify-center text-xs">
+          {[
+            { label: "Terms & Conditions", href: "/terms" },
+            { label: "Privacy Policy", href: "/privacy" },
+            { label: "Cancellation & Refund Policy", href: "/refund-policy" },
+            { label: "Contact Us", href: "/contact" },
+          ].map((l) => (
+            <Link key={l.label} href={l.href} className="text-white/30 hover:text-white/70 transition-colors">{l.label}</Link>
+          ))}
         </div>
         <div className="max-w-5xl mx-auto mt-8 pt-6 border-t border-white/5 text-center text-xs text-white/15">
           © {new Date().getFullYear()} The Urban Escape, By Saubhagya Mangalam. All rights reserved.
