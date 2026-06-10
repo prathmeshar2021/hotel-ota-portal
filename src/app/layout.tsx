@@ -4,16 +4,42 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 import SessionWrapper from "@/components/shared/SessionWrapper";
 import ChatBotWrapper from "@/components/customer/ChatBotWrapper";
+import { BUSINESS, SITE_URL } from "@/lib/constants/business";
 
 const inter = Inter({ subsets: ["latin"] });
 
+const TAGLINE = "Book cottages & rooms at a forest retreat in Bhilai";
+const DESCRIPTION = `Book your stay at ${BUSINESS.brand} — luxury cottages, AC and non-AC rooms at a peaceful forest retreat in ${BUSINESS.city}, ${BUSINESS.state}. Best prices, instant WhatsApp confirmation and secure online payment.`;
+
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: {
-    default: "StayIndia — Book Hotels & Resorts",
-    template: "%s | StayIndia",
+    default: `${BUSINESS.brand} — ${TAGLINE}`,
+    template: `%s | ${BUSINESS.brand}`,
   },
-  description:
-    "Discover and book handpicked hotels, resorts and cottages across India. Best prices, instant confirmation.",
+  description: DESCRIPTION,
+  applicationName: BUSINESS.brand,
+  keywords: [
+    BUSINESS.brand, "Bhilai resort", "Bhilai hotel", "cottages in Bhilai",
+    "forest retreat Bhilai", "Chhattisgarh resort", "weekend getaway Bhilai",
+  ],
+  alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    siteName: BUSINESS.brand,
+    title: `${BUSINESS.brand} — ${TAGLINE}`,
+    description: DESCRIPTION,
+    url: SITE_URL,
+    locale: "en_IN",
+    images: [{ url: "/images/hero.jpg", width: 1200, height: 630, alt: BUSINESS.brand }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: `${BUSINESS.brand} — ${TAGLINE}`,
+    description: DESCRIPTION,
+    images: ["/images/hero.jpg"],
+  },
+  robots: { index: true, follow: true },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

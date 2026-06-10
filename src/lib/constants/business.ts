@@ -20,3 +20,14 @@ export const BUSINESS = {
   // Last reviewed date for the policy documents (keep current on edits).
   policiesUpdated: "10 June 2026",
 } as const;
+
+/**
+ * Canonical site origin, used for metadata, sitemap and robots.
+ * Set NEXT_PUBLIC_SITE_URL to your custom domain in production; otherwise we
+ * fall back to the Vercel production URL, then localhost for dev.
+ */
+export const SITE_URL: string =
+  process.env.NEXT_PUBLIC_SITE_URL ??
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : "http://localhost:3000");
