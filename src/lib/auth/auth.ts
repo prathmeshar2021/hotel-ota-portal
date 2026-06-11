@@ -146,17 +146,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
       // ── Google OAuth sign-in: find or create Guest record ───────────────────
       if (account?.provider === "google" && user?.email) {
-        // Try to find existing guest by email
-        let guest = await prisma.guest.findUnique({
-          where: { email: user.email },
-        });
+        const email = user.email.trim().toLowerCase();
+        // Reuse the existing account for this email — this is where a phone-
+        // registered guest who later linked their email gets unified, so the
+        // SAME account logs in (instead of creating a duplicate).
+        let guest = await prisma.guest.findUnique({ where: { email } });
 
         // Create new guest if first time
         if (!guest) {
           guest = await prisma.guest.create({
             data: {
-              name: user.name ?? user.email.split("@")[0],
-              email: user.email,
+              name: user.name ?? email.split("@")[0],
+              email,
               isVerified: true, // Google verifies email
             },
           });
@@ -165,6 +166,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.id = guest.id;
         token.role = "CUSTOMER" as Role;
         token.phone = guest.phone ?? undefined;
+        token.email = guest.email ?? undefined;
+        token.name = guest.name;
       }
 
       return token;

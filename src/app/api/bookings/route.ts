@@ -43,15 +43,19 @@ export async function POST(req: NextRequest) {
   const data = parsed.data;
   const { CATEGORY_META, getCategoryMeta } = await import("@/lib/utils/room-categories");
 
-  // Resolve or create guest
+  // Resolve or create guest, keeping one account per person across login methods.
+  const { linkGuestContact, normalizeEmail } = await import("@/lib/utils/guest");
   let guestId: string;
   if (session?.user.role === "CUSTOMER") {
     guestId = session.user.id;
   } else if (data.guestPhone) {
-    // Guest checkout (no account) — find or create
-    const existing = await prisma.guest.findUnique({
-      where: { phone: data.guestPhone },
-    });
+    // Guest checkout (no account) — reuse an existing account by phone, then by
+    // email (so a Google-created account isn't duplicated), else create one.
+    let existing = await prisma.guest.findUnique({ where: { phone: data.guestPhone } });
+    if (!existing) {
+      const email = normalizeEmail(data.guestEmail);
+      if (email) existing = await prisma.guest.findUnique({ where: { email } });
+    }
     if (existing) {
       guestId = existing.id;
     } else {
@@ -59,7 +63,7 @@ export async function POST(req: NextRequest) {
         data: {
           phone: data.guestPhone,
           name: data.guestName ?? "Guest",
-          email: data.guestEmail,
+          email: normalizeEmail(data.guestEmail),
         },
       });
       guestId = created.id;
@@ -67,6 +71,14 @@ export async function POST(req: NextRequest) {
   } else {
     return NextResponse.json({ error: "Guest details required" }, { status: 400 });
   }
+
+  // Fill in any missing email/phone/name on the account from this booking, so it
+  // becomes reachable by both phone-login and Google-login.
+  await linkGuestContact(guestId, {
+    email: data.guestEmail,
+    phone: data.guestPhone,
+    name: data.guestName,
+  });
 
   // Validate category
   const categoryMeta = getCategoryMeta(data.roomCategory);

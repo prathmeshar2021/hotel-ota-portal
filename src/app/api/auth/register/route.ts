@@ -22,16 +22,31 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten().fieldErrors }, { status: 400 });
   }
 
-  const { name, phone, email, password } = parsed.data;
+  const { name, phone, password } = parsed.data;
+  const email = parsed.data.email?.trim().toLowerCase() || undefined;
 
+  // Reuse an existing account (e.g. one created via Google with this email, or a
+  // prior phone account) rather than erroring — set the password on it instead.
   const existing = await prisma.guest.findFirst({
     where: { OR: [{ phone }, ...(email ? [{ email }] : [])] },
   });
-  if (existing) {
-    return NextResponse.json({ error: "An account with this phone/email already exists" }, { status: 409 });
-  }
 
   const hashed = await bcrypt.hash(password, 12);
+
+  if (existing) {
+    if (existing.password) {
+      return NextResponse.json(
+        { error: "An account with this phone/email already exists. Please sign in." },
+        { status: 409 }
+      );
+    }
+    // Account exists without a password (e.g. created via Google or guest
+    // checkout) — set the password, then safely link phone/email/name onto it.
+    const { linkGuestContact } = await import("@/lib/utils/guest");
+    await prisma.guest.update({ where: { id: existing.id }, data: { password: hashed } });
+    await linkGuestContact(existing.id, { phone, email, name });
+    return NextResponse.json({ success: true });
+  }
 
   await prisma.guest.create({
     data: { name, phone, email, password: hashed },
