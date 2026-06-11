@@ -41,8 +41,9 @@ export async function POST(
 
   try {
     const invoice = await ensureGstInvoice(booking.id);
-    // gupshup must fetch the PDF over the public internet.
-    const pdfUrl = `${appUrl}/api/invoices/${booking.id}/pdf`;
+    // gupshup must fetch the PDF over the public internet. The invoice number is
+    // a required second factor on the URL (defends the PII behind a 2nd secret).
+    const pdfUrl = `${appUrl}/api/invoices/${booking.id}/pdf?n=${encodeURIComponent(invoice.invoiceNumber)}`;
     await gupshup.sendInvoiceDocument(phone, {
       guestName: booking.primaryGuest.name,
       hotelName: BUSINESS.brand,

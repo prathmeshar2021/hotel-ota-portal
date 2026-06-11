@@ -18,10 +18,16 @@ export async function GET(
   if (limited) return limited;
 
   const { id } = await params;
+  // Second factor: the booking id alone isn't enough — the invoice number must
+  // also be supplied. Missing/mismatched → 404 (don't reveal the booking).
+  const n = req.nextUrl.searchParams.get("n");
+  if (!n) {
+    return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
+  }
 
   let result: { bytes: Uint8Array; invoiceNumber: string } | null = null;
   try {
-    result = await renderExistingInvoicePdf(id);
+    result = await renderExistingInvoicePdf(id, n);
   } catch (err) {
     console.error("[invoice pdf]", err);
     return NextResponse.json({ error: "Could not render invoice" }, { status: 500 });

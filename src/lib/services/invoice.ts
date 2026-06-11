@@ -25,11 +25,12 @@ export async function ensureGstInvoice(bookingId: string): Promise<GstInvoice> {
 
   const roomNo =
     booking.room?.roomNumber ?? getCategoryMeta(booking.roomCategory).displayName;
+  const invoiceNumber = await generateInvoiceNumber();
 
   return prisma.gstInvoice.create({
     data: {
       bookingId: booking.id,
-      invoiceNumber: await generateInvoiceNumber(),
+      invoiceNumber,
       customerName: booking.primaryGuest.name,
       customerPhone: booking.primaryGuest.phone ?? "",
       customerGstin: booking.guestGstin ?? null,
@@ -43,7 +44,7 @@ export async function ensureGstInvoice(bookingId: string): Promise<GstInvoice> {
       cgst: booking.cgst,
       sgst: booking.sgst,
       totalAmount: booking.totalAmount,
-      pdfUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/api/invoices/${booking.id}/pdf`,
+      pdfUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/api/invoices/${booking.id}/pdf?n=${invoiceNumber}`,
     },
   });
 }
@@ -115,12 +116,18 @@ export async function renderBookingInvoicePdf(bookingId: string): Promise<{
  * burn invoice numbers (invoices are only issued at check-out or by an
  * authenticated admin action).
  */
-export async function renderExistingInvoicePdf(bookingId: string): Promise<{
+export async function renderExistingInvoicePdf(
+  bookingId: string,
+  expectedInvoiceNumber?: string
+): Promise<{
   bytes: Uint8Array;
   invoiceNumber: string;
 } | null> {
   const rec = await prisma.gstInvoice.findUnique({ where: { bookingId } });
   if (!rec) return null;
+  // Second factor: the booking id alone isn't enough — the URL must also carry
+  // the matching invoice number. Mismatch is treated as "not found".
+  if (expectedInvoiceNumber && rec.invoiceNumber !== expectedInvoiceNumber) return null;
   const booking = await prisma.booking.findUnique({
     where: { id: bookingId },
     select: { bookingRef: true },

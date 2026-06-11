@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
 
   let event: {
     event?: string;
-    payload?: { payment?: { entity?: { id?: string; order_id?: string } } };
+    payload?: { payment?: { entity?: { id?: string; order_id?: string; amount?: number } } };
   };
   try {
     event = JSON.parse(raw);
@@ -45,7 +45,11 @@ export async function POST(req: NextRequest) {
         select: { bookingId: true },
       });
       if (record?.bookingId) {
-        await confirmPaidBooking({ bookingId: record.bookingId, razorpayPaymentId: paymentId });
+        await confirmPaidBooking({
+          bookingId: record.bookingId,
+          razorpayPaymentId: paymentId,
+          capturedPaise: entity?.amount,
+        });
       }
     }
   }

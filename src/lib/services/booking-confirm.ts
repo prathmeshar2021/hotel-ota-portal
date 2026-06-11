@@ -19,8 +19,10 @@ import { getCategoryMeta } from "@/lib/utils/room-categories";
 export async function confirmPaidBooking(params: {
   bookingId: string;
   razorpayPaymentId?: string;
+  /** Amount actually captured (in paise), when known — used to verify and record the real paid amount. */
+  capturedPaise?: number;
 }): Promise<{ bookingRef: string; alreadyConfirmed: boolean } | null> {
-  const { bookingId, razorpayPaymentId } = params;
+  const { bookingId, razorpayPaymentId, capturedPaise } = params;
 
   // Atomically claim the confirmation — only succeeds for the first caller.
   const claimed = await prisma.booking.updateMany({
@@ -39,12 +41,24 @@ export async function confirmPaidBooking(params: {
     return { bookingRef: booking.bookingRef, alreadyConfirmed: true };
   }
 
+  // Record the actual captured amount when known; defend against an unexpected
+  // under-payment slipping through as "fully paid". Razorpay already guarantees
+  // capture == order amount, so this is belt-and-suspenders.
+  const captured = capturedPaise != null ? Math.round(capturedPaise) / 100 : booking.totalAmount;
+  if (capturedPaise != null && Math.abs(captured - booking.totalAmount) > 1) {
+    console.warn(
+      `[confirm] amount mismatch for ${booking.bookingRef}: captured ₹${captured}, expected ₹${booking.totalAmount}`
+    );
+  }
+  const onlinePaid = Math.min(captured, booking.totalAmount);
+  const balanceDue = Math.max(0, booking.totalAmount - onlinePaid);
+
   // We own the confirmation — settle the payment + amounts.
   await prisma.booking.update({
     where: { id: bookingId },
     data: {
-      onlinePaid: booking.totalAmount,
-      balanceDue: 0,
+      onlinePaid,
+      balanceDue,
       ...(booking.payment
         ? {
             payment: {

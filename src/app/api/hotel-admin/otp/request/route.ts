@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
 import { createOtpRequest } from "@/lib/utils/otp";
+import { enforceRateLimit } from "@/lib/ratelimit";
 import type { OtpPurpose } from "@prisma/client";
 
 const VALID_PURPOSES: OtpPurpose[] = [
@@ -27,6 +28,15 @@ export async function POST(req: NextRequest) {
     session.user.role !== "SUPER_ADMIN"
   )
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  // Throttle OTP requests per hotel — these notify the owner, so cap the spam.
+  const limited = await enforceRateLimit(req, {
+    name: "otp-request",
+    limit: 10,
+    windowSec: 300,
+    identifier: session.user.hotelId,
+  });
+  if (limited) return limited;
 
   const body = await req.json().catch(() => null);
   const purpose = body?.purpose as OtpPurpose;
