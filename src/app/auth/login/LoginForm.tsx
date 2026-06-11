@@ -148,9 +148,17 @@ export default function LoginForm() {
 
             {/* Password */}
             <div>
-              <label className="block text-xs font-semibold text-white/50 uppercase tracking-wider mb-2">
-                Password
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-xs font-semibold text-white/50 uppercase tracking-wider">
+                  Password
+                </label>
+                <Link
+                  href="/auth/forgot-password"
+                  className="text-xs font-semibold text-amber-400/80 hover:text-amber-300 transition-colors"
+                >
+                  Forgot password?
+                </Link>
+              </div>
               <div className="relative">
                 <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/25" />
                 <input

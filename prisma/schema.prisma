@@ -498,6 +498,17 @@ model Coupon {
   bookings  Booking[]
 }
 
+// ─── PASSWORD RESET ───────────────────────────────────────────────────────────
+// One active reset per phone (the customer login identifier). The OTP is sent
+// over WhatsApp and stored only as a bcrypt hash.
+model PasswordReset {
+  phone     String   @id
+  otpHash   String
+  expiresAt DateTime
+  attempts  Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
 // ─── REVIEW ───────────────────────────────────────────────────────────────────
 
 model Review {

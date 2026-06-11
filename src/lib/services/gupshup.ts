@@ -138,6 +138,16 @@ export const gupshup = {
       filename: "Guest_Consent.pdf",
     }),
 
+  sendPasswordResetOtp: (phone: string, data: { otp: string; name?: string }) =>
+    send({
+      to: phone,
+      message:
+        `🔐 *Password Reset*\n\n` +
+        (data.name ? `Hi ${data.name},\n\n` : "") +
+        `Your password reset code is:\n\n*${data.otp}*\n\n` +
+        `It is valid for 10 minutes. If you didn't request this, you can ignore this message.`,
+    }),
+
   sendInvoiceDocument: (phone: string, data: {
     guestName: string;
     hotelName: string;
