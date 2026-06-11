@@ -94,7 +94,7 @@ export function invoiceDataFromRecord(rec: GstInvoice, bookingRef: string): Invo
   };
 }
 
-/** Convenience: ensure the record exists and return its rendered PDF bytes. */
+/** Ensure the record exists and return its rendered PDF bytes (authenticated callers only). */
 export async function renderBookingInvoicePdf(bookingId: string): Promise<{
   bytes: Uint8Array;
   invoiceNumber: string;
@@ -106,5 +106,25 @@ export async function renderBookingInvoicePdf(bookingId: string): Promise<{
   if (!booking) return null;
   const rec = await ensureGstInvoice(bookingId);
   const bytes = generateInvoicePdf(invoiceDataFromRecord(rec, booking.bookingRef));
+  return { bytes, invoiceNumber: rec.invoiceNumber };
+}
+
+/**
+ * Render an ALREADY-ISSUED invoice. Returns null when no invoice exists — used
+ * by the public PDF route so an unauthenticated GET can never create records or
+ * burn invoice numbers (invoices are only issued at check-out or by an
+ * authenticated admin action).
+ */
+export async function renderExistingInvoicePdf(bookingId: string): Promise<{
+  bytes: Uint8Array;
+  invoiceNumber: string;
+} | null> {
+  const rec = await prisma.gstInvoice.findUnique({ where: { bookingId } });
+  if (!rec) return null;
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+    select: { bookingRef: true },
+  });
+  const bytes = generateInvoicePdf(invoiceDataFromRecord(rec, booking?.bookingRef ?? bookingId));
   return { bytes, invoiceNumber: rec.invoiceNumber };
 }
