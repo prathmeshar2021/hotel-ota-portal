@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { X, AlertTriangle, CheckCircle, Loader2, ShieldCheck } from "lucide-react";
 import { getCancellationPolicy, computeCancellationBreakdown, formatHoursUntilCheckIn } from "@/lib/utils/cancellation";
@@ -19,6 +20,8 @@ export default function CancelBookingButton({
 }: Props) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const policy = getCancellationPolicy(new Date(checkInDate));
   const breakdown = computeCancellationBreakdown(totalAmount, depositAmount, policy.chargePercent);
@@ -58,10 +61,10 @@ export default function CancelBookingButton({
         <X className="w-3.5 h-3.5" /> Cancel
       </button>
 
-      {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {open && mounted && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 overflow-y-auto">
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => !loading && setOpen(false)} />
-          <div className="relative bg-[#0d1a0e] border border-white/10 rounded-3xl p-6 w-full max-w-md shadow-2xl">
+          <div className="relative bg-[#0d1a0e] border border-white/10 rounded-3xl p-6 w-full max-w-md shadow-2xl my-auto max-h-[90vh] overflow-y-auto">
 
             {/* Header */}
             <div className="flex items-center justify-between mb-5">
@@ -145,7 +148,8 @@ export default function CancelBookingButton({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
