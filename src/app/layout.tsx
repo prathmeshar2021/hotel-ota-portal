@@ -4,6 +4,7 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 import SessionWrapper from "@/components/shared/SessionWrapper";
 import ChatBotWrapper from "@/components/customer/ChatBotWrapper";
+import { CartProvider } from "@/lib/cart/CartContext";
 import { BUSINESS, SITE_URL } from "@/lib/constants/business";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -47,9 +48,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.className} bg-[#071209]`}>
         <SessionWrapper>
-          {children}
-          <Toaster richColors position="top-right" />
-          <ChatBotWrapper />
+          <CartProvider>
+            {children}
+            <Toaster richColors position="top-right" />
+            <ChatBotWrapper />
+          </CartProvider>
         </SessionWrapper>
       </body>
     </html>

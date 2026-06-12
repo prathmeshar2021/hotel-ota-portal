@@ -272,6 +272,9 @@ model Booking {
   roomCategory   String        @default("LUXURY_COTTAGE")
   // Physical room assigned by admin after booking (null until assigned)
   roomId         String?
+  // Links the rooms booked together in one cart checkout (null for single-room
+  // bookings). The whole group shares one payment.
+  bookingGroupId String?
   primaryGuestId String
   source         BookingSource @default(PORTAL)
   status         BookingStatus @default(PENDING_PAYMENT)
@@ -337,6 +340,8 @@ model Booking {
   charges      AdditionalCharge[]
   onlineCheckin OnlineCheckin?
   syncLogs     AppsheetSyncLog[]
+
+  @@index([bookingGroupId])
 }
 
 // ─── BOOKING COMPANION ────────────────────────────────────────────────────────

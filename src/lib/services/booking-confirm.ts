@@ -24,72 +24,80 @@ export async function confirmPaidBooking(params: {
 }): Promise<{ bookingRef: string; alreadyConfirmed: boolean } | null> {
   const { bookingId, razorpayPaymentId, capturedPaise } = params;
 
-  // Atomically claim the confirmation — only succeeds for the first caller.
-  const claimed = await prisma.booking.updateMany({
-    where: { id: bookingId, status: "PENDING_PAYMENT" },
-    data: { status: "CONFIRMED" },
-  });
-
   const booking = await prisma.booking.findUnique({
     where: { id: bookingId },
     include: { primaryGuest: true, hotel: true, payment: true },
   });
   if (!booking) return null;
 
+  // A multi-room cart checkout shares one payment across a group of bookings —
+  // confirm the whole group atomically. Single bookings claim just themselves.
+  const groupId = booking.bookingGroupId;
+  const claimWhere = groupId
+    ? { bookingGroupId: groupId, status: "PENDING_PAYMENT" as const }
+    : { id: bookingId, status: "PENDING_PAYMENT" as const };
+  const claimed = await prisma.booking.updateMany({ where: claimWhere, data: { status: "CONFIRMED" } });
+
   // Someone already confirmed it (or it was never pending) — nothing more to do.
   if (claimed.count === 0) {
     return { bookingRef: booking.bookingRef, alreadyConfirmed: true };
   }
 
-  // Record the actual captured amount when known; defend against an unexpected
-  // under-payment slipping through as "fully paid". Razorpay already guarantees
-  // capture == order amount, so this is belt-and-suspenders.
-  const captured = capturedPaise != null ? Math.round(capturedPaise) / 100 : booking.totalAmount;
-  if (capturedPaise != null && Math.abs(captured - booking.totalAmount) > 1) {
+  // The shared payment row's amount is the group total (or the single booking's).
+  const expectedTotal = booking.payment?.amount ?? booking.totalAmount;
+  const captured = capturedPaise != null ? Math.round(capturedPaise) / 100 : expectedTotal;
+  if (capturedPaise != null && Math.abs(captured - expectedTotal) > 1) {
     console.warn(
-      `[confirm] amount mismatch for ${booking.bookingRef}: captured ₹${captured}, expected ₹${booking.totalAmount}`
+      `[confirm] amount mismatch for ${booking.bookingRef}: captured ₹${captured}, expected ₹${expectedTotal}`
     );
   }
-  const onlinePaid = Math.min(captured, booking.totalAmount);
-  const balanceDue = Math.max(0, booking.totalAmount - onlinePaid);
 
-  // We own the confirmation — settle the payment + amounts.
-  await prisma.booking.update({
-    where: { id: bookingId },
-    data: {
-      onlinePaid,
-      balanceDue,
-      ...(booking.payment
-        ? {
-            payment: {
-              update: {
-                ...(razorpayPaymentId ? { razorpayPaymentId } : {}),
-                status: "captured",
-                paidAt: new Date(),
-              },
-            },
-          }
-        : {}),
-    },
-  });
+  // Settle every booking in the group (each room is fully paid online).
+  const groupBookings = groupId
+    ? await prisma.booking.findMany({ where: { bookingGroupId: groupId }, select: { id: true, totalAmount: true } })
+    : [{ id: booking.id, totalAmount: booking.totalAmount }];
+  for (const b of groupBookings) {
+    await prisma.booking.update({
+      where: { id: b.id },
+      data: { onlinePaid: b.totalAmount, balanceDue: 0 },
+    });
+  }
 
-  // WhatsApp confirmation (fire-and-forget)
+  // Settle the shared payment row (lives on the primary booking).
+  if (booking.payment) {
+    await prisma.payment.update({
+      where: { id: booking.payment.id },
+      data: {
+        ...(razorpayPaymentId ? { razorpayPaymentId } : {}),
+        status: "captured",
+        paidAt: new Date(),
+      },
+    });
+  }
+
+  // WhatsApp confirmation (fire-and-forget). One message for the whole group.
   if (booking.primaryGuest.phone) {
+    const roomType =
+      groupBookings.length > 1
+        ? `${groupBookings.length} rooms`
+        : getCategoryMeta(booking.roomCategory).displayName;
     gupshup
       .sendBookingConfirmation(booking.primaryGuest.phone, {
         guestName: booking.primaryGuest.name,
         bookingRef: booking.bookingRef,
         hotelName: booking.hotel.name,
-        roomType: getCategoryMeta(booking.roomCategory).displayName,
+        roomType,
         checkIn: format(booking.checkInDate, "dd MMM yyyy"),
         checkOut: format(booking.checkOutDate, "dd MMM yyyy"),
-        totalAmount: booking.totalAmount,
+        totalAmount: expectedTotal,
       })
       .catch((e) => console.error("[WhatsApp] Confirmation failed:", e));
   }
 
-  // AppSheet sync (fire-and-forget)
-  syncBookingToAppSheet(booking.id).catch((e) => console.error("[AppSheet Sync]:", e));
+  // Sync each room booking to AppSheet.
+  for (const b of groupBookings) {
+    syncBookingToAppSheet(b.id).catch((e) => console.error("[AppSheet Sync]:", e));
+  }
 
   return { bookingRef: booking.bookingRef, alreadyConfirmed: false };
 }
