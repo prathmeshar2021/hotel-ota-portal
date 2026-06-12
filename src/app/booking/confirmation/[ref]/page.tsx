@@ -47,6 +47,18 @@ export default async function ConfirmationPage({
   const accentColor = categoryMeta?.accentColor ?? "#F59E0B";
   const categoryLabel = categoryMeta?.displayName ?? booking.roomCategory;
 
+  // Multi-room cart booking — summarise the whole group.
+  const groupRooms = booking.bookingGroupId
+    ? await prisma.booking.groupBy({
+        by: ["roomCategory"],
+        where: { bookingGroupId: booking.bookingGroupId },
+        _count: { id: true },
+        _sum: { totalAmount: true },
+      })
+    : [];
+  const groupRoomCount = groupRooms.reduce((n, r) => n + r._count.id, 0);
+  const groupTotal = groupRooms.reduce((s, r) => s + (r._sum.totalAmount ?? 0), 0);
+
   return (
     <div className="min-h-screen bg-[#071209]">
       <Navbar />
@@ -87,6 +99,30 @@ export default async function ConfirmationPage({
             )}
           </p>
         </div>
+
+        {/* Multi-room group summary */}
+        {groupRoomCount > 1 && (
+          <div className="glass-card rounded-2xl p-5 mb-5 border border-amber-500/20">
+            <p className="text-amber-400 text-sm font-bold mb-3">
+              Group booking — {groupRoomCount} rooms
+            </p>
+            <div className="space-y-1.5">
+              {groupRooms.map((r) => (
+                <div key={r.roomCategory} className="flex justify-between text-sm text-white/60">
+                  <span>{r._count.id} × {getCategoryMeta(r.roomCategory as never)?.displayName ?? r.roomCategory}</span>
+                  <span>₹{(r._sum.totalAmount ?? 0).toLocaleString("en-IN")}</span>
+                </div>
+              ))}
+              <div className="flex justify-between font-bold text-white text-sm pt-2 border-t border-white/10">
+                <span>Total paid</span>
+                <span style={{ color: accentColor }}>₹{groupTotal.toLocaleString("en-IN")}</span>
+              </div>
+            </div>
+            <p className="text-white/35 text-xs mt-2">
+              Each room has its own reference for check-in; they&apos;re listed in My Bookings.
+            </p>
+          </div>
+        )}
 
         {/* Booking reference card */}
         <div className="glass-card glass-shimmer rounded-3xl overflow-hidden mb-5">

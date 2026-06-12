@@ -12,11 +12,13 @@ interface Props {
   checkInDate: Date;
   totalAmount: number;
   depositAmount: number;
+  /** When >1, this cancels a whole multi-room group; totals are the group totals. */
+  groupRooms?: number;
   onCancelled?: () => void;
 }
 
 export default function CancelBookingButton({
-  bookingId, bookingRef, checkInDate, totalAmount, depositAmount, onCancelled,
+  bookingId, bookingRef, checkInDate, totalAmount, depositAmount, groupRooms = 1, onCancelled,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -74,7 +76,9 @@ export default function CancelBookingButton({
                 </div>
                 <div>
                   <h2 className="font-bold text-white">Cancel Booking</h2>
-                  <p className="text-white/35 text-xs">#{bookingRef}</p>
+                  <p className="text-white/35 text-xs">
+                    #{bookingRef}{groupRooms > 1 ? ` · cancels all ${groupRooms} rooms` : ""}
+                  </p>
                 </div>
               </div>
               <button onClick={() => !loading && setOpen(false)} className="text-white/30 hover:text-white/60 p-1 rounded-lg transition-colors">

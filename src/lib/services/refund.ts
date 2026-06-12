@@ -36,7 +36,7 @@ export async function processBookingRefund(
       cashPaid: true,
       refundStatus: true,
       refundId: true,
-      payment: { select: { id: true, razorpayPaymentId: true, refundAmount: true } },
+      payment: { select: { id: true, razorpayPaymentId: true, refundAmount: true, amount: true } },
     },
   });
   if (!booking) {
@@ -62,8 +62,14 @@ export async function processBookingRefund(
     return { refundStatus: "NONE", refundAmount: 0, message: "No refund due" };
   }
 
-  const onlinePortion = Math.min(owed, Math.round(booking.onlinePaid));
   const paymentId = booking.payment?.razorpayPaymentId;
+  // For a multi-room group the captured online amount lives on the shared Payment
+  // (= group total), not this booking's per-room onlinePaid. Cap by the real
+  // captured amount (less anything already refunded) when an online payment exists.
+  const paidOnline = paymentId
+    ? booking.payment!.amount - (booking.payment!.refundAmount ?? 0)
+    : booking.onlinePaid;
+  const onlinePortion = Math.min(owed, Math.round(paidOnline));
 
   // ── Online auto-refund path ──
   if (onlinePortion > 0 && paymentId) {

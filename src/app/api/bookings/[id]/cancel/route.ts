@@ -27,6 +27,7 @@ export async function POST(
       totalAmount: true,
       refundableDeposit: true,
       bookingRef: true,
+      bookingGroupId: true,
     },
   });
 
@@ -37,26 +38,44 @@ export async function POST(
     );
   }
 
-  const depositAmount = booking.refundableDeposit ?? DEPOSIT_AMOUNT;
   const policy = getCancellationPolicy(new Date(booking.checkInDate));
-  const breakdown = computeCancellationBreakdown(
-    booking.totalAmount,
-    depositAmount,
-    policy.chargePercent
-  );
 
-  await prisma.booking.update({
-    where: { id: booking.id },
-    data: {
-      status: "CANCELLED",
-      cancelledAt: new Date(),
-      cancellationCharge: breakdown.cancellationCharge,
-    },
-  });
+  // A multi-room cart booking shares one payment → cancel the whole group and
+  // refund the group total via the booking that holds the payment.
+  const groupBookings = booking.bookingGroupId
+    ? await prisma.booking.findMany({
+        where: { bookingGroupId: booking.bookingGroupId, primaryGuestId: session.user.id, status: "CONFIRMED" },
+        select: { id: true, totalAmount: true, refundableDeposit: true },
+      })
+    : [{ id: booking.id, totalAmount: booking.totalAmount, refundableDeposit: booking.refundableDeposit }];
 
-  // Issue the refund (auto via Razorpay where possible; otherwise flagged for the desk).
-  const refund = await processBookingRefund(booking.id, breakdown.totalRefund, {
-    reason: `Guest cancellation (${policy.tier})`,
+  let groupCharge = 0;
+  let groupRefund = 0;
+  for (const b of groupBookings) {
+    const bk = computeCancellationBreakdown(
+      b.totalAmount,
+      b.refundableDeposit ?? DEPOSIT_AMOUNT,
+      policy.chargePercent
+    );
+    groupCharge += bk.cancellationCharge;
+    groupRefund += bk.totalRefund;
+    await prisma.booking.update({
+      where: { id: b.id },
+      data: { status: "CANCELLED", cancelledAt: new Date(), cancellationCharge: bk.cancellationCharge },
+    });
+  }
+
+  // The captured payment lives on the primary booking — refund the group total there.
+  const paymentBooking = booking.bookingGroupId
+    ? (await prisma.payment.findFirst({
+        where: { booking: { bookingGroupId: booking.bookingGroupId } },
+        select: { bookingId: true },
+      }))?.bookingId ?? booking.id
+    : booking.id;
+
+  const breakdown = { cancellationCharge: groupCharge, totalRefund: groupRefund };
+  const refund = await processBookingRefund(paymentBooking, breakdown.totalRefund, {
+    reason: `Guest cancellation (${policy.tier})${booking.bookingGroupId ? ` · group of ${groupBookings.length}` : ""}`,
   });
 
   return NextResponse.json({

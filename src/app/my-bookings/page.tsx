@@ -63,6 +63,19 @@ export default async function MyBookingsPage() {
   });
   // Note: prisma.findMany with include returns all scalar fields by default
 
+  // Aggregate multi-room cart groups (count + totals) so a group shows one
+  // "Cancel" (which cancels the whole group) and a "N rooms" badge.
+  const groupAgg = new Map<string, { count: number; total: number; deposit: number }>();
+  for (const b of bookings) {
+    if (!b.bookingGroupId) continue;
+    const g = groupAgg.get(b.bookingGroupId) ?? { count: 0, total: 0, deposit: 0 };
+    g.count += 1;
+    g.total += b.totalAmount;
+    g.deposit += b.refundableDeposit;
+    groupAgg.set(b.bookingGroupId, g);
+  }
+  const cancelRendered = new Set<string>();
+
   return (
     <div className="min-h-screen bg-[#071209]">
       <Navbar />
@@ -122,6 +135,11 @@ export default async function MyBookingsPage() {
                         >
                           {status.label}
                         </span>
+                        {booking.bookingGroupId && (groupAgg.get(booking.bookingGroupId)?.count ?? 1) > 1 && (
+                          <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full border bg-amber-500/10 text-amber-300 border-amber-500/20">
+                            Group · {groupAgg.get(booking.bookingGroupId)!.count} rooms
+                          </span>
+                        )}
                       </div>
 
                       {/* Location */}
@@ -202,15 +220,33 @@ export default async function MyBookingsPage() {
                           Payment Pending
                         </div>
                       )}
-                      {booking.status === "CONFIRMED" && (
-                        <CancelBookingButton
-                          bookingId={booking.id}
-                          bookingRef={booking.bookingRef}
-                          checkInDate={booking.checkInDate}
-                          totalAmount={booking.totalAmount}
-                          depositAmount={booking.refundableDeposit}
-                        />
-                      )}
+                      {booking.status === "CONFIRMED" && (() => {
+                        const gid = booking.bookingGroupId;
+                        const g = gid ? groupAgg.get(gid) : null;
+                        if (g && g.count > 1) {
+                          if (cancelRendered.has(gid!)) return null; // one cancel per group
+                          cancelRendered.add(gid!);
+                          return (
+                            <CancelBookingButton
+                              bookingId={booking.id}
+                              bookingRef={booking.bookingRef}
+                              checkInDate={booking.checkInDate}
+                              totalAmount={g.total}
+                              depositAmount={g.deposit}
+                              groupRooms={g.count}
+                            />
+                          );
+                        }
+                        return (
+                          <CancelBookingButton
+                            bookingId={booking.id}
+                            bookingRef={booking.bookingRef}
+                            checkInDate={booking.checkInDate}
+                            totalAmount={booking.totalAmount}
+                            depositAmount={booking.refundableDeposit}
+                          />
+                        );
+                      })()}
                       {booking.status === "CANCELLED" && booking.cancellationCharge !== null && (
                         <div className="text-xs text-red-400/60 bg-red-500/5 border border-red-500/10 rounded-xl px-3 py-2.5 text-center">
                           {booking.cancellationCharge === 0
