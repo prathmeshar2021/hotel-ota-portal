@@ -288,6 +288,9 @@ export default async function HotelDetailPage({ params, searchParams }: Props) {
                 <CategoryBrowser
                   mains={mains}
                   hotelSlug={hotel.slug}
+                  hotelId={hotel.id}
+                  checkIn={sp.checkIn}
+                  checkOut={sp.checkOut}
                   query={query}
                   hasDateFilter={hasDateFilter}
                   nights={nights}

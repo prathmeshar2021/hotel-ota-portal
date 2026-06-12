@@ -4,7 +4,9 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { Users, BedDouble, ArrowRight, ChevronRight, ArrowLeft, CheckCircle2 } from "lucide-react";
+import { toast } from "sonner";
+import { Users, BedDouble, ArrowRight, ChevronRight, ArrowLeft, CheckCircle2, Plus } from "lucide-react";
+import { useCart } from "@/lib/cart/CartContext";
 
 export interface SubCategoryView {
   type: string;
@@ -40,18 +42,46 @@ const ease = [0.21, 0.47, 0.32, 0.98] as const;
 export default function CategoryBrowser({
   mains,
   hotelSlug,
+  hotelId,
+  checkIn,
+  checkOut,
   query,
   hasDateFilter,
   nights,
 }: {
   mains: MainCategoryView[];
   hotelSlug: string;
+  hotelId: string;
+  checkIn?: string;
+  checkOut?: string;
   query: string;
   hasDateFilter: boolean;
   nights: number | null;
 }) {
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const active = mains.find((m) => m.key === activeKey) ?? null;
+  const { addItem } = useCart();
+
+  const canAddToCart = hasDateFilter && !!checkIn && !!checkOut;
+
+  function handleAdd(s: SubCategoryView) {
+    if (!checkIn || !checkOut) return;
+    addItem(
+      { hotelId, hotelSlug, checkIn, checkOut },
+      {
+        categoryType: s.type,
+        slug: s.slug,
+        displayName: s.displayName,
+        pricePerNight: s.price,
+        originalPricePerNight: s.originalPrice,
+        capacity: s.maxGuests,
+        guestsPerRoom: Math.min(2, s.maxGuests),
+        image: s.images[0] ?? null,
+        accentColor: s.accentColor,
+      }
+    );
+    toast.success(`${s.displayName} added to cart`);
+  }
 
   return (
     <div className="relative">
@@ -245,13 +275,23 @@ export default function CategoryBrowser({
                           Not Available
                         </span>
                       ) : (
-                        <Link
-                          href={`/book/${hotelSlug}/${s.slug}${query ? `?${query}` : ""}`}
-                          className="flex items-center gap-1.5 text-sm font-bold px-4 py-2.5 rounded-xl text-black transition-all hover:scale-105 active:scale-95 whitespace-nowrap shadow-lg"
-                          style={{ background: s.accentColor, boxShadow: `0 8px 24px ${s.accentColor}30` }}
-                        >
-                          Book Now <ArrowRight className="w-4 h-4" />
-                        </Link>
+                        <div className="flex flex-col items-stretch gap-2 w-full sm:w-auto">
+                          <Link
+                            href={`/book/${hotelSlug}/${s.slug}${query ? `?${query}` : ""}`}
+                            className="flex items-center justify-center gap-1.5 text-sm font-bold px-4 py-2.5 rounded-xl text-black transition-all hover:scale-105 active:scale-95 whitespace-nowrap shadow-lg"
+                            style={{ background: s.accentColor, boxShadow: `0 8px 24px ${s.accentColor}30` }}
+                          >
+                            Book Now <ArrowRight className="w-4 h-4" />
+                          </Link>
+                          {canAddToCart && (
+                            <button
+                              onClick={() => handleAdd(s)}
+                              className="flex items-center justify-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-xl text-white/70 hover:text-white bg-white/5 hover:bg-white/10 border border-white/12 transition-all whitespace-nowrap"
+                            >
+                              <Plus className="w-3.5 h-3.5" /> Add to cart
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
                   </div>

@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/sonner";
 import SessionWrapper from "@/components/shared/SessionWrapper";
 import ChatBotWrapper from "@/components/customer/ChatBotWrapper";
 import { CartProvider } from "@/lib/cart/CartContext";
+import CartBar from "@/components/customer/CartBar";
 import { BUSINESS, SITE_URL } from "@/lib/constants/business";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -50,6 +51,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <SessionWrapper>
           <CartProvider>
             {children}
+            <CartBar />
             <Toaster richColors position="top-right" />
             <ChatBotWrapper />
           </CartProvider>

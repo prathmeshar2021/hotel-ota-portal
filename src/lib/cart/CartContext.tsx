@@ -6,7 +6,8 @@ export interface CartItem {
   categoryType: string; // enum value, e.g. "NON_AC_ROOM"
   slug: string;
   displayName: string;
-  pricePerNight: number; // original nightly price (before marketing discount)
+  pricePerNight: number; // nightly price after marketing discount (what's charged)
+  originalPricePerNight: number; // base nightly price (for struck-through + GST slab)
   capacity: number; // max guests per room of this category
   qty: number;
   guestsPerRoom: number;
