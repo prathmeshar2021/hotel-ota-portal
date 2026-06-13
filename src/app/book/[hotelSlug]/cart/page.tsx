@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -36,7 +36,55 @@ export default function CartPage() {
   const params = useParams<{ hotelSlug: string }>();
   const router = useRouter();
   const { data: session } = useSession();
-  const { items, hotelId, checkIn, checkOut, totalRooms, setQty, setGuests, removeItem, clear } = useCart();
+  const { items, hotelId, checkIn, checkOut, totalRooms, addItem, setQty, setGuests, removeItem, clear } = useCart();
+
+  // Live availability per category for the cart's dates (counts gate quantities
+  // but are NOT shown to the guest — only "available / not available" states).
+  interface AvailCat {
+    type: string; slug: string; displayName: string; capacity: number;
+    available: number; originalPricePerNight: number; pricePerNight: number;
+    image: string | null; accentColor: string;
+  }
+  const [cats, setCats] = useState<AvailCat[]>([]);
+  const [showAdd, setShowAdd] = useState(false);
+  const availOf = (type: string) => cats.find((c) => c.type === type)?.available;
+
+  useEffect(() => {
+    if (!hotelId || !checkIn || !checkOut) return;
+    fetch(`/api/categories/availability?hotelId=${hotelId}&checkIn=${checkIn}&checkOut=${checkOut}`)
+      .then((r) => r.json())
+      .then((d) => setCats(d.categories ?? []))
+      .catch(() => {});
+  }, [hotelId, checkIn, checkOut]);
+
+  function bump(type: string, delta: number) {
+    const cur = items.find((i) => i.categoryType === type)?.qty ?? 0;
+    const next = cur + delta;
+    const max = availOf(type);
+    if (delta > 0 && max != null && next > max) {
+      toast.error("No more rooms of this type are available for your dates.");
+      return;
+    }
+    setQty(type, next);
+  }
+
+  function addCategory(c: AvailCat) {
+    if (c.available <= 0) { toast.error("That room type isn't available for your dates."); return; }
+    if (!hotelId || !checkIn || !checkOut) return;
+    addItem(
+      { hotelId, hotelSlug: params.hotelSlug, checkIn, checkOut },
+      {
+        categoryType: c.type, slug: c.slug, displayName: c.displayName,
+        pricePerNight: c.pricePerNight, originalPricePerNight: c.originalPricePerNight,
+        capacity: c.capacity, guestsPerRoom: Math.min(2, c.capacity), image: c.image, accentColor: c.accentColor,
+      }
+    );
+    setShowAdd(false);
+    toast.success(`${c.displayName} added`);
+  }
+
+  // Categories that can still be added (available beyond what's already in cart).
+  const addable = cats.filter((c) => c.available > (items.find((i) => i.categoryType === c.type)?.qty ?? 0));
 
   const [guestName, setGuestName] = useState(session?.user?.name ?? "");
   const [guestPhone, setGuestPhone] = useState((session?.user as { phone?: string })?.phone ?? "");
@@ -191,11 +239,13 @@ export default function CartPage() {
                     <div className="flex items-center gap-2">
                       <span className="text-[11px] text-white/40 uppercase tracking-wider">Rooms</span>
                       <div className="flex items-center bg-white/5 border border-white/10 rounded-lg">
-                        <button onClick={() => setQty(it.categoryType, it.qty - 1)} className="px-2 py-1.5 text-white/60 hover:text-white">
+                        <button onClick={() => bump(it.categoryType, -1)} className="px-2 py-1.5 text-white/60 hover:text-white">
                           <Minus className="w-3.5 h-3.5" />
                         </button>
                         <span className="px-2 text-sm font-semibold text-white w-6 text-center">{it.qty}</span>
-                        <button onClick={() => setQty(it.categoryType, it.qty + 1)} className="px-2 py-1.5 text-white/60 hover:text-white">
+                        <button onClick={() => bump(it.categoryType, 1)}
+                          disabled={availOf(it.categoryType) != null && it.qty >= availOf(it.categoryType)!}
+                          className="px-2 py-1.5 text-white/60 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed">
                           <Plus className="w-3.5 h-3.5" />
                         </button>
                       </div>
@@ -214,13 +264,45 @@ export default function CartPage() {
                       </select>
                     </div>
                   </div>
+                  {availOf(it.categoryType) != null && it.qty >= availOf(it.categoryType)! && (
+                    <p className="text-[11px] text-amber-300/80 mt-2">
+                      That&apos;s all the {it.displayName.toLowerCase()}s available for your dates — try another room type below.
+                    </p>
+                  )}
                 </div>
               </div>
             ))}
 
-            <Link href={`/hotel/${params.hotelSlug}?checkIn=${checkIn}&checkOut=${checkOut}`} className="inline-flex items-center gap-1.5 text-sm text-amber-400/80 hover:text-amber-300 px-1">
-              <Plus className="w-4 h-4" /> Add more rooms
-            </Link>
+            {/* Add another room type (cross-category) */}
+            <div>
+              <button
+                onClick={() => setShowAdd((v) => !v)}
+                disabled={addable.length === 0}
+                className="inline-flex items-center gap-1.5 text-sm font-semibold text-amber-400/80 hover:text-amber-300 px-1 disabled:opacity-40"
+              >
+                <Plus className="w-4 h-4" /> {addable.length === 0 ? "No other room types available" : "Add another room type"}
+              </button>
+              {showAdd && addable.length > 0 && (
+                <div className="mt-2 glass-card rounded-2xl p-2 space-y-1">
+                  {addable.map((c) => (
+                    <button
+                      key={c.type}
+                      onClick={() => addCategory(c)}
+                      className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-white/5 transition-all text-left"
+                    >
+                      <div className="relative w-12 h-12 rounded-lg overflow-hidden shrink-0 bg-white/5">
+                        {c.image && <Image src={c.image} alt={c.displayName} fill className="object-cover" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-white">{c.displayName}</p>
+                        <p className="text-xs text-white/40">₹{c.pricePerNight.toLocaleString("en-IN")}/night · up to {c.capacity} guests</p>
+                      </div>
+                      <Plus className="w-4 h-4 text-amber-400" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
 
             {/* Guest details */}
             <div className="glass-card rounded-2xl p-5 mt-2 space-y-3">

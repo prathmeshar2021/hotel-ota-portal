@@ -60,12 +60,17 @@ export default function CategoryBrowser({
 }) {
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const active = mains.find((m) => m.key === activeKey) ?? null;
-  const { addItem } = useCart();
+  const { addItem, items } = useCart();
 
   const canAddToCart = hasDateFilter && !!checkIn && !!checkOut;
 
   function handleAdd(s: SubCategoryView) {
     if (!checkIn || !checkOut) return;
+    const inCart = items.find((i) => i.categoryType === s.type)?.qty ?? 0;
+    if (inCart + 1 > s.available) {
+      toast.error("No more rooms of this type are available for your dates.");
+      return;
+    }
     addItem(
       { hotelId, hotelSlug, checkIn, checkOut },
       {
@@ -157,7 +162,7 @@ export default function CategoryBrowser({
                           className="flex items-center gap-1 text-xs font-bold px-3 py-2 rounded-xl text-black transition-transform group-hover:scale-105"
                           style={{ background: m.accentColor }}
                         >
-                          {hasDateFilter ? `${m.available} available` : "Explore"}
+                          {hasDateFilter ? "Available" : "Explore"}
                           <ChevronRight className="w-3.5 h-3.5" />
                         </span>
                       )}
@@ -225,7 +230,7 @@ export default function CategoryBrowser({
                       ) : (
                         <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-black/50 text-white/80 flex items-center gap-1.5">
                           <CheckCircle2 className="w-3 h-3 text-green-400" />
-                          {hasDateFilter ? s.available : s.totalRooms} of {s.totalRooms} available
+                          Available
                         </span>
                       )}
                     </div>

@@ -100,7 +100,7 @@ export default function BookingForm({
           );
           const data = await res.json();
           available = data.available > 0;
-          reason = available ? "" : `${data.total} room${data.total !== 1 ? "s" : ""} fully booked for these dates`;
+          reason = available ? "" : "This room type is fully booked for these dates";
         } else {
           // Legacy: specific room availability
           const res = await fetch(
@@ -142,15 +142,30 @@ export default function BookingForm({
   const [agreed, setAgreed] = useState(false);
 
   // ── Add-to-cart (multi-room) ──
-  const { addItem, totalRooms } = useCart();
+  const { addItem, items: cartItems, totalRooms } = useCart();
   const [roomsToAdd, setRoomsToAdd] = useState(1);
   const canAddToCart = room.isCategory && !!hotelSlug && !!categorySlug;
 
-  function handleAddToCart() {
+  async function handleAddToCart() {
     if (!localCheckIn || !localCheckOut || localNights < 1) {
       toast.error("Pick your check-in and check-out dates first."); return;
     }
     if (!hotelSlug || !categorySlug) return;
+    // Gate on live availability (count not shown to the guest).
+    try {
+      const res = await fetch(
+        `/api/categories/${categorySlug}/availability?hotelId=${hotel.id}&checkIn=${localCheckIn}&checkOut=${localCheckOut}`
+      );
+      const data = await res.json();
+      const available = typeof data.available === "number" ? data.available : Infinity;
+      const inCart = cartItems.find((i) => i.categoryType === room.id)?.qty ?? 0;
+      if (inCart + roomsToAdd > available) {
+        toast.error("Not enough rooms of this type for your dates. Try adding another room type.");
+        return;
+      }
+    } catch {
+      /* availability check failed — let the server enforce at checkout */
+    }
     addItem(
       { hotelId: hotel.id, hotelSlug, checkIn: localCheckIn, checkOut: localCheckOut },
       {

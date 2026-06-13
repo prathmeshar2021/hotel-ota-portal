@@ -59,7 +59,7 @@ export default function HotelCard({ hotel, searchParams }: HotelCardProps) {
           <div className="absolute top-3 left-3 flex gap-2">
             {hotel.availableRooms > 0 ? (
               <Badge className="bg-green-600 text-white border-0 text-xs">
-                {hotel.availableRooms} rooms left
+                Available
               </Badge>
             ) : (
               <Badge variant="destructive" className="text-xs">Fully booked</Badge>
