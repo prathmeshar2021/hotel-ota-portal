@@ -7,6 +7,7 @@ import {
   X, LogIn, Loader2, CreditCard, MapPin, Car, Users, Plus, Trash2,
   ShieldCheck, Upload,
 } from "lucide-react";
+import GuestSearch, { type GuestResult } from "./GuestSearch";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -291,6 +292,33 @@ export default function CounterCheckinModal({
     });
   }
 
+  // ── Pre-fill from an existing (returning) guest ────────────────────────────
+  function fillPrimaryFromGuest(g: GuestResult) {
+    if (g.idType) setIdType(g.idType as IdType);
+    setIdNumber(g.idNumber ?? "");
+    setIdFrontUrl(g.idFrontUrl ?? "");
+    setIdBackUrl(g.idBackUrl ?? "");
+    toast.success(`Loaded ID from ${g.name}`);
+  }
+
+  function fillCompanionFromGuest(i: number, g: GuestResult) {
+    setCompanions(prev =>
+      prev.map((c, idx) =>
+        idx === i
+          ? {
+              ...c,
+              name: g.name,
+              idType: g.idType ?? "AADHAR",
+              idNumber: g.idNumber ?? "",
+              idFrontUrl: g.idFrontUrl ?? "",
+              idBackUrl: g.idBackUrl ?? "",
+            }
+          : c
+      )
+    );
+    toast.success(`Loaded ${g.name}`);
+  }
+
   // ── Submit ─────────────────────────────────────────────────────────────────
 
   async function handleSubmit(e: React.FormEvent) {
@@ -425,6 +453,10 @@ export default function CounterCheckinModal({
               title="Primary Guest — Identity Proof"
               sub="Verify original document and upload photos"
             />
+            <GuestSearch
+              onSelect={fillPrimaryFromGuest}
+              placeholder="Returning guest? Search by name, phone or ID to auto-fill…"
+            />
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className={reqLabelCls}>ID Type <Req /></label>
@@ -544,6 +576,11 @@ export default function CounterCheckinModal({
                         Guest {i + 2}
                         {i === 0 && noOfPersons > 1 && <span className="ml-1 text-amber-400/80">(required)</span>}
                       </p>
+
+                      <GuestSearch
+                        onSelect={(g) => fillCompanionFromGuest(i, g)}
+                        placeholder="Returning companion? Search to auto-fill…"
+                      />
 
                       {/* Name + relation */}
                       <div className="grid grid-cols-2 gap-3">
