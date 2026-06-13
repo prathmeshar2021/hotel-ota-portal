@@ -3,7 +3,6 @@ import { randomUUID } from "crypto";
 import { prisma } from "@/lib/db/prisma";
 import { auth } from "@/lib/auth/auth";
 import {
-  generateBookingRef,
   computeTotals,
   getUniversalDiscount,
   universalDiscountAmount,
@@ -146,7 +145,22 @@ export async function POST(req: NextRequest) {
 
     const groupTotal = rows.reduce((s, r) => s + r.totalAmount, 0);
     const bookingGroupId = randomUUID();
-    const refs = await Promise.all(rows.map(() => generateBookingRef()));
+
+    // Generate one distinct ref per room. generateBookingRef() is count-based, so
+    // calling it N times (in parallel or not) before any insert yields identical
+    // refs — derive a unique sequence here instead, with a random suffix to avoid
+    // collisions with concurrent bookings.
+    const now = new Date();
+    const dateStr =
+      now.getFullYear().toString() +
+      (now.getMonth() + 1).toString().padStart(2, "0") +
+      now.getDate().toString().padStart(2, "0");
+    const baseCount = await prisma.booking.count();
+    const refs = rows.map((_, i) => {
+      const seq = (baseCount + 1 + i).toString().padStart(4, "0");
+      const rand = Math.random().toString(36).slice(2, 5).toUpperCase();
+      return `BK-${dateStr}-${seq}${rows.length > 1 ? `-${rand}` : ""}`;
+    });
     const status = data.payMode === "PAY_AT_HOTEL" ? "CONFIRMED" : "PENDING_PAYMENT";
 
     // ── Razorpay order for the whole group (PAY_NOW only) ──
