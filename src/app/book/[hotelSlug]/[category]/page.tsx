@@ -103,6 +103,9 @@ export default async function BookingPage({ params, searchParams }: Props) {
               guests={parseInt(sp.guests ?? "2")}
               totals={totals}
               universal={universal}
+              hotelSlug={hotelSlug}
+              categorySlug={categorySlug}
+              categoryImage={heroImage}
               accentColor={meta.accentColor}
             />
           </div>

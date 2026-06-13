@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 import { computeTotals, REFUNDABLE_DEPOSIT, universalDiscountAmount, discountedNightlyPrice, type UniversalDiscount } from "@/lib/utils/booking-calc";
 import { signIn } from "next-auth/react";
+import { useCart } from "@/lib/cart/CartContext";
+import { ShoppingCart, Plus, Minus } from "lucide-react";
 
 interface BookingFormProps {
   hotel: { id: string; name: string };
@@ -26,6 +28,10 @@ interface BookingFormProps {
   totals: { roomRent: number; cgst: number; sgst: number; cgstRate: number; sgstRate: number; totalAmount: number };
   /** Active hotel-wide marketing discount, auto-applied to every guest. */
   universal?: UniversalDiscount | null;
+  /** Cart context for "add to cart" (only on category bookings). */
+  hotelSlug?: string;
+  categorySlug?: string;
+  categoryImage?: string | null;
   accentColor?: string;
 }
 
@@ -50,7 +56,8 @@ function FieldIcon({ icon }: { icon: React.ReactNode }) {
 type PayMode = "PAY_NOW" | "PAY_AT_HOTEL";
 
 export default function BookingForm({
-  hotel, room, checkIn, checkOut, guests, totals, universal = null, accentColor = "#F59E0B",
+  hotel, room, checkIn, checkOut, guests, totals, universal = null,
+  hotelSlug, categorySlug, categoryImage, accentColor = "#F59E0B",
 }: BookingFormProps) {
   const { data: session } = useSession();
   const router = useRouter();
@@ -133,6 +140,34 @@ export default function BookingForm({
 
   // Terms acceptance (required before booking)
   const [agreed, setAgreed] = useState(false);
+
+  // ── Add-to-cart (multi-room) ──
+  const { addItem, totalRooms } = useCart();
+  const [roomsToAdd, setRoomsToAdd] = useState(1);
+  const canAddToCart = room.isCategory && !!hotelSlug && !!categorySlug;
+
+  function handleAddToCart() {
+    if (!localCheckIn || !localCheckOut || localNights < 1) {
+      toast.error("Pick your check-in and check-out dates first."); return;
+    }
+    if (!hotelSlug || !categorySlug) return;
+    addItem(
+      { hotelId: hotel.id, hotelSlug, checkIn: localCheckIn, checkOut: localCheckOut },
+      {
+        categoryType: room.id,
+        slug: categorySlug,
+        displayName: room.roomTypeLabel,
+        pricePerNight: discountedNightly,
+        originalPricePerNight: room.basePrice,
+        capacity: room.capacity,
+        guestsPerRoom: Math.min(noOfPersons || 2, room.capacity),
+        image: categoryImage ?? null,
+        accentColor,
+        qty: roomsToAdd,
+      }
+    );
+    toast.success(`${roomsToAdd} ${room.roomTypeLabel}${roomsToAdd > 1 ? "s" : ""} added to cart`);
+  }
 
   // Per-night marketing discount (struck-through display) + this booking's rent saving.
   const nightlyDiscount = universalDiscountAmount(universal, room.basePrice);
@@ -426,6 +461,39 @@ export default function BookingForm({
           </div>
         )}
       </div>
+
+      {/* ── Add more rooms (group booking) ─────────── */}
+      {canAddToCart && (
+        <div className="glass-card rounded-3xl p-5 border border-white/10">
+          <div className="flex items-center gap-2.5 mb-3">
+            <ShoppingCart className="w-4 h-4" style={{ color: accentColor }} />
+            <div>
+              <p className="text-white font-semibold text-sm">Booking for a group?</p>
+              <p className="text-white/40 text-xs">Add more rooms (any type) and pay once.</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center bg-white/5 border border-white/10 rounded-xl">
+              <button type="button" onClick={() => setRoomsToAdd((n) => Math.max(1, n - 1))}
+                className="px-3 py-2.5 text-white/60 hover:text-white"><Minus className="w-4 h-4" /></button>
+              <span className="px-2 text-sm font-bold text-white w-8 text-center">{roomsToAdd}</span>
+              <button type="button" onClick={() => setRoomsToAdd((n) => Math.min(10, n + 1))}
+                className="px-3 py-2.5 text-white/60 hover:text-white"><Plus className="w-4 h-4" /></button>
+            </div>
+            <button type="button" onClick={handleAddToCart}
+              className="flex-1 min-w-[140px] flex items-center justify-center gap-2 text-sm font-bold py-2.5 rounded-xl border transition-all"
+              style={{ borderColor: `${accentColor}40`, color: accentColor, background: `${accentColor}10` }}>
+              <Plus className="w-4 h-4" /> Add {roomsToAdd > 1 ? `${roomsToAdd} rooms` : "to cart"}
+            </button>
+          </div>
+          {totalRooms > 0 && hotelSlug && (
+            <a href={`/book/${hotelSlug}/cart`}
+              className="mt-3 flex items-center justify-center gap-1.5 text-xs font-semibold text-white/60 hover:text-white">
+              <ShoppingCart className="w-3.5 h-3.5" /> {totalRooms} room{totalRooms !== 1 ? "s" : ""} in cart — review &amp; pay
+            </a>
+          )}
+        </div>
+      )}
 
       {/* ── Section 2: Guest Details ───────────────── */}
       <div className="glass-card glass-shimmer glass-top-highlight rounded-3xl p-6">
