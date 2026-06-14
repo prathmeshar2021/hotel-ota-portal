@@ -13,6 +13,7 @@ const CompanionSchema = z.object({
 });
 
 const CounterCheckinSchema = z.object({
+  name:       z.string().min(1).optional(),
   idType:     z.enum(["AADHAR", "DRIVING_LICENSE", "PASSPORT", "VOTER_ID", "OTHER"]),
   idNumber:   z.string().min(1, "Primary guest ID number is required"),
   idFrontUrl: z.string().url("Primary guest ID front photo is required"),
@@ -80,6 +81,7 @@ export async function POST(
   await prisma.guest.update({
     where: { id: booking.primaryGuestId },
     data: {
+      ...(data.name ? { name: data.name } : {}),
       idType:     data.idType,
       idNumber:   data.idNumber,
       idFrontUrl: data.idFrontUrl,

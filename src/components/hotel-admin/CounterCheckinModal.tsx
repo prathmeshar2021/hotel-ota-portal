@@ -184,6 +184,7 @@ export default function CounterCheckinModal({
   const [loading, setLoading] = useState(false);
 
   // Primary guest
+  const [primaryName, setPrimaryName] = useState(guestName);
   const [idType, setIdType]         = useState<IdType>((existingData?.idType as IdType) ?? "AADHAR");
   const [idNumber, setIdNumber]     = useState(existingData?.idNumber ?? "");
   const [idFrontUrl, setIdFrontUrl] = useState(existingData?.idFrontUrl ?? "");
@@ -216,6 +217,7 @@ export default function CounterCheckinModal({
   // Reset on open
   useEffect(() => {
     if (!open) return;
+    setPrimaryName(guestName);
     setIdType((existingData?.idType as IdType) ?? "AADHAR");
     setIdNumber(existingData?.idNumber ?? "");
     setIdFrontUrl(existingData?.idFrontUrl ?? "");
@@ -294,6 +296,7 @@ export default function CounterCheckinModal({
 
   // ── Pre-fill from an existing (returning) guest ────────────────────────────
   function fillPrimaryFromGuest(g: GuestResult) {
+    if (g.name) setPrimaryName(g.name);
     if (g.idType) setIdType(g.idType as IdType);
     setIdNumber(g.idNumber ?? "");
     setIdFrontUrl(g.idFrontUrl ?? "");
@@ -325,6 +328,7 @@ export default function CounterCheckinModal({
     e.preventDefault();
 
     // Primary guest
+    if (!primaryName.trim()) { toast.error("Primary guest name is required"); return; }
     if (!idNumber.trim())   { toast.error("Primary guest ID number is required"); return; }
     if (!idFrontUrl)        { toast.error("Primary guest ID front photo is required"); return; }
     if (!idBackUrl)         { toast.error("Primary guest ID back photo is required"); return; }
@@ -354,6 +358,7 @@ export default function CounterCheckinModal({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          name: primaryName.trim(),
           idType, idNumber: idNumber.trim(), idFrontUrl, idBackUrl,
           comingFrom: comingFrom.trim(), goingTo: goingTo.trim(),
           purpose, vehicleNo: vehicleNo.trim() || undefined,
@@ -457,6 +462,11 @@ export default function CounterCheckinModal({
               onSelect={fillPrimaryFromGuest}
               placeholder="Returning guest? Search by name, phone or ID to auto-fill…"
             />
+            <div>
+              <label className={reqLabelCls}>Full Name <Req /></label>
+              <input value={primaryName} onChange={e => setPrimaryName(e.target.value)}
+                placeholder="Guest's full name" className={reqInputCls} />
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className={reqLabelCls}>ID Type <Req /></label>
