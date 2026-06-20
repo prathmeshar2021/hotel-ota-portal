@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db/prisma";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { gupshup } from "@/lib/services/gupshup";
+import { email } from "@/lib/services/email";
 import { enforceRateLimit } from "@/lib/ratelimit";
 
 const Schema = z.object({ phone: z.string().regex(/^\d{10}$/) });
@@ -25,7 +26,7 @@ export async function POST(req: NextRequest) {
   const { phone } = parsed.data;
   const guest = await prisma.guest.findUnique({
     where: { phone },
-    select: { id: true, name: true, password: true },
+    select: { id: true, name: true, password: true, email: true },
   });
   // Only accounts with a password (phone-login) can reset; Google users have none.
   if (!guest?.password) return ok;
@@ -44,7 +45,10 @@ export async function POST(req: NextRequest) {
     await gupshup.sendPasswordResetOtp(phone, { otp, name: guest.name });
   } catch (e) {
     console.error("[pwreset] WhatsApp send failed:", e);
-    // Still return the generic success — the row exists; avoid leaking failures.
+  }
+  if (guest.email) {
+    email.sendPasswordResetOtp(guest.email, { otp, name: guest.name })
+      .catch((e) => console.error("[pwreset] Email send failed:", e));
   }
 
   return ok;

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db/prisma";
 import { gupshup } from "@/lib/services/gupshup";
+import { email } from "@/lib/services/email";
 import { syncBookingToAppSheet } from "@/lib/services/appsheet-sync";
 import { format } from "date-fns";
 import { getCategoryMeta } from "@/lib/utils/room-categories";
@@ -79,23 +80,33 @@ export async function confirmPaidBooking(params: {
     });
   }
 
-  // WhatsApp confirmation (fire-and-forget). One message for the whole group.
+  // Notifications (fire-and-forget). One message for the whole group.
+  const roomType =
+    groupBookings.length > 1
+      ? `${groupBookings.length} rooms`
+      : getCategoryMeta(booking.roomCategory).displayName;
+  const isPartial = captured < expectedTotal - 1;
+  const notifData = {
+    guestName: booking.primaryGuest.name,
+    bookingRef: booking.bookingRef,
+    hotelName: booking.hotel.name,
+    roomType,
+    checkIn: format(booking.checkInDate, "dd MMM yyyy"),
+    checkOut: format(booking.checkOutDate, "dd MMM yyyy"),
+    totalAmount: expectedTotal,
+    isPartial,
+    onlinePaid: isPartial ? captured : undefined,
+    balanceDue: isPartial ? expectedTotal - captured : undefined,
+  };
   if (booking.primaryGuest.phone) {
-    const roomType =
-      groupBookings.length > 1
-        ? `${groupBookings.length} rooms`
-        : getCategoryMeta(booking.roomCategory).displayName;
     gupshup
-      .sendBookingConfirmation(booking.primaryGuest.phone, {
-        guestName: booking.primaryGuest.name,
-        bookingRef: booking.bookingRef,
-        hotelName: booking.hotel.name,
-        roomType,
-        checkIn: format(booking.checkInDate, "dd MMM yyyy"),
-        checkOut: format(booking.checkOutDate, "dd MMM yyyy"),
-        totalAmount: expectedTotal,
-      })
+      .sendBookingConfirmation(booking.primaryGuest.phone, notifData)
       .catch((e) => console.error("[WhatsApp] Confirmation failed:", e));
+  }
+  if (booking.primaryGuest.email) {
+    email
+      .sendBookingConfirmation(booking.primaryGuest.email, notifData)
+      .catch((e) => console.error("[Email] Confirmation failed:", e));
   }
 
   // Sync each room booking to AppSheet.

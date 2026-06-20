@@ -10,6 +10,7 @@ import {
   IndianRupee,
   ArrowRight,
   CreditCard,
+  MessageCircle,
 } from "lucide-react";
 import { requireSuperAdmin } from "@/lib/auth/superAdmin";
 import { prisma } from "@/lib/db/prisma";
@@ -140,6 +141,13 @@ export default async function SuperAdminDashboard() {
       desc: "Choose which payment modes customers can use",
       icon: CreditCard,
       accent: "text-emerald-400",
+    },
+    {
+      href: "/admin/hotel-admin/support",
+      label: "Customer Support",
+      desc: "Chat with guests — reply to support queries",
+      icon: MessageCircle,
+      accent: "text-sky-400",
     },
   ];
 

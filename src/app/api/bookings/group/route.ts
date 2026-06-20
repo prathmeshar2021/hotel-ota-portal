@@ -11,6 +11,7 @@ import { REFUNDABLE_DEPOSIT, PARTIAL_PAYMENT_AMOUNT } from "@/lib/utils/booking-
 import { createOrder } from "@/lib/services/razorpay";
 import { enforceRateLimit } from "@/lib/ratelimit";
 import { gupshup } from "@/lib/services/gupshup";
+import { email } from "@/lib/services/email";
 import { format } from "date-fns";
 import type { Booking } from "@prisma/client";
 import { z } from "zod";
@@ -226,21 +227,25 @@ export async function POST(req: NextRequest) {
 
     // ── PAY AT HOTEL: confirmed now, notify ──
     if (data.payMode === "PAY_AT_HOTEL") {
-      const guest = await prisma.guest.findUnique({ where: { id: guestId }, select: { phone: true, name: true } });
+      const guest = await prisma.guest.findUnique({ where: { id: guestId }, select: { phone: true, email: true, name: true } });
       const hotelName = (await prisma.hotel.findUnique({ where: { id: data.hotelId }, select: { name: true } }))?.name ?? "The Hotel";
+      const groupNotifData = {
+        guestName: guest?.name ?? "",
+        bookingRef: primary.bookingRef,
+        hotelName,
+        roomType: `${rows.length} room(s)`,
+        checkIn: format(checkIn, "dd MMM yyyy"),
+        checkOut: format(checkOut, "dd MMM yyyy"),
+        totalAmount: groupTotal,
+        payAtHotel: true,
+      };
       if (guest?.phone) {
-        gupshup
-          .sendBookingConfirmation(guest.phone, {
-            guestName: guest.name,
-            bookingRef: primary.bookingRef,
-            hotelName,
-            roomType: `${rows.length} room(s)`,
-            checkIn: format(checkIn, "dd MMM yyyy"),
-            checkOut: format(checkOut, "dd MMM yyyy"),
-            totalAmount: groupTotal,
-            payAtHotel: true,
-          })
+        gupshup.sendBookingConfirmation(guest.phone, groupNotifData)
           .catch((e) => console.error("[WhatsApp] group PAY_AT_HOTEL failed:", e));
+      }
+      if (guest?.email) {
+        email.sendBookingConfirmation(guest.email, groupNotifData)
+          .catch((e) => console.error("[Email] group PAY_AT_HOTEL failed:", e));
       }
       return NextResponse.json({
         bookingGroupId,

@@ -3,6 +3,8 @@ import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
 import { getCancellationPolicy, computeCancellationBreakdown, DEPOSIT_AMOUNT } from "@/lib/utils/cancellation";
 import { processBookingRefund } from "@/lib/services/refund";
+import { email } from "@/lib/services/email";
+import { format } from "date-fns";
 
 export async function POST(
   _req: NextRequest,
@@ -28,6 +30,8 @@ export async function POST(
       refundableDeposit: true,
       bookingRef: true,
       bookingGroupId: true,
+      hotel: { select: { name: true } },
+      primaryGuest: { select: { email: true, name: true } },
     },
   });
 
@@ -110,6 +114,18 @@ export async function POST(
   const refund = await processBookingRefund(paymentBookingId, groupRefund, {
     reason: `Guest cancellation (${policy.tier})${booking.bookingGroupId ? ` · group of ${groupBookings.length}` : ""}${isPartialPayment ? " · partial payment" : ""}`,
   });
+
+  if (booking.primaryGuest?.email) {
+    email.sendCancellationConfirmation(booking.primaryGuest.email, {
+      guestName: booking.primaryGuest.name,
+      bookingRef: booking.bookingRef,
+      hotelName: booking.hotel?.name ?? "The Hotel",
+      checkIn: format(new Date(booking.checkInDate), "dd MMM yyyy"),
+      cancellationCharge: groupCharge,
+      totalRefund: groupRefund,
+      tier: policy.tier,
+    }).catch((e) => console.error("[Email] Cancellation email failed:", e));
+  }
 
   return NextResponse.json({
     success: true,

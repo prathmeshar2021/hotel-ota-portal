@@ -6,6 +6,7 @@ import { REFUNDABLE_DEPOSIT, PARTIAL_PAYMENT_AMOUNT } from "@/lib/utils/booking-
 import { createOrder } from "@/lib/services/razorpay";
 import { enforceRateLimit } from "@/lib/ratelimit";
 import { gupshup } from "@/lib/services/gupshup";
+import { email } from "@/lib/services/email";
 import { format } from "date-fns";
 import { z } from "zod";
 
@@ -233,27 +234,32 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Send WhatsApp confirmation (fire-and-forget)
-    const guestPhone = (await prisma.guest.findUnique({
+    // Notifications (fire-and-forget)
+    const guestContact = await prisma.guest.findUnique({
       where: { id: guestId },
-      select: { phone: true, name: true },
-    }));
+      select: { phone: true, email: true, name: true },
+    });
     const hotelName = (await prisma.hotel.findUnique({
       where: { id: data.hotelId },
       select: { name: true },
     }))?.name ?? "The Hotel";
-
-    if (guestPhone?.phone) {
-      gupshup.sendBookingConfirmation(guestPhone.phone, {
-        guestName: guestPhone.name,
-        bookingRef,
-        hotelName,
-        roomType: categoryMeta.displayName,
-        checkIn: format(checkIn, "dd MMM yyyy"),
-        checkOut: format(checkOut, "dd MMM yyyy"),
-        totalAmount: totals.totalAmount,
-        payAtHotel: true,
-      }).catch((e) => console.error("[WhatsApp] PAY_AT_HOTEL confirmation failed:", e));
+    const notifData = {
+      guestName: guestContact?.name ?? "",
+      bookingRef,
+      hotelName,
+      roomType: categoryMeta.displayName,
+      checkIn: format(checkIn, "dd MMM yyyy"),
+      checkOut: format(checkOut, "dd MMM yyyy"),
+      totalAmount: totals.totalAmount,
+      payAtHotel: true,
+    };
+    if (guestContact?.phone) {
+      gupshup.sendBookingConfirmation(guestContact.phone, notifData)
+        .catch((e) => console.error("[WhatsApp] PAY_AT_HOTEL confirmation failed:", e));
+    }
+    if (guestContact?.email) {
+      email.sendBookingConfirmation(guestContact.email, notifData)
+        .catch((e) => console.error("[Email] PAY_AT_HOTEL confirmation failed:", e));
     }
 
     return NextResponse.json({

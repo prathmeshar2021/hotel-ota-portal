@@ -172,6 +172,7 @@ model Hotel {
   bookings        Booking[]
   coupons         Coupon[]
   reviews         Review[]
+  supportThreads  SupportThread[]
   otaSync         OtaChannelSync[]
   appsheetSync    AppsheetSyncLog[]
   cashCollections CashCollection[]
@@ -264,6 +265,7 @@ model Guest {
   secondaryConsent Consent[]          @relation("SecondaryConsent")
   reviews          Review[]
   onlineCheckins   OnlineCheckin[]
+  supportThreads   SupportThread[]
 }
 
 // ─── BOOKING ──────────────────────────────────────────────────────────────────
@@ -668,4 +670,42 @@ model AdminOtp {
   hotel Hotel @relation(fields: [hotelId], references: [id])
 
   @@index([hotelId, status])
+}
+
+// ─── CUSTOMER SUPPORT CHAT ────────────────────────────────────────────────────
+
+enum SupportStatus {
+  OPEN
+  CLOSED
+}
+
+// One thread per guest per hotel. Guests initiate; staff reply from admin panel.
+model SupportThread {
+  id        String        @id @default(cuid())
+  hotelId   String
+  guestId   String
+  status    SupportStatus @default(OPEN)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  hotel    Hotel           @relation(fields: [hotelId], references: [id])
+  guest    Guest           @relation(fields: [guestId], references: [id])
+  messages SupportMessage[]
+
+  @@unique([hotelId, guestId])
+  @@index([hotelId, status])
+}
+
+model SupportMessage {
+  id         String   @id @default(cuid())
+  threadId   String
+  senderRole String   // "CUSTOMER" | "STAFF"
+  senderName String
+  body       String
+  isRead     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  thread SupportThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@index([threadId, createdAt])
 }

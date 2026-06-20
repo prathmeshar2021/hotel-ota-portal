@@ -12,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Menu, X, BookOpen, LogOut, User, Settings } from "lucide-react";
+import { Menu, X, BookOpen, LogOut, User, Settings, MessageCircle } from "lucide-react";
 
 export default function Navbar() {
   const { data: session } = useSession();
@@ -92,6 +92,13 @@ export default function Navbar() {
                   >
                     <Settings className="w-4 h-4 mr-2" />
                     My Account
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="text-white/70 hover:text-white hover:bg-white/10 cursor-pointer"
+                    onClick={() => (window.location.href = "/support")}
+                  >
+                    <MessageCircle className="w-4 h-4 mr-2" />
+                    Support
                   </DropdownMenuItem>
                   <DropdownMenuSeparator className="bg-white/10" />
                   <DropdownMenuItem
@@ -183,6 +190,15 @@ export default function Navbar() {
                       onClick={() => setMobileOpen(false)}
                     >
                       <Settings className="w-4 h-4" /> My Account
+                    </Link>
+                  </motion.div>
+                  <motion.div variants={{ hidden: { opacity: 0, x: -16 }, show: { opacity: 1, x: 0 } }}>
+                    <Link
+                      href="/support"
+                      className="flex items-center gap-2 text-sm font-medium text-white/70 hover:text-white py-2.5 border-b border-white/5 transition-colors"
+                      onClick={() => setMobileOpen(false)}
+                    >
+                      <MessageCircle className="w-4 h-4" /> Support
                     </Link>
                   </motion.div>
                   <motion.div variants={{ hidden: { opacity: 0, x: -16 }, show: { opacity: 1, x: 0 } }}>

@@ -226,15 +226,27 @@ export default async function ConfirmationPage({
                 <p className="text-sm font-semibold text-white/80">{booking.noOfPersons}</p>
               </div>
 
-              {booking.onlinePaid === 0 && booking.balanceDue > 0 ? (
-                <div className="col-span-2 bg-amber-500/8 border border-amber-500/20 rounded-xl p-3">
-                  <p className="text-xs text-amber-400/70 flex items-center gap-1 mb-1">
-                    <Banknote className="w-3 h-3" /> Due at Check-in
-                  </p>
-                  <p className="text-sm font-bold text-amber-400">
-                    ₹{booking.balanceDue.toLocaleString("en-IN")}
-                  </p>
-                </div>
+              {booking.balanceDue > 0 ? (
+                <>
+                  {booking.onlinePaid > 0 && (
+                    <div className="col-span-2 bg-white/3 rounded-xl p-3">
+                      <p className="text-xs text-white/30 flex items-center gap-1 mb-1">
+                        <Banknote className="w-3 h-3" /> Advance Paid
+                      </p>
+                      <p className="text-sm font-bold" style={{ color: accentColor }}>
+                        ₹{booking.onlinePaid.toLocaleString("en-IN")}
+                      </p>
+                    </div>
+                  )}
+                  <div className="col-span-2 bg-amber-500/8 border border-amber-500/20 rounded-xl p-3">
+                    <p className="text-xs text-amber-400/70 flex items-center gap-1 mb-1">
+                      <Banknote className="w-3 h-3" /> Due at Check-in
+                    </p>
+                    <p className="text-sm font-bold text-amber-400">
+                      ₹{booking.balanceDue.toLocaleString("en-IN")}
+                    </p>
+                  </div>
+                </>
               ) : (
                 <div className="col-span-2 bg-white/3 rounded-xl p-3">
                   <p className="text-xs text-white/30 flex items-center gap-1 mb-1">
@@ -249,8 +261,8 @@ export default async function ConfirmationPage({
           </div>
         </div>
 
-        {/* Pay-at-hotel notice */}
-        {booking.onlinePaid === 0 && booking.balanceDue > 0 && (
+        {/* Pay-at-hotel / partial-payment notice */}
+        {booking.balanceDue > 0 && (
           <div className="rounded-2xl p-4 mb-5 border border-amber-500/20 bg-amber-500/6 flex items-start gap-3">
             <Banknote className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
             <div>

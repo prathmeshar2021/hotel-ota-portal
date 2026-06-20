@@ -42,6 +42,7 @@ export async function POST(
       id: true,
       checkInDate: true,
       totalAmount: true,
+      onlinePaid: true,
       refundableDeposit: true,
       bookingRef: true,
       roomId: true,
@@ -66,16 +67,35 @@ export async function POST(
   });
   if (!otp.ok) return NextResponse.json({ error: otp.error }, { status: 403 });
 
-  const depositAmount = booking.refundableDeposit ?? DEPOSIT_AMOUNT;
   const policy = getCancellationPolicy(new Date(booking.checkInDate));
-  const breakdown = computeCancellationBreakdown(
-    booking.totalAmount,
-    depositAmount,
-    policy.chargePercent
-  );
 
-  // Admin can override the charge (e.g., waive it)
-  const finalCharge = parsed.data.overrideCharge ?? breakdown.cancellationCharge;
+  // Detect PAY_PARTIAL: advance was paid but full amount was not.
+  const isPartialPayment =
+    booking.onlinePaid > 0 && booking.onlinePaid < booking.totalAmount;
+
+  let finalCharge: number;
+  let totalRefund: number;
+
+  if (isPartialPayment) {
+    // Charge% applies only to the ₹500 advance — the unpaid balance was never collected.
+    const defaultRefund = Math.floor(booking.onlinePaid * (1 - policy.chargePercent / 100));
+    const defaultCharge = booking.onlinePaid - defaultRefund;
+    // Admin override is capped at what was actually paid.
+    finalCharge =
+      parsed.data.overrideCharge !== undefined
+        ? Math.min(parsed.data.overrideCharge, booking.onlinePaid)
+        : defaultCharge;
+    totalRefund = booking.onlinePaid - finalCharge;
+  } else {
+    const depositAmount = booking.refundableDeposit ?? DEPOSIT_AMOUNT;
+    const breakdown = computeCancellationBreakdown(
+      booking.totalAmount,
+      depositAmount,
+      policy.chargePercent
+    );
+    finalCharge = parsed.data.overrideCharge ?? breakdown.cancellationCharge;
+    totalRefund = booking.totalAmount - finalCharge;
+  }
 
   await prisma.booking.update({
     where: { id: booking.id },
@@ -87,7 +107,6 @@ export async function POST(
   });
 
   // Issue the refund (auto via Razorpay where possible; otherwise flagged for the desk).
-  const totalRefund = booking.totalAmount - finalCharge;
   const refund = await processBookingRefund(booking.id, totalRefund, {
     reason: `Admin cancellation (${policy.tier})`,
   });
