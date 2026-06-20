@@ -160,6 +160,10 @@ model Hotel {
   isApproved     Boolean @default(false)
   commissionRate Float   @default(0)
 
+  // Customer-facing payment options (super-admin controlled)
+  allowPayAtHotel Boolean @default(true)
+  allowPartialPay Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

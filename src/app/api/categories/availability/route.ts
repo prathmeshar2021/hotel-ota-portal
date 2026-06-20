@@ -24,10 +24,16 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Invalid dates" }, { status: 400 });
   }
 
-  const rooms = await prisma.room.findMany({
-    where: { hotelId, isActive: true },
-    select: { roomType: true, basePrice: true },
-  });
+  const [rooms, hotelSettings] = await Promise.all([
+    prisma.room.findMany({
+      where: { hotelId, isActive: true },
+      select: { roomType: true, basePrice: true },
+    }),
+    prisma.hotel.findUnique({
+      where: { id: hotelId },
+      select: { allowPayAtHotel: true, allowPartialPay: true },
+    }),
+  ]);
   const basePrice: Record<string, number> = {};
   for (const r of rooms) if (!(r.roomType in basePrice)) basePrice[r.roomType] = r.basePrice;
 
@@ -61,5 +67,11 @@ export async function GET(req: NextRequest) {
       };
     });
 
-  return NextResponse.json({ categories });
+  return NextResponse.json({
+    categories,
+    paymentSettings: {
+      allowPayAtHotel: hotelSettings?.allowPayAtHotel ?? true,
+      allowPartialPay: hotelSettings?.allowPartialPay ?? false,
+    },
+  });
 }

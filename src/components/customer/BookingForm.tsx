@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   Loader2, Tag, CheckCircle, XCircle, User, Phone, Mail, Users, MessageSquare,
-  CreditCard, Banknote, ArrowRight, Wifi, Calendar, ShieldCheck, Info,
+  CreditCard, Banknote, ArrowRight, Wifi, Calendar, ShieldCheck, Info, SplitSquareHorizontal,
 } from "lucide-react";
 import { computeTotals, REFUNDABLE_DEPOSIT, universalDiscountAmount, discountedNightlyPrice, type UniversalDiscount } from "@/lib/utils/booking-calc";
 import { signIn } from "next-auth/react";
@@ -33,6 +33,9 @@ interface BookingFormProps {
   categorySlug?: string;
   categoryImage?: string | null;
   accentColor?: string;
+  /** Which payment modes the super admin has enabled for this hotel. */
+  allowPayAtHotel?: boolean;
+  allowPartialPay?: boolean;
 }
 
 declare global {
@@ -53,11 +56,12 @@ function FieldIcon({ icon }: { icon: React.ReactNode }) {
   return <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/25">{icon}</span>;
 }
 
-type PayMode = "PAY_NOW" | "PAY_AT_HOTEL";
+type PayMode = "PAY_NOW" | "PAY_PARTIAL" | "PAY_AT_HOTEL";
 
 export default function BookingForm({
   hotel, room, checkIn, checkOut, guests, totals, universal = null,
   hotelSlug, categorySlug, categoryImage, accentColor = "#F59E0B",
+  allowPayAtHotel = true, allowPartialPay = false,
 }: BookingFormProps) {
   const { data: session } = useSession();
   const router = useRouter();
@@ -299,15 +303,21 @@ export default function BookingForm({
         return;
       }
 
-      // ── Pay Now: launch Razorpay ──────────────────────────────────────────────
+      // ── Pay Now / Pay Partial: launch Razorpay ────────────────────────────────
       await loadRazorpay();
+
+      const isPartial = payMode === "PAY_PARTIAL";
+      const rzpAmount = isPartial ? REFUNDABLE_DEPOSIT : totalAfterCoupon;
+      const rzpDescription = isPartial
+        ? `Deposit · ${room.roomTypeLabel} · balance at hotel`
+        : `${room.roomTypeLabel} · ${localNights} night${localNights > 1 ? "s" : ""}`;
 
       const rzp = new window.Razorpay({
         key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
-        amount: Math.round(totalAfterCoupon * 100),
+        amount: Math.round(rzpAmount * 100),
         currency: "INR",
         name: "The Urban Escape",
-        description: `${room.roomTypeLabel} · ${localNights} night${localNights > 1 ? "s" : ""}`,
+        description: rzpDescription,
         order_id: data.razorpayOrderId,
         prefill: { name: guestName, email: guestEmail, contact: guestPhone },
         theme: { color: accentColor },
@@ -343,17 +353,24 @@ export default function BookingForm({
   const PAY_MODES: { value: PayMode; label: string; sub: string; icon: React.ReactNode; badge?: string }[] = [
     {
       value: "PAY_NOW",
-      label: "Pay Now",
+      label: "Pay Full Now",
       sub: "UPI · Cards · Net Banking · Wallets",
       icon: <CreditCard className="w-5 h-5" />,
       badge: "Instant confirmation",
     },
-    {
-      value: "PAY_AT_HOTEL",
+    ...(allowPartialPay ? [{
+      value: "PAY_PARTIAL" as const,
+      label: "Pay ₹200 Now",
+      sub: `Pay ₹${REFUNDABLE_DEPOSIT} deposit now · balance at hotel`,
+      icon: <SplitSquareHorizontal className="w-5 h-5" />,
+      badge: "Saves your spot",
+    }] : []),
+    ...(allowPayAtHotel ? [{
+      value: "PAY_AT_HOTEL" as const,
       label: "Pay at Hotel",
       sub: "Cash or UPI at check-in",
       icon: <Banknote className="w-5 h-5" />,
-    },
+    }] : []),
   ];
 
   return (
@@ -821,6 +838,8 @@ export default function BookingForm({
             "Select dates above to continue"
           ) : payMode === "PAY_NOW" ? (
             `Pay ₹${totalAfterCoupon.toLocaleString("en-IN")} & Confirm`
+          ) : payMode === "PAY_PARTIAL" ? (
+            `Pay ₹${REFUNDABLE_DEPOSIT} Deposit & Reserve`
           ) : (
             <><ArrowRight className="w-5 h-5" /> Reserve Room · Pay at Hotel</>
           )}
@@ -830,6 +849,8 @@ export default function BookingForm({
           <p className="text-center text-xs text-white/20 mt-3">
             {payMode === "PAY_NOW"
               ? "Secured by Razorpay · UPI, Cards, Net Banking, Wallets accepted"
+              : payMode === "PAY_PARTIAL"
+              ? `₹${REFUNDABLE_DEPOSIT} deposit now · ₹${(totalAfterCoupon - REFUNDABLE_DEPOSIT).toLocaleString("en-IN")} balance payable at check-in`
               : `₹${totalAfterCoupon.toLocaleString("en-IN")} payable in cash or UPI at check-in`}
           </p>
         )}

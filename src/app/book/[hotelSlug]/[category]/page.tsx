@@ -30,6 +30,7 @@ export default async function BookingPage({ params, searchParams }: Props) {
     select: {
       id: true, name: true, city: true, state: true,
       checkInTime: true, checkOutTime: true, images: true,
+      allowPayAtHotel: true, allowPartialPay: true,
     },
   });
   if (!hotel) notFound();
@@ -107,6 +108,8 @@ export default async function BookingPage({ params, searchParams }: Props) {
               categorySlug={categorySlug}
               categoryImage={heroImage}
               accentColor={meta.accentColor}
+              allowPayAtHotel={hotel.allowPayAtHotel}
+              allowPartialPay={hotel.allowPartialPay}
             />
           </div>
 

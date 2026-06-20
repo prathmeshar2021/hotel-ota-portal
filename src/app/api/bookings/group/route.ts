@@ -26,7 +26,7 @@ const Schema = z.object({
   checkInDate: z.string(),
   checkOutDate: z.string(),
   items: z.array(ItemSchema).min(1).max(15),
-  payMode: z.enum(["PAY_NOW", "PAY_AT_HOTEL"]).default("PAY_NOW"),
+  payMode: z.enum(["PAY_NOW", "PAY_PARTIAL", "PAY_AT_HOTEL"]).default("PAY_NOW"),
   guestName: z.string().optional(),
   guestPhone: z.string().optional(),
   guestEmail: z.string().email().optional(),
@@ -162,11 +162,14 @@ export async function POST(req: NextRequest) {
       return `BK-${dateStr}-${seq}${rows.length > 1 ? `-${rand}` : ""}`;
     });
     const status = data.payMode === "PAY_AT_HOTEL" ? "CONFIRMED" : "PENDING_PAYMENT";
+    const isPartial = data.payMode === "PAY_PARTIAL";
+    // For partial pay: ₹200 deposit per room
+    const onlineAmount = isPartial ? REFUNDABLE_DEPOSIT * rows.length : groupTotal;
 
-    // ── Razorpay order for the whole group (PAY_NOW only) ──
+    // ── Razorpay order for online modes ──
     let razorpayOrderId: string | undefined;
-    if (data.payMode === "PAY_NOW") {
-      const order = await createOrder(Math.round(groupTotal * 100), `GRP-${bookingGroupId.slice(0, 8)}`);
+    if (data.payMode === "PAY_NOW" || isPartial) {
+      const order = await createOrder(Math.round(onlineAmount * 100), `GRP-${bookingGroupId.slice(0, 8)}`);
       razorpayOrderId = order.id;
     }
 
@@ -208,10 +211,12 @@ export async function POST(req: NextRequest) {
         data: {
           bookingId: bookings[0].id,
           razorpayOrderId,
-          amount: groupTotal,
+          amount: onlineAmount,
           mode: data.payMode === "PAY_AT_HOTEL" ? "CASH" : "ONLINE",
           status: "pending",
-          notes: `Group booking · ${rows.length} room(s)`,
+          notes: isPartial
+            ? `Group booking · ${rows.length} room(s) · deposit only; balance due at hotel`
+            : `Group booking · ${rows.length} room(s)`,
         },
       });
       return bookings;
@@ -247,14 +252,15 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // ── PAY NOW ──
+    // ── PAY NOW / PAY PARTIAL ──
     return NextResponse.json({
       bookingGroupId,
       bookingId: primary.id,
       bookingRef: primary.bookingRef,
       razorpayOrderId,
-      amount: groupTotal,
+      amount: onlineAmount,
       rooms: rows.length,
+      isPartial,
     });
   } catch (err) {
     console.error("[POST /api/bookings/group]", err);

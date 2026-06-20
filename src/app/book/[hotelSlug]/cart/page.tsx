@@ -8,7 +8,7 @@ import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import {
   ShoppingCart, Minus, Plus, Trash2, Users, ShieldCheck, Loader2,
-  CreditCard, Banknote, ArrowRight, CheckCircle, ArrowLeft,
+  CreditCard, Banknote, ArrowRight, CheckCircle, ArrowLeft, SplitSquareHorizontal,
 } from "lucide-react";
 import Navbar from "@/components/customer/Navbar";
 import { useCart } from "@/lib/cart/CartContext";
@@ -20,7 +20,7 @@ declare global {
   }
 }
 
-type PayMode = "PAY_NOW" | "PAY_AT_HOTEL";
+type PayMode = "PAY_NOW" | "PAY_PARTIAL" | "PAY_AT_HOTEL";
 
 function loadRazorpay(): Promise<void> {
   return new Promise((resolve) => {
@@ -47,13 +47,21 @@ export default function CartPage() {
   }
   const [cats, setCats] = useState<AvailCat[]>([]);
   const [showAdd, setShowAdd] = useState(false);
+  const [allowPayAtHotel, setAllowPayAtHotel] = useState(true);
+  const [allowPartialPay, setAllowPartialPay] = useState(false);
   const availOf = (type: string) => cats.find((c) => c.type === type)?.available;
 
   useEffect(() => {
     if (!hotelId || !checkIn || !checkOut) return;
     fetch(`/api/categories/availability?hotelId=${hotelId}&checkIn=${checkIn}&checkOut=${checkOut}`)
       .then((r) => r.json())
-      .then((d) => setCats(d.categories ?? []))
+      .then((d) => {
+        setCats(d.categories ?? []);
+        if (d.paymentSettings) {
+          setAllowPayAtHotel(d.paymentSettings.allowPayAtHotel ?? true);
+          setAllowPartialPay(d.paymentSettings.allowPartialPay ?? false);
+        }
+      })
       .catch(() => {});
   }, [hotelId, checkIn, checkOut]);
 
@@ -146,12 +154,18 @@ export default function CartPage() {
       }
 
       await loadRazorpay();
+      const isPartial = payMode === "PAY_PARTIAL";
+      const rzpAmount = isPartial ? totalDeposit : grandTotal;
+      const rzpDesc = isPartial
+        ? `Deposit · ${totalRooms} room${totalRooms !== 1 ? "s" : ""} · balance at hotel`
+        : `${totalRooms} room${totalRooms !== 1 ? "s" : ""} · ${nights} night${nights !== 1 ? "s" : ""}`;
+
       const rzp = new window.Razorpay({
         key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
-        amount: Math.round(grandTotal * 100),
+        amount: Math.round(rzpAmount * 100),
         currency: "INR",
         name: "The Urban Escape",
-        description: `${totalRooms} room${totalRooms !== 1 ? "s" : ""} · ${nights} night${nights !== 1 ? "s" : ""}`,
+        description: rzpDesc,
         order_id: data.razorpayOrderId,
         prefill: { name: guestName, email: guestEmail, contact: guestPhone },
         theme: { color: "#F59E0B" },
@@ -341,8 +355,12 @@ export default function CartPage() {
               </div>
 
               {/* Pay mode */}
-              <div className="grid grid-cols-2 gap-2">
-                {([["PAY_NOW", "Pay Now", CreditCard], ["PAY_AT_HOTEL", "Pay at Hotel", Banknote]] as const).map(([val, label, Icon]) => (
+              <div className={`grid gap-2 ${(allowPartialPay && allowPayAtHotel) ? "grid-cols-3" : allowPartialPay || allowPayAtHotel ? "grid-cols-2" : "grid-cols-1"}`}>
+                {([
+                  { val: "PAY_NOW" as const, label: "Pay Full Now", Icon: CreditCard, show: true },
+                  { val: "PAY_PARTIAL" as const, label: "Pay ₹200 Now", Icon: SplitSquareHorizontal, show: allowPartialPay },
+                  { val: "PAY_AT_HOTEL" as const, label: "Pay at Hotel", Icon: Banknote, show: allowPayAtHotel },
+                ] as const).filter((m) => m.show).map(({ val, label, Icon }) => (
                   <button key={val} onClick={() => setPayMode(val)}
                     className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border text-center transition-all ${payMode === val ? "border-amber-400/45 bg-amber-400/10" : "border-white/8 bg-white/3 hover:border-white/15"}`}>
                     <Icon className={`w-4 h-4 ${payMode === val ? "text-amber-400" : "text-white/35"}`} />
@@ -364,9 +382,20 @@ export default function CartPage() {
 
               <button onClick={checkout} disabled={loading}
                 className="w-full flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-60 text-black font-bold py-3.5 rounded-xl transition-all">
-                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : payMode === "PAY_NOW" ? <CheckCircle className="w-5 h-5" /> : <ArrowRight className="w-5 h-5" />}
-                {loading ? "Processing…" : payMode === "PAY_NOW" ? `Pay ₹${grandTotal.toLocaleString("en-IN")}` : "Reserve · Pay at Hotel"}
+                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : payMode === "PAY_NOW" || payMode === "PAY_PARTIAL" ? <CheckCircle className="w-5 h-5" /> : <ArrowRight className="w-5 h-5" />}
+                {loading
+                  ? "Processing…"
+                  : payMode === "PAY_NOW"
+                  ? `Pay ₹${grandTotal.toLocaleString("en-IN")}`
+                  : payMode === "PAY_PARTIAL"
+                  ? `Pay ₹${totalDeposit.toLocaleString("en-IN")} Deposit & Reserve`
+                  : "Reserve · Pay at Hotel"}
               </button>
+              {payMode === "PAY_PARTIAL" && (
+                <p className="text-center text-[11px] text-white/30 -mt-1">
+                  ₹{totalDeposit.toLocaleString("en-IN")} deposit now · ₹{(grandTotal - totalDeposit).toLocaleString("en-IN")} balance at check-in
+                </p>
+              )}
             </div>
           </div>
         </div>

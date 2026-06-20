@@ -19,7 +19,7 @@ const CreateBookingSchema = z.object({
   couponCode: z.string().optional(),
   specialRequests: z.string().optional(),
   guestGstin: z.string().optional(),
-  payMode: z.enum(["PAY_NOW", "PAY_AT_HOTEL"]).default("PAY_NOW"),
+  payMode: z.enum(["PAY_NOW", "PAY_PARTIAL", "PAY_AT_HOTEL"]).default("PAY_NOW"),
   // Guest details for new/unauthenticated bookings
   guestName: z.string().optional(),
   guestPhone: z.string().optional(),
@@ -265,7 +265,10 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // ── PAY NOW (Razorpay) ──────────────────────────────────────────────────────
+  // ── PAY PARTIAL / PAY NOW (Razorpay) ──────────────────────────────────────
+  const isPartial = data.payMode === "PAY_PARTIAL";
+  const onlineAmount = isPartial ? REFUNDABLE_DEPOSIT : totals.totalAmount;
+
   const booking = await prisma.booking.create({
     data: {
       bookingRef,
@@ -293,9 +296,9 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  // Create Razorpay order
+  // Create Razorpay order for deposit only (partial) or full amount (pay now)
   const razorpayOrder = await createOrder(
-    Math.round(totals.totalAmount * 100),
+    Math.round(onlineAmount * 100),
     bookingRef
   );
 
@@ -304,9 +307,10 @@ export async function POST(req: NextRequest) {
     data: {
       bookingId: booking.id,
       razorpayOrderId: razorpayOrder.id,
-      amount: totals.totalAmount,
+      amount: onlineAmount,
       mode: "ONLINE",
       status: "pending",
+      ...(isPartial ? { notes: "Partial payment — deposit only; balance due at hotel" } : {}),
     },
   });
 
@@ -314,8 +318,9 @@ export async function POST(req: NextRequest) {
     bookingId: booking.id,
     bookingRef,
     razorpayOrderId: razorpayOrder.id,
-    amount: totals.totalAmount,
+    amount: onlineAmount,
     totals,
+    isPartial,
   });
   } catch (err) {
     // Log the full object — Razorpay/Prisma errors carry detail beyond `.message`.

@@ -9,6 +9,7 @@ import {
   BedDouble,
   IndianRupee,
   ArrowRight,
+  CreditCard,
 } from "lucide-react";
 import { requireSuperAdmin } from "@/lib/auth/superAdmin";
 import { prisma } from "@/lib/db/prisma";
@@ -132,6 +133,13 @@ export default async function SuperAdminDashboard() {
       icon: ShieldCheck,
       accent: "text-red-400",
       meta: pendingOtps > 0 ? `${pendingOtps} waiting` : undefined,
+    },
+    {
+      href: "/admin/payment-settings",
+      label: "Payment Options",
+      desc: "Choose which payment modes customers can use",
+      icon: CreditCard,
+      accent: "text-emerald-400",
     },
   ];
 
