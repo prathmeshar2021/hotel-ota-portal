@@ -199,7 +199,7 @@ export default async function MyBookingsPage() {
 
                     {/* Actions */}
                     <div className="flex flex-row sm:flex-col gap-2 shrink-0 sm:min-w-[148px]">
-                      {booking.status === "CONFIRMED" &&
+                      {booking.status === "CONFIRMED" && new Date(booking.checkOutDate) > new Date() &&
                         (booking.onlineCheckin?.completedAt ? (
                           <div className="flex items-center gap-1.5 text-xs font-semibold text-green-400 bg-green-500/10 border border-green-500/20 px-3 py-2.5 rounded-xl">
                             <CheckCircle className="w-4 h-4" />
