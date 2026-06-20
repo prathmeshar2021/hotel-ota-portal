@@ -10,6 +10,7 @@ import { REFUNDABLE_DEPOSIT, universalDiscountAmount, discountedNightlyPrice } f
 import { getCategoryImages, getCategoryMeta, slugToCategory } from "@/lib/utils/room-categories";
 import { resolveCategoryPrice } from "@/lib/utils/pricing";
 import { Calendar, Users, Moon, ShieldCheck } from "lucide-react";
+import { auth } from "@/lib/auth/auth";
 
 interface Props {
   params: Promise<{ hotelSlug: string; category: string }>;
@@ -49,6 +50,20 @@ export default async function BookingPage({ params, searchParams }: Props) {
     categoryType as never,
     checkInDate
   );
+
+  // Fetch fresh contact info for logged-in customers — the JWT token can be stale
+  // (e.g. user added a phone number after logging in).
+  const session = await auth();
+  let guestPhone: string | undefined;
+  let guestEmail: string | undefined;
+  if (session?.user?.role === "CUSTOMER") {
+    const guest = await prisma.guest.findUnique({
+      where: { id: session.user.id },
+      select: { phone: true, email: true },
+    });
+    guestPhone = guest?.phone ?? undefined;
+    guestEmail = guest?.email ?? undefined;
+  }
 
   // Active hotel-wide marketing discount (auto-applied to every guest).
   const universal = await getUniversalDiscount(hotel.id);
@@ -110,6 +125,8 @@ export default async function BookingPage({ params, searchParams }: Props) {
               accentColor={meta.accentColor}
               allowPayAtHotel={hotel.allowPayAtHotel}
               allowPartialPay={hotel.allowPartialPay}
+              defaultPhone={guestPhone}
+              defaultEmail={guestEmail}
             />
           </div>
 

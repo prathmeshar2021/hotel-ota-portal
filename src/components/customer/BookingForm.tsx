@@ -36,6 +36,9 @@ interface BookingFormProps {
   /** Which payment modes the super admin has enabled for this hotel. */
   allowPayAtHotel?: boolean;
   allowPartialPay?: boolean;
+  /** Fresh contact info fetched server-side — overrides the (stale) session token. */
+  defaultPhone?: string;
+  defaultEmail?: string;
 }
 
 declare global {
@@ -62,6 +65,7 @@ export default function BookingForm({
   hotel, room, checkIn, checkOut, guests, totals, universal = null,
   hotelSlug, categorySlug, categoryImage, accentColor = "#F59E0B",
   allowPayAtHotel = true, allowPartialPay = false,
+  defaultPhone, defaultEmail,
 }: BookingFormProps) {
   const { data: session } = useSession();
   const router = useRouter();
@@ -124,10 +128,10 @@ export default function BookingForm({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localCheckIn, localCheckOut]);
 
-  // Guest details
+  // Guest details — prefer server-fetched defaults (always fresh) over stale session token
   const [guestName, setGuestName] = useState(session?.user?.name ?? "");
-  const [guestPhone, setGuestPhone] = useState((session?.user as { phone?: string })?.phone ?? "");
-  const [guestEmail, setGuestEmail] = useState(session?.user?.email ?? "");
+  const [guestPhone, setGuestPhone] = useState(defaultPhone ?? (session?.user as { phone?: string })?.phone ?? "");
+  const [guestEmail, setGuestEmail] = useState(defaultEmail ?? session?.user?.email ?? "");
   const [specialRequests, setSpecialRequests] = useState("");
   const [noOfPersons, setNoOfPersons] = useState(guests);
 

@@ -102,6 +102,21 @@ export default function CartPage() {
   const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // Fetch fresh contact info — session token may be stale if phone/email was added after login.
+  useEffect(() => {
+    if (session?.user?.role !== "CUSTOMER") return;
+    fetch("/api/account/me")
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (!data) return;
+        if (data.name) setGuestName((prev) => prev || data.name);
+        if (data.phone) setGuestPhone((prev) => prev || data.phone);
+        if (data.email) setGuestEmail((prev) => prev || data.email);
+      })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user?.role]);
+
   const nights =
     checkIn && checkOut
       ? Math.max(1, Math.ceil((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / 86400000))
