@@ -52,14 +52,18 @@ export async function confirmPaidBooking(params: {
     );
   }
 
-  // Settle every booking in the group (each room is fully paid online).
+  // Settle every booking in the group using the ACTUAL captured amount,
+  // not the booking total — this handles PAY_PARTIAL (₹500/room) correctly.
   const groupBookings = groupId
     ? await prisma.booking.findMany({ where: { bookingGroupId: groupId }, select: { id: true, totalAmount: true } })
     : [{ id: booking.id, totalAmount: booking.totalAmount }];
+  const capturedPerRoom = captured / groupBookings.length;
   for (const b of groupBookings) {
+    const onlinePaid = +Math.min(capturedPerRoom, b.totalAmount).toFixed(2);
+    const balanceDue = +Math.max(0, b.totalAmount - onlinePaid).toFixed(2);
     await prisma.booking.update({
       where: { id: b.id },
-      data: { onlinePaid: b.totalAmount, balanceDue: 0 },
+      data: { onlinePaid, balanceDue },
     });
   }
 

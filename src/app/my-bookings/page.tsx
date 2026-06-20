@@ -174,12 +174,17 @@ export default async function MyBookingsPage() {
                           <p className="font-bold text-white/80">
                             ₹{booking.totalAmount.toLocaleString("en-IN")}
                           </p>
-                          {booking.refundableDeposit > 0 && (
+                          {booking.balanceDue > 0 && booking.status === "CONFIRMED" ? (
+                            <p className="text-[10px] text-amber-400/80 mt-0.5 flex items-center gap-0.5">
+                              <ShieldCheck className="w-2.5 h-2.5" />
+                              ₹{booking.balanceDue.toLocaleString("en-IN")} due at hotel
+                            </p>
+                          ) : booking.refundableDeposit > 0 ? (
                             <p className="text-[10px] text-green-400/70 mt-0.5 flex items-center gap-0.5">
                               <ShieldCheck className="w-2.5 h-2.5" />
                               incl. ₹{booking.refundableDeposit} deposit
                             </p>
-                          )}
+                          ) : null}
                         </div>
                       </div>
 
