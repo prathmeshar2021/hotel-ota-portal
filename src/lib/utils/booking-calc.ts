@@ -14,6 +14,7 @@ export function calculateGST(roomRentPerNight: number) {
 }
 
 export const REFUNDABLE_DEPOSIT = 200; // Rs 200 fixed deposit — always collected, always refunded
+export const PARTIAL_PAYMENT_AMOUNT = 500; // advance paid upfront for PAY_PARTIAL; subject to cancellation policy
 
 export function computeTotals(params: {
   roomRentPerNight: number;

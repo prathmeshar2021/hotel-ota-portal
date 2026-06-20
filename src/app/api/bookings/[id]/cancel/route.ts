@@ -47,8 +47,7 @@ export async function POST(
     );
   }
 
-  // A multi-room cart booking shares one payment → cancel the whole group and
-  // refund the group total via the booking that holds the payment.
+  // A multi-room cart booking shares one payment → cancel the whole group.
   const groupBookings = booking.bookingGroupId
     ? await prisma.booking.findMany({
         where: { bookingGroupId: booking.bookingGroupId, primaryGuestId: session.user.id, status: "CONFIRMED" },
@@ -56,47 +55,74 @@ export async function POST(
       })
     : [{ id: booking.id, totalAmount: booking.totalAmount, refundableDeposit: booking.refundableDeposit }];
 
+  // Find the online payment record (if any) to detect partial-payment bookings.
+  const paymentRecord = await prisma.payment.findFirst({
+    where: booking.bookingGroupId
+      ? { booking: { bookingGroupId: booking.bookingGroupId }, mode: "ONLINE" }
+      : { bookingId: booking.id, mode: "ONLINE" },
+    select: { bookingId: true, amount: true },
+  });
+
+  const paymentBookingId = paymentRecord?.bookingId ?? booking.id;
+  const groupTotalAmount = groupBookings.reduce((s, b) => s + b.totalAmount, 0);
+
+  // A partial-payment booking is one where the online payment amount is less
+  // than the total booking amount (customer paid only the ₹500 advance).
+  // For these, cancellation policy applies directly to the ₹500 paid — not
+  // the full room-charge breakdown (since the rest was never collected).
+  const isPartialPayment =
+    paymentRecord !== null &&
+    paymentRecord.amount < groupTotalAmount;
+
   let groupCharge = 0;
   let groupRefund = 0;
-  for (const b of groupBookings) {
-    const bk = computeCancellationBreakdown(
-      b.totalAmount,
-      b.refundableDeposit ?? DEPOSIT_AMOUNT,
-      policy.chargePercent
-    );
-    groupCharge += bk.cancellationCharge;
-    groupRefund += bk.totalRefund;
-    await prisma.booking.update({
-      where: { id: b.id },
-      data: { status: "CANCELLED", cancelledAt: new Date(), cancellationCharge: bk.cancellationCharge },
-    });
+
+  if (isPartialPayment) {
+    const paidAmount = paymentRecord!.amount;
+    // Apply policy % directly to what was actually paid online.
+    groupRefund = Math.floor(paidAmount * (1 - policy.chargePercent / 100));
+    groupCharge = paidAmount - groupRefund;
+    // Distribute the charge evenly across rooms for record-keeping.
+    const chargePerRoom = Math.round(groupCharge / groupBookings.length);
+    for (const b of groupBookings) {
+      await prisma.booking.update({
+        where: { id: b.id },
+        data: { status: "CANCELLED", cancelledAt: new Date(), cancellationCharge: chargePerRoom },
+      });
+    }
+  } else {
+    // Full-payment (or pay-at-hotel): deposit always refunded, policy applies to room charges.
+    for (const b of groupBookings) {
+      const bk = computeCancellationBreakdown(
+        b.totalAmount,
+        b.refundableDeposit ?? DEPOSIT_AMOUNT,
+        policy.chargePercent
+      );
+      groupCharge += bk.cancellationCharge;
+      groupRefund += bk.totalRefund;
+      await prisma.booking.update({
+        where: { id: b.id },
+        data: { status: "CANCELLED", cancelledAt: new Date(), cancellationCharge: bk.cancellationCharge },
+      });
+    }
   }
 
-  // The captured payment lives on the primary booking — refund the group total there.
-  const paymentBooking = booking.bookingGroupId
-    ? (await prisma.payment.findFirst({
-        where: { booking: { bookingGroupId: booking.bookingGroupId } },
-        select: { bookingId: true },
-      }))?.bookingId ?? booking.id
-    : booking.id;
-
-  const breakdown = { cancellationCharge: groupCharge, totalRefund: groupRefund };
-  const refund = await processBookingRefund(paymentBooking, breakdown.totalRefund, {
-    reason: `Guest cancellation (${policy.tier})${booking.bookingGroupId ? ` · group of ${groupBookings.length}` : ""}`,
+  const refund = await processBookingRefund(paymentBookingId, groupRefund, {
+    reason: `Guest cancellation (${policy.tier})${booking.bookingGroupId ? ` · group of ${groupBookings.length}` : ""}${isPartialPayment ? " · partial payment" : ""}`,
   });
 
   return NextResponse.json({
     success: true,
     bookingRef: booking.bookingRef,
-    cancellationCharge: breakdown.cancellationCharge,
-    totalRefund: breakdown.totalRefund,
+    cancellationCharge: groupCharge,
+    totalRefund: groupRefund,
     tier: policy.tier,
     refundStatus: refund.refundStatus,
     message:
       refund.refundStatus === "PROCESSED"
-        ? `Booking cancelled. ₹${breakdown.totalRefund.toLocaleString("en-IN")} refunded to your original payment method — it may take 5–7 business days to reflect.`
+        ? `Booking cancelled. ₹${groupRefund.toLocaleString("en-IN")} refunded to your original payment method — it may take 5–7 business days to reflect.`
         : refund.refundStatus === "NONE"
         ? "Booking cancelled."
-        : `Booking cancelled. ₹${breakdown.totalRefund.toLocaleString("en-IN")} refund is being processed and will reflect within 5–7 business days.`,
+        : `Booking cancelled. ₹${groupRefund.toLocaleString("en-IN")} refund is being processed and will reflect within 5–7 business days.`,
   });
 }

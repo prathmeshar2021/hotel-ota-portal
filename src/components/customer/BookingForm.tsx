@@ -8,7 +8,7 @@ import {
   Loader2, Tag, CheckCircle, XCircle, User, Phone, Mail, Users, MessageSquare,
   CreditCard, Banknote, ArrowRight, Wifi, Calendar, ShieldCheck, Info, SplitSquareHorizontal,
 } from "lucide-react";
-import { computeTotals, REFUNDABLE_DEPOSIT, universalDiscountAmount, discountedNightlyPrice, type UniversalDiscount } from "@/lib/utils/booking-calc";
+import { computeTotals, REFUNDABLE_DEPOSIT, PARTIAL_PAYMENT_AMOUNT, universalDiscountAmount, discountedNightlyPrice, type UniversalDiscount } from "@/lib/utils/booking-calc";
 import { signIn } from "next-auth/react";
 import { useCart } from "@/lib/cart/CartContext";
 import { ShoppingCart, Plus, Minus } from "lucide-react";
@@ -307,9 +307,9 @@ export default function BookingForm({
       await loadRazorpay();
 
       const isPartial = payMode === "PAY_PARTIAL";
-      const rzpAmount = isPartial ? REFUNDABLE_DEPOSIT : totalAfterCoupon;
+      const rzpAmount = isPartial ? PARTIAL_PAYMENT_AMOUNT : totalAfterCoupon;
       const rzpDescription = isPartial
-        ? `Deposit · ${room.roomTypeLabel} · balance at hotel`
+        ? `Booking advance · ${room.roomTypeLabel} · balance at hotel`
         : `${room.roomTypeLabel} · ${localNights} night${localNights > 1 ? "s" : ""}`;
 
       const rzp = new window.Razorpay({
@@ -360,8 +360,8 @@ export default function BookingForm({
     },
     ...(allowPartialPay ? [{
       value: "PAY_PARTIAL" as const,
-      label: "Pay ₹200 Now",
-      sub: `Pay ₹${REFUNDABLE_DEPOSIT} deposit now · balance at hotel`,
+      label: "Pay ₹500 Now",
+      sub: `Pay ₹${PARTIAL_PAYMENT_AMOUNT} booking advance · balance at hotel`,
       icon: <SplitSquareHorizontal className="w-5 h-5" />,
       badge: "Saves your spot",
     }] : []),
@@ -839,7 +839,7 @@ export default function BookingForm({
           ) : payMode === "PAY_NOW" ? (
             `Pay ₹${totalAfterCoupon.toLocaleString("en-IN")} & Confirm`
           ) : payMode === "PAY_PARTIAL" ? (
-            `Pay ₹${REFUNDABLE_DEPOSIT} Deposit & Reserve`
+            `Pay ₹${PARTIAL_PAYMENT_AMOUNT} & Reserve`
           ) : (
             <><ArrowRight className="w-5 h-5" /> Reserve Room · Pay at Hotel</>
           )}
@@ -850,7 +850,7 @@ export default function BookingForm({
             {payMode === "PAY_NOW"
               ? "Secured by Razorpay · UPI, Cards, Net Banking, Wallets accepted"
               : payMode === "PAY_PARTIAL"
-              ? `₹${REFUNDABLE_DEPOSIT} deposit now · ₹${(totalAfterCoupon - REFUNDABLE_DEPOSIT).toLocaleString("en-IN")} balance payable at check-in`
+              ? `₹${PARTIAL_PAYMENT_AMOUNT} booking advance now · ₹${(totalAfterCoupon - PARTIAL_PAYMENT_AMOUNT).toLocaleString("en-IN")} balance payable at check-in`
               : `₹${totalAfterCoupon.toLocaleString("en-IN")} payable in cash or UPI at check-in`}
           </p>
         )}

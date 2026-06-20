@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import { auth } from "@/lib/auth/auth";
 import { generateBookingRef, computeTotals, getUniversalDiscount, resolveBookingDiscount } from "@/lib/utils/booking";
-import { REFUNDABLE_DEPOSIT } from "@/lib/utils/booking-calc";
+import { REFUNDABLE_DEPOSIT, PARTIAL_PAYMENT_AMOUNT } from "@/lib/utils/booking-calc";
 import { createOrder } from "@/lib/services/razorpay";
 import { enforceRateLimit } from "@/lib/ratelimit";
 import { gupshup } from "@/lib/services/gupshup";
@@ -267,7 +267,7 @@ export async function POST(req: NextRequest) {
 
   // ── PAY PARTIAL / PAY NOW (Razorpay) ──────────────────────────────────────
   const isPartial = data.payMode === "PAY_PARTIAL";
-  const onlineAmount = isPartial ? REFUNDABLE_DEPOSIT : totals.totalAmount;
+  const onlineAmount = isPartial ? PARTIAL_PAYMENT_AMOUNT : totals.totalAmount;
 
   const booking = await prisma.booking.create({
     data: {

@@ -7,7 +7,7 @@ import {
   getUniversalDiscount,
   universalDiscountAmount,
 } from "@/lib/utils/booking";
-import { REFUNDABLE_DEPOSIT } from "@/lib/utils/booking-calc";
+import { REFUNDABLE_DEPOSIT, PARTIAL_PAYMENT_AMOUNT } from "@/lib/utils/booking-calc";
 import { createOrder } from "@/lib/services/razorpay";
 import { enforceRateLimit } from "@/lib/ratelimit";
 import { gupshup } from "@/lib/services/gupshup";
@@ -163,8 +163,8 @@ export async function POST(req: NextRequest) {
     });
     const status = data.payMode === "PAY_AT_HOTEL" ? "CONFIRMED" : "PENDING_PAYMENT";
     const isPartial = data.payMode === "PAY_PARTIAL";
-    // For partial pay: ₹200 deposit per room
-    const onlineAmount = isPartial ? REFUNDABLE_DEPOSIT * rows.length : groupTotal;
+    // For partial pay: ₹500 booking advance per room
+    const onlineAmount = isPartial ? PARTIAL_PAYMENT_AMOUNT * rows.length : groupTotal;
 
     // ── Razorpay order for online modes ──
     let razorpayOrderId: string | undefined;

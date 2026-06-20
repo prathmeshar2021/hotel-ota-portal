@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import Navbar from "@/components/customer/Navbar";
 import { useCart } from "@/lib/cart/CartContext";
-import { computeTotals, REFUNDABLE_DEPOSIT } from "@/lib/utils/booking-calc";
+import { computeTotals, REFUNDABLE_DEPOSIT, PARTIAL_PAYMENT_AMOUNT } from "@/lib/utils/booking-calc";
 
 declare global {
   interface Window {
@@ -120,6 +120,7 @@ export default function CartPage() {
   });
   const grandTotal = lines.reduce((s, l) => s + l.lineTotal, 0);
   const totalDeposit = totalRooms * REFUNDABLE_DEPOSIT;
+  const totalPartialAmount = totalRooms * PARTIAL_PAYMENT_AMOUNT;
 
   async function checkout() {
     if (!hotelId || !checkIn || !checkOut) { toast.error("Your cart is missing stay dates."); return; }
@@ -155,7 +156,7 @@ export default function CartPage() {
 
       await loadRazorpay();
       const isPartial = payMode === "PAY_PARTIAL";
-      const rzpAmount = isPartial ? totalDeposit : grandTotal;
+      const rzpAmount = isPartial ? totalPartialAmount : grandTotal;
       const rzpDesc = isPartial
         ? `Deposit · ${totalRooms} room${totalRooms !== 1 ? "s" : ""} · balance at hotel`
         : `${totalRooms} room${totalRooms !== 1 ? "s" : ""} · ${nights} night${nights !== 1 ? "s" : ""}`;
@@ -358,7 +359,7 @@ export default function CartPage() {
               <div className={`grid gap-2 ${(allowPartialPay && allowPayAtHotel) ? "grid-cols-3" : allowPartialPay || allowPayAtHotel ? "grid-cols-2" : "grid-cols-1"}`}>
                 {([
                   { val: "PAY_NOW" as const, label: "Pay Full Now", Icon: CreditCard, show: true },
-                  { val: "PAY_PARTIAL" as const, label: "Pay ₹200 Now", Icon: SplitSquareHorizontal, show: allowPartialPay },
+                  { val: "PAY_PARTIAL" as const, label: "Pay ₹500 Now", Icon: SplitSquareHorizontal, show: allowPartialPay },
                   { val: "PAY_AT_HOTEL" as const, label: "Pay at Hotel", Icon: Banknote, show: allowPayAtHotel },
                 ] as const).filter((m) => m.show).map(({ val, label, Icon }) => (
                   <button key={val} onClick={() => setPayMode(val)}
@@ -388,12 +389,12 @@ export default function CartPage() {
                   : payMode === "PAY_NOW"
                   ? `Pay ₹${grandTotal.toLocaleString("en-IN")}`
                   : payMode === "PAY_PARTIAL"
-                  ? `Pay ₹${totalDeposit.toLocaleString("en-IN")} Deposit & Reserve`
+                  ? `Pay ₹${totalPartialAmount.toLocaleString("en-IN")} & Reserve`
                   : "Reserve · Pay at Hotel"}
               </button>
               {payMode === "PAY_PARTIAL" && (
                 <p className="text-center text-[11px] text-white/30 -mt-1">
-                  ₹{totalDeposit.toLocaleString("en-IN")} deposit now · ₹{(grandTotal - totalDeposit).toLocaleString("en-IN")} balance at check-in
+                  ₹{totalPartialAmount.toLocaleString("en-IN")} booking advance now · ₹{(grandTotal - totalPartialAmount).toLocaleString("en-IN")} balance at check-in
                 </p>
               )}
             </div>

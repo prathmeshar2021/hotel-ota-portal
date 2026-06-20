@@ -58,7 +58,7 @@ export default function PaymentSettingsPage() {
     {
       key: "allowPartialPay" as const,
       label: "Pay Partial Amount Now",
-      sub: "Customer pays only the ₹200 refundable deposit online now. Balance is collected at the hotel.",
+      sub: "Customer pays ₹500 booking advance online now. Balance is collected at the hotel. The ₹500 is subject to the cancellation policy.",
       icon: SplitSquareHorizontal,
       color: "text-blue-400",
       bgColor: "bg-blue-500/10",
