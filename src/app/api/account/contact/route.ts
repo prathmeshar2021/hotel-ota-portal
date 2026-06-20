@@ -34,8 +34,19 @@ export async function PATCH(req: NextRequest) {
     select: { id: true },
   });
   if (conflict) {
+    // For phone conflicts we offer account merge via OTP verification.
+    if (field === "phone") {
+      return NextResponse.json(
+        {
+          error: "This mobile number is already linked to another account.",
+          canMerge: true,
+          phone: value,
+        },
+        { status: 409 }
+      );
+    }
     return NextResponse.json(
-      { error: `This ${field === "phone" ? "mobile number" : "email address"} is already linked to another account.` },
+      { error: "This email address is already linked to another account." },
       { status: 409 }
     );
   }
