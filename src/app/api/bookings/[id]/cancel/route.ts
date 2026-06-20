@@ -40,6 +40,13 @@ export async function POST(
 
   const policy = getCancellationPolicy(new Date(booking.checkInDate));
 
+  if (policy.hoursUntilCheckIn <= 0) {
+    return NextResponse.json(
+      { error: "This booking cannot be cancelled after the check-in date." },
+      { status: 400 }
+    );
+  }
+
   // A multi-room cart booking shares one payment → cancel the whole group and
   // refund the group total via the booking that holds the payment.
   const groupBookings = booking.bookingGroupId

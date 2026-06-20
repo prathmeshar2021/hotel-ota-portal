@@ -220,7 +220,7 @@ export default async function MyBookingsPage() {
                           Payment Pending
                         </div>
                       )}
-                      {booking.status === "CONFIRMED" && (() => {
+                      {booking.status === "CONFIRMED" && new Date(booking.checkInDate) > new Date() && (() => {
                         const gid = booking.bookingGroupId;
                         const g = gid ? groupAgg.get(gid) : null;
                         if (g && g.count > 1) {
