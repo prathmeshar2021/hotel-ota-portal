@@ -98,16 +98,14 @@ export async function confirmPaidBooking(params: {
     onlinePaid: isPartial ? captured : undefined,
     balanceDue: isPartial ? expectedTotal - captured : undefined,
   };
-  if (booking.primaryGuest.phone) {
-    gupshup
-      .sendBookingConfirmation(booking.primaryGuest.phone, notifData)
-      .catch((e) => console.error("[WhatsApp] Confirmation failed:", e));
-  }
-  if (booking.primaryGuest.email) {
-    email
-      .sendBookingConfirmation(booking.primaryGuest.email, notifData)
-      .catch((e) => console.error("[Email] Confirmation failed:", e));
-  }
+  await Promise.allSettled([
+    booking.primaryGuest.phone
+      ? gupshup.sendBookingConfirmation(booking.primaryGuest.phone, notifData)
+      : Promise.resolve(),
+    booking.primaryGuest.email
+      ? email.sendBookingConfirmation(booking.primaryGuest.email, notifData)
+      : Promise.resolve(),
+  ]);
 
   // Sync each room booking to AppSheet.
   for (const b of groupBookings) {

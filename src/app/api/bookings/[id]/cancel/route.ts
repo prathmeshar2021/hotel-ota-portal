@@ -116,7 +116,7 @@ export async function POST(
   });
 
   if (booking.primaryGuest?.email) {
-    email.sendCancellationConfirmation(booking.primaryGuest.email, {
+    await email.sendCancellationConfirmation(booking.primaryGuest.email, {
       guestName: booking.primaryGuest.name,
       bookingRef: booking.bookingRef,
       hotelName: booking.hotel?.name ?? "The Hotel",

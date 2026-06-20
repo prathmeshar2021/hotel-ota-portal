@@ -253,14 +253,14 @@ export async function POST(req: NextRequest) {
       totalAmount: totals.totalAmount,
       payAtHotel: true,
     };
-    if (guestContact?.phone) {
-      gupshup.sendBookingConfirmation(guestContact.phone, notifData)
-        .catch((e) => console.error("[WhatsApp] PAY_AT_HOTEL confirmation failed:", e));
-    }
-    if (guestContact?.email) {
-      email.sendBookingConfirmation(guestContact.email, notifData)
-        .catch((e) => console.error("[Email] PAY_AT_HOTEL confirmation failed:", e));
-    }
+    await Promise.allSettled([
+      guestContact?.phone
+        ? gupshup.sendBookingConfirmation(guestContact.phone, notifData)
+        : Promise.resolve(),
+      guestContact?.email
+        ? email.sendBookingConfirmation(guestContact.email, notifData)
+        : Promise.resolve(),
+    ]);
 
     return NextResponse.json({
       bookingId: booking.id,
