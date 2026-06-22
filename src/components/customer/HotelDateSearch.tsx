@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Calendar, Users, Search, Loader2 } from "lucide-react";
 
 interface Props {
@@ -21,10 +21,16 @@ export default function HotelDateSearch({
   defaultGuests = 2,
 }: Props) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [checkIn, setCheckIn] = useState(defaultCheckIn);
   const [checkOut, setCheckOut] = useState(defaultCheckOut);
   const [guests, setGuests] = useState(defaultGuests);
   const [loading, setLoading] = useState(false);
+
+  // Reset loading once navigation completes (URL search params update)
+  useEffect(() => {
+    setLoading(false);
+  }, [searchParams]);
 
   const today = new Date().toISOString().split("T")[0];
   const hasFilter = !!(checkIn && checkOut);
