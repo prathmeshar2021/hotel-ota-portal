@@ -211,11 +211,21 @@ export const gupshup = {
     const ownerPhone = process.env.OWNER_WHATSAPP;
     if (!ownerPhone) return Promise.resolve(null);
 
-    const OTA_SOURCES = ["MMT", "GOIBIBO", "BOOKING_COM"];
     const payLabel =
       data.payMode === "PAY_AT_HOTEL" ? "Pay at Hotel" :
       data.payMode === "PAY_PARTIAL"  ? "Partial Paid" : "Paid Online";
 
+    if (process.env.GUPSHUP_TEMPLATE_OWNER_ALERT) {
+      return sendTemplate(ownerPhone, process.env.GUPSHUP_TEMPLATE_OWNER_ALERT, [
+        data.bookingRef,
+        data.guestName + (data.guestPhone ? ` · ${data.guestPhone}` : ""),
+        data.roomType,
+        `${data.checkIn} to ${data.checkOut} (${data.nights} nights)`,
+        `₹${data.totalAmount.toLocaleString("en-IN")} - ${payLabel}`,
+      ]);
+    }
+
+    const OTA_SOURCES = ["MMT", "GOIBIBO", "BOOKING_COM"];
     return send({
       to: ownerPhone,
       message:
