@@ -70,9 +70,8 @@ export default function RegisterPage() {
         <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-green-400/60 to-transparent" />
 
         <div className="relative z-10 flex flex-col h-full p-10">
-          <Link href="/" className="flex flex-col leading-tight group w-fit">
-            <span className="text-white font-bold text-lg group-hover:text-amber-300 transition-colors">The Urban Escape</span>
-            <span className="text-amber-400/60 text-[10px] tracking-[0.2em] uppercase">By Saubhagya Mangalam</span>
+          <Link href="/" className="block w-fit">
+            <Image src="/logo.png" alt="The Urban Escape" width={120} height={120} className="h-10 w-auto rounded-lg" />
           </Link>
 
           <div className="flex-1 flex flex-col justify-center">
@@ -102,9 +101,8 @@ export default function RegisterPage() {
         <div className="absolute bottom-1/3 left-1/4 w-48 h-48 bg-amber-900/10 rounded-full blur-3xl pointer-events-none" />
 
         <div className="w-full max-w-sm relative z-10">
-          <Link href="/" className="flex flex-col leading-tight mb-8 lg:hidden">
-            <span className="text-white font-bold text-lg">The Urban Escape</span>
-            <span className="text-amber-400/60 text-[10px] tracking-[0.2em] uppercase">By Saubhagya Mangalam</span>
+          <Link href="/" className="block mb-8 lg:hidden w-fit">
+            <Image src="/logo.png" alt="The Urban Escape" width={120} height={120} className="h-9 w-auto rounded-lg" />
           </Link>
 
           <div className="mb-8">

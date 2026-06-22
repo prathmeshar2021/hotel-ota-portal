@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Phone, Lock, KeyRound, Loader2, ArrowLeft, ShieldCheck } from "lucide-react";
@@ -63,9 +64,8 @@ export default function ForgotPasswordPage() {
   return (
     <div className="min-h-screen bg-[#071209] flex items-center justify-center px-4">
       <div className="w-full max-w-md">
-        <Link href="/" className="flex flex-col leading-tight mb-8 w-fit">
-          <span className="text-white font-bold text-xl">The Urban Escape</span>
-          <span className="text-amber-400/70 text-[10px] tracking-[0.2em] uppercase">By Saubhagya Mangalam</span>
+        <Link href="/" className="block mb-8 w-fit">
+          <Image src="/logo.png" alt="The Urban Escape" width={120} height={120} className="h-9 w-auto rounded-lg" />
         </Link>
 
         <div className="glass-card glass-top-highlight rounded-3xl p-6 sm:p-8">

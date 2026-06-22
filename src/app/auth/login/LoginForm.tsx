@@ -74,11 +74,8 @@ export default function LoginForm() {
         {/* Content */}
         <div className="relative z-10 flex flex-col h-full p-10">
           {/* Logo */}
-          <Link href="/" className="flex flex-col leading-tight group w-fit">
-            <span className="text-white font-bold text-lg group-hover:text-amber-300 transition-colors">
-              The Urban Escape
-            </span>
-            <span className="text-amber-400/60 text-[10px] tracking-[0.2em] uppercase">By Saubhagya Mangalam</span>
+          <Link href="/" className="block w-fit">
+            <Image src="/logo.png" alt="The Urban Escape" width={120} height={120} className="h-14 w-auto rounded-lg" />
           </Link>
 
           {/* Center text */}
@@ -115,9 +112,8 @@ export default function LoginForm() {
 
         <div className="w-full max-w-sm relative z-10">
           {/* Mobile logo */}
-          <Link href="/" className="flex flex-col leading-tight mb-8 lg:hidden">
-            <span className="text-white font-bold text-lg">The Urban Escape</span>
-            <span className="text-amber-400/60 text-[10px] tracking-[0.2em] uppercase">By Saubhagya Mangalam</span>
+          <Link href="/" className="flex justify-center mb-8 lg:hidden">
+            <Image src="/logo.png" alt="The Urban Escape" width={160} height={160} className="h-24 w-auto rounded-xl" />
           </Link>
 
           <div className="mb-8">

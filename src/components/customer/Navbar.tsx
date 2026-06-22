@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useSession, signOut } from "next-auth/react";
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -38,13 +39,12 @@ export default function Navbar() {
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between h-16 md:h-18">
           {/* Logo */}
-          <Link href="/" className="flex flex-col leading-tight group">
-            <span className="text-white font-bold text-base md:text-lg tracking-wide group-hover:text-amber-300 transition-colors">
-              The Urban Escape
-            </span>
-            <span className="text-amber-400/70 text-[10px] font-light tracking-[0.2em] uppercase hidden sm:block">
-              By Saubhagya Mangalam
-            </span>
+          <Link href="/" className="flex items-center gap-2.5 shrink-0 group">
+            <Image src="/logo.png" alt="The Urban Escape" width={40} height={40} className="h-9 w-9 rounded-lg" priority />
+            <div className="flex flex-col leading-tight">
+              <span className="text-white font-bold text-sm tracking-wide group-hover:text-amber-300 transition-colors">The Urban Escape</span>
+              <span className="text-amber-400/60 text-[9px] tracking-[0.2em] uppercase hidden sm:block">By Saubhagya Mangalam</span>
+            </div>
           </Link>
 
           {/* Desktop nav */}

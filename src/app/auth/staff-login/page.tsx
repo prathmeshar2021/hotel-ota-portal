@@ -42,13 +42,8 @@ export default function StaffLoginPage() {
         <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-blue-400/60 to-transparent" />
 
         <div className="relative z-10 flex flex-col h-full p-10">
-          <Link href="/" className="flex flex-col leading-tight group w-fit">
-            <span className="text-white font-bold text-lg group-hover:text-blue-300 transition-colors">
-              The Urban Escape
-            </span>
-            <span className="text-blue-400/60 text-[10px] tracking-[0.2em] uppercase">
-              Staff Portal
-            </span>
+          <Link href="/" className="block w-fit">
+            <Image src="/logo.png" alt="The Urban Escape" width={120} height={120} className="h-10 w-auto rounded-lg" />
           </Link>
 
           <div className="flex-1 flex flex-col justify-center">
@@ -84,9 +79,8 @@ export default function StaffLoginPage() {
         <div className="absolute top-1/3 right-1/4 w-64 h-64 bg-blue-900/8 rounded-full blur-3xl pointer-events-none" />
 
         <div className="w-full max-w-sm relative z-10">
-          <Link href="/" className="flex flex-col leading-tight mb-8 lg:hidden">
-            <span className="text-white font-bold text-lg">The Urban Escape</span>
-            <span className="text-blue-400/60 text-[10px] tracking-[0.2em] uppercase">Staff Portal</span>
+          <Link href="/" className="block mb-8 lg:hidden w-fit">
+            <Image src="/logo.png" alt="The Urban Escape" width={120} height={120} className="h-9 w-auto rounded-lg" />
           </Link>
 
           <div className="mb-8">

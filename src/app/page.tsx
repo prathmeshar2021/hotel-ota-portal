@@ -510,9 +510,9 @@ export default async function HomePage() {
       ════════════════════════════════════════════════════════ */}
       <footer className="bg-[#0D1B0E] text-white/35 py-10 px-5 border-t border-white/5">
         <div className="max-w-5xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
-          <div>
-            <p className="text-white font-bold text-lg">The Urban Escape</p>
-            <p className="text-xs mt-1 text-white/25">By Saubhagya Mangalam · Bhilai, Chhattisgarh</p>
+          <div className="flex flex-col items-center md:items-start">
+            <Image src="/logo.png" alt="The Urban Escape" width={120} height={120} className="h-12 w-auto rounded-lg" />
+            <p className="text-xs mt-2 text-white/25">By Saubhagya Mangalam · Bhilai, Chhattisgarh</p>
           </div>
           <div className="flex flex-wrap gap-5 text-xs justify-center">
             {[
