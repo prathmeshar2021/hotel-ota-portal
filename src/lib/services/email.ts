@@ -15,8 +15,8 @@ function shell(bodyHtml: string): string {
     <table width="580" cellpadding="0" cellspacing="0" style="max-width:580px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
       <!-- Header -->
       <tr><td style="background:#071209;padding:28px 32px;text-align:center;">
-        <p style="margin:0;color:#F59E0B;font-size:22px;font-weight:700;letter-spacing:0.5px;">${BUSINESS.brand}</p>
-        <p style="margin:4px 0 0;color:rgba(245,158,11,0.55);font-size:11px;letter-spacing:2px;text-transform:uppercase;">By ${BUSINESS.legalName}</p>
+        <img src="${APP_URL}/logo.png" alt="${BUSINESS.brand}" width="160" style="display:block;margin:0 auto;max-width:160px;height:auto;" />
+        <p style="margin:8px 0 0;color:rgba(245,158,11,0.45);font-size:11px;letter-spacing:2px;text-transform:uppercase;">By ${BUSINESS.legalName}</p>
       </td></tr>
       <!-- Body -->
       <tr><td style="padding:32px;">
