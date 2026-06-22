@@ -99,7 +99,7 @@ export default function HotelDateSearch({
             onChange={(e) => setGuests(Number(e.target.value))}
             className={`${dateCls} pl-9 appearance-none cursor-pointer`}
           >
-            {[1, 2, 3, 4, 5, 6].map((n) => (
+            {[1, 2, 3, 4].map((n) => (
               <option key={n} value={n} className="bg-[#0D1B0E] text-white">
                 {n} Guest{n > 1 ? "s" : ""}
               </option>
@@ -130,6 +130,11 @@ export default function HotelDateSearch({
           Clear dates · show all rooms
         </button>
       )}
+
+      {/* Multi-room hint */}
+      <p className="text-[11px] text-white/25 text-center leading-relaxed">
+        Travelling with more than 4 guests? Add multiple rooms.
+      </p>
 
       {/* Hint when no dates */}
       {!hasFilter && (

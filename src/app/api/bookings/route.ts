@@ -223,6 +223,19 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    // Auto-allot the best available physical room for this booking
+    const { autoAllotRoom } = await import("@/lib/services/room-allotment");
+    const allottedRoomId = await autoAllotRoom({
+      hotelId: data.hotelId,
+      roomCategory: data.roomCategory,
+      checkInDate: checkIn,
+      checkOutDate: checkOut,
+      excludeBookingId: booking.id,
+    });
+    if (allottedRoomId) {
+      await prisma.booking.update({ where: { id: booking.id }, data: { roomId: allottedRoomId } });
+    }
+
     // Create a pending CASH payment record so the admin can collect it at check-in
     await prisma.payment.create({
       data: {

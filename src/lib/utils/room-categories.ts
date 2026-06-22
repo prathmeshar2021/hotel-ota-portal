@@ -167,7 +167,7 @@ export const CATEGORY_IMAGES: Record<RoomCategoryType, string[]> = {
   PREMIUM_AC_ROOM:  ["/rooms/deluxe-ac/1.jpg", "/rooms/deluxe-ac/2.jpg", "/rooms/deluxe-ac/3.jpg", "/rooms/deluxe-ac/4.jpg"],
   CAVE_AC_ROOM:     ["/rooms/cave-ac/1.jpg", "/rooms/cave-ac/2.jpg"],
   PINEWOOD_COTTAGE: ["/rooms/pinewood/1.jpg", "/rooms/pinewood/2.jpg"],
-  THEATRE_COTTAGE:  ["/rooms/theatre/1.jpg", "/rooms/theatre/2.jpg"],
+  THEATRE_COTTAGE:  ["/rooms/theatre/2.jpg", "/rooms/theatre/1.jpg"],
   LUXURY_COTTAGE:   ["/rooms/luxury/1.jpg", "/rooms/luxury/2.jpg", "/rooms/luxury/3.jpg"],
 };
 

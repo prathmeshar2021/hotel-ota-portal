@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { BedDouble, X, Check, Loader2, AlertCircle } from "lucide-react";
+import { BedDouble, X, Check, Loader2, AlertCircle, Sparkles } from "lucide-react";
 import { getCategoryMeta } from "@/lib/utils/room-categories";
 
 interface AvailableRoom {
@@ -178,9 +178,26 @@ export default function AssignRoomButton({
                     </div>
                   ) : (
                     <>
-                      <p className="text-xs text-white/35 mb-3 uppercase tracking-widest font-semibold">
-                        Available Rooms
-                      </p>
+                      <div className="flex items-center justify-between mb-3">
+                        <p className="text-xs text-white/35 uppercase tracking-widest font-semibold">
+                          Available Rooms
+                        </p>
+                        {rooms.length === 1 && (
+                          <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full">
+                            Only 1 available
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Auto-allot info banner */}
+                      {currentRoomId && (
+                        <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-xl bg-white/4 border border-white/8">
+                          <Sparkles className="w-3.5 h-3.5 shrink-0" style={{ color: accentColor }} />
+                          <p className="text-[11px] text-white/50">
+                            Room auto-assigned by system · you can change it below
+                          </p>
+                        </div>
+                      )}
 
                       <div className="space-y-2 max-h-56 overflow-y-auto pr-1 mb-4">
                         {rooms.map((room) => {
@@ -193,14 +210,8 @@ export default function AssignRoomButton({
                               className="w-full flex items-center justify-between px-4 py-3 rounded-xl border text-left transition-all"
                               style={
                                 isSelected
-                                  ? {
-                                      borderColor: `${accentColor}50`,
-                                      background: `${accentColor}15`,
-                                    }
-                                  : {
-                                      borderColor: "rgba(255,255,255,0.08)",
-                                      background: "rgba(255,255,255,0.03)",
-                                    }
+                                  ? { borderColor: `${accentColor}50`, background: `${accentColor}15` }
+                                  : { borderColor: "rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)" }
                               }
                             >
                               <div>
@@ -208,16 +219,13 @@ export default function AssignRoomButton({
                                   Room {room.roomNumber}
                                 </p>
                                 {isCurrent && (
-                                  <p className="text-[10px] mt-0.5" style={{ color: accentColor }}>
-                                    Currently assigned
+                                  <p className="text-[10px] mt-0.5 flex items-center gap-1" style={{ color: accentColor }}>
+                                    <Sparkles className="w-3 h-3" /> Auto-assigned
                                   </p>
                                 )}
                               </div>
                               {isSelected && (
-                                <Check
-                                  className="w-4 h-4 shrink-0"
-                                  style={{ color: accentColor }}
-                                />
+                                <Check className="w-4 h-4 shrink-0" style={{ color: accentColor }} />
                               )}
                             </button>
                           );

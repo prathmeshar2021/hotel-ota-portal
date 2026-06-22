@@ -56,8 +56,11 @@ export async function confirmPaidBooking(params: {
   // Settle every booking in the group using the ACTUAL captured amount,
   // not the booking total — this handles PAY_PARTIAL (₹500/room) correctly.
   const groupBookings = groupId
-    ? await prisma.booking.findMany({ where: { bookingGroupId: groupId }, select: { id: true, totalAmount: true } })
-    : [{ id: booking.id, totalAmount: booking.totalAmount }];
+    ? await prisma.booking.findMany({
+        where: { bookingGroupId: groupId },
+        select: { id: true, totalAmount: true, roomCategory: true, checkInDate: true, checkOutDate: true, roomId: true },
+      })
+    : [{ id: booking.id, totalAmount: booking.totalAmount, roomCategory: booking.roomCategory, checkInDate: booking.checkInDate, checkOutDate: booking.checkOutDate, roomId: booking.roomId }];
   const capturedPerRoom = captured / groupBookings.length;
   for (const b of groupBookings) {
     const onlinePaid = +Math.min(capturedPerRoom, b.totalAmount).toFixed(2);
@@ -79,6 +82,19 @@ export async function confirmPaidBooking(params: {
       },
     });
   }
+
+  // Auto-allot physical rooms for all bookings in the group that don't have one yet.
+  const { autoAllotGroup } = await import("@/lib/services/room-allotment");
+  await autoAllotGroup({
+    hotelId: booking.hotel.id,
+    bookings: groupBookings.map((b) => ({
+      id: b.id,
+      roomCategory: b.roomCategory,
+      checkInDate: b.checkInDate,
+      checkOutDate: b.checkOutDate,
+      roomId: b.roomId,
+    })),
+  });
 
   // Notifications (fire-and-forget). One message for the whole group.
   const roomType =

@@ -1,11 +1,9 @@
 "use client";
 
-import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
-import { Users, BedDouble, ArrowRight, ChevronRight, ArrowLeft, CheckCircle2, Plus } from "lucide-react";
+import { Users, BedDouble, ArrowRight, CheckCircle2, Plus } from "lucide-react";
 import { useCart } from "@/lib/cart/CartContext";
 
 export interface SubCategoryView {
@@ -37,8 +35,6 @@ export interface MainCategoryView {
   subcategories: SubCategoryView[];
 }
 
-const ease = [0.21, 0.47, 0.32, 0.98] as const;
-
 export default function CategoryBrowser({
   mains,
   hotelSlug,
@@ -58,10 +54,7 @@ export default function CategoryBrowser({
   hasDateFilter: boolean;
   nights: number | null;
 }) {
-  const [activeKey, setActiveKey] = useState<string | null>(null);
-  const active = mains.find((m) => m.key === activeKey) ?? null;
   const { addItem, items } = useCart();
-
   const canAddToCart = hasDateFilter && !!checkIn && !!checkOut;
 
   function handleAdd(s: SubCategoryView) {
@@ -89,118 +82,26 @@ export default function CategoryBrowser({
   }
 
   return (
-    <div className="relative">
-      <AnimatePresence mode="wait">
-        {!active ? (
-          /* ── Level 1: main category cards ───────────────────────── */
-          <motion.div
-            key="mains"
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -16 }}
-            transition={{ duration: 0.4, ease }}
-            className="grid grid-cols-1 sm:grid-cols-3 gap-4"
-          >
-            {mains.map((m) => {
-              const soldOut = hasDateFilter && m.available === 0;
-              return (
-                <button
-                  key={m.key}
-                  onClick={() => !soldOut && setActiveKey(m.key)}
-                  disabled={soldOut}
-                  className={`group relative text-left rounded-3xl overflow-hidden border transition-all duration-300 ${
-                    soldOut
-                      ? "border-white/5 opacity-55 cursor-not-allowed"
-                      : "border-white/10 hover:border-white/20 hover:-translate-y-1 shadow-[0_8px_32px_rgba(0,0,0,0.4)]"
-                  }`}
-                >
-                  {/* Cover */}
-                  <div className="relative h-44 overflow-hidden">
-                    <Image
-                      src={m.heroImage}
-                      alt={m.displayName}
-                      fill
-                      className={`object-cover transition-transform duration-500 ${!soldOut ? "group-hover:scale-105" : ""}`}
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
-                    <div
-                      className="absolute top-0 left-0 right-0 h-0.5"
-                      style={{ background: `linear-gradient(to right, transparent, ${m.accentColor}, transparent)` }}
-                    />
-                    <div className="absolute bottom-3 left-4 right-4">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.2em] mb-0.5" style={{ color: m.accentColor }}>
-                        {m.tagline}
-                      </p>
-                      <h3 className="text-white font-bold text-lg leading-tight">{m.displayName}</h3>
-                    </div>
-                  </div>
+    <div className="space-y-8">
+      {mains.map((m) => (
+        <div key={m.key}>
+          {/* Group separator */}
+          <div className="flex items-center gap-3 mb-4">
+            <div className="h-px flex-1" style={{ background: `${m.accentColor}20` }} />
+            <span
+              className="text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-full border"
+              style={{ color: m.accentColor, borderColor: `${m.accentColor}30`, background: `${m.accentColor}10` }}
+            >
+              {m.displayName}
+            </span>
+            <div className="h-px flex-1" style={{ background: `${m.accentColor}20` }} />
+          </div>
 
-                  {/* Footer */}
-                  <div className="p-4 bg-white/[0.03]">
-                    <p className="text-white/40 text-xs leading-relaxed line-clamp-2 mb-3 min-h-[2rem]">
-                      {m.description}
-                    </p>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-white/30 text-[10px] uppercase tracking-wider">From</p>
-                        <p className="font-bold flex items-baseline gap-1.5" style={{ color: m.accentColor }}>
-                          {m.originalMinPrice > m.minPrice && (
-                            <span className="text-white/30 text-xs font-normal line-through">
-                              ₹{m.originalMinPrice.toLocaleString("en-IN")}
-                            </span>
-                          )}
-                          ₹{m.minPrice.toLocaleString("en-IN")}
-                          <span className="text-white/30 text-xs font-normal">/night</span>
-                        </p>
-                      </div>
-                      {soldOut ? (
-                        <span className="text-xs font-bold px-3 py-1.5 rounded-full bg-red-500/15 text-red-300 border border-red-500/20">
-                          Fully Booked
-                        </span>
-                      ) : (
-                        <span
-                          className="flex items-center gap-1 text-xs font-bold px-3 py-2 rounded-xl text-black transition-transform group-hover:scale-105"
-                          style={{ background: m.accentColor }}
-                        >
-                          {hasDateFilter ? "Available" : "Explore"}
-                          <ChevronRight className="w-3.5 h-3.5" />
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-          </motion.div>
-        ) : (
-          /* ── Level 2: sub-category cards for the chosen main ───────── */
-          <motion.div
-            key={`subs-${active.key}`}
-            initial={{ opacity: 0, x: 40 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 40 }}
-            transition={{ duration: 0.4, ease }}
-            className="space-y-4"
-          >
-            {/* Back header */}
-            <div className="flex items-center justify-between">
-              <button
-                onClick={() => setActiveKey(null)}
-                className="flex items-center gap-1.5 text-sm text-white/55 hover:text-white transition-colors"
-              >
-                <ArrowLeft className="w-4 h-4" /> All categories
-              </button>
-              <span
-                className="text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-full border"
-                style={{ color: active.accentColor, borderColor: `${active.accentColor}30`, background: `${active.accentColor}10` }}
-              >
-                {active.displayName}
-              </span>
-            </div>
-
-            {active.subcategories.map((s) => {
+          {/* Subcategory cards */}
+          <div className="space-y-4">
+            {m.subcategories.map((s) => {
               const soldOut = hasDateFilter && s.available === 0;
-              const imageSrc = s.images[0] ?? active.heroImage;
+              const imageSrc = s.images[0] ?? m.heroImage;
               return (
                 <div
                   key={s.type}
@@ -211,7 +112,7 @@ export default function CategoryBrowser({
                   }`}
                 >
                   {/* Image */}
-                  <div className="relative w-full sm:w-60 h-44 sm:h-auto shrink-0 overflow-hidden">
+                  <div className="relative w-full sm:w-56 h-44 sm:h-auto shrink-0 overflow-hidden">
                     <Image
                       src={imageSrc}
                       alt={s.displayName}
@@ -219,6 +120,10 @@ export default function CategoryBrowser({
                       className={`object-cover transition-transform duration-500 ${!soldOut ? "group-hover:scale-105" : ""}`}
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                    <div
+                      className="absolute top-0 left-0 right-0 h-0.5"
+                      style={{ background: `linear-gradient(to right, transparent, ${s.accentColor}, transparent)` }}
+                    />
                     <div className="absolute top-3 left-3">
                       <span className="text-xs font-bold px-2.5 py-1 rounded-full text-black" style={{ background: s.accentColor }}>
                         {s.shortName}
@@ -227,12 +132,12 @@ export default function CategoryBrowser({
                     <div className="absolute bottom-3 left-3">
                       {soldOut ? (
                         <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-red-500/80 text-white">Fully Booked</span>
-                      ) : (
+                      ) : hasDateFilter ? (
                         <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-black/50 text-white/80 flex items-center gap-1.5">
                           <CheckCircle2 className="w-3 h-3 text-green-400" />
                           Available
                         </span>
-                      )}
+                      ) : null}
                     </div>
                   </div>
 
@@ -303,9 +208,9 @@ export default function CategoryBrowser({
                 </div>
               );
             })}
-          </motion.div>
-        )}
-      </AnimatePresence>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

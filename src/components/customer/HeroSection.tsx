@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { motion, useScroll, useTransform, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowRight, ChevronDown, MapPin, Star } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowRight, Calendar, ChevronDown, Loader2, MapPin, Star, Users } from "lucide-react";
 
 const ease = [0.21, 0.47, 0.32, 0.98] as const;
 
@@ -75,6 +76,21 @@ export default function HeroSection({ heroImage, galleryImages, avgRating, revie
   // Entrance for floating cards
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
+
+  // Inline booking widget
+  const router = useRouter();
+  const today = new Date().toISOString().split("T")[0];
+  const [checkIn, setCheckIn] = useState("");
+  const [checkOut, setCheckOut] = useState("");
+  const [guests, setGuests] = useState(2);
+  const [bookLoading, setBookLoading] = useState(false);
+
+  function handleCheckAvailability() {
+    if (!checkIn || !checkOut) return;
+    setBookLoading(true);
+    const params = new URLSearchParams({ checkIn, checkOut, guests: String(guests) });
+    router.push(`/hotel/the-urban-escape-bhilai?${params.toString()}`);
+  }
 
   return (
     <section ref={ref} className="relative isolate min-h-screen flex flex-col items-center justify-center overflow-hidden">
@@ -194,26 +210,85 @@ export default function HeroSection({ heroImage, galleryImages, avgRating, revie
           amber warmth, electric blue moods, lush green surroundings.
         </motion.p>
 
-        {/* CTAs */}
+        {/* Inline booking widget */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 1.15, duration: 0.7, ease }}
-          className="flex flex-col sm:flex-row gap-4 justify-center"
+          className="w-full max-w-2xl mx-auto"
         >
-          <Link href="/hotel/the-urban-escape-bhilai"
-            className="shimmer-btn group inline-flex items-center justify-center gap-2.5 bg-amber-500 hover:bg-amber-400 text-black font-bold px-9 py-4 rounded-2xl transition-all duration-200 hover:scale-105 shadow-2xl shadow-amber-500/30 text-base"
-          >
-            Book Your Stay
-            <motion.span animate={{ x: [0, 4, 0] }} transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut" }}>
-              <ArrowRight className="w-5 h-5" />
-            </motion.span>
-          </Link>
-          <a href="#rooms"
-            className="inline-flex items-center justify-center gap-2 border border-white/20 hover:border-amber-400/40 bg-white/5 hover:bg-amber-400/5 text-white/70 hover:text-white px-9 py-4 rounded-2xl transition-all duration-200 backdrop-blur-sm text-base"
-          >
-            Explore Rooms <ChevronDown className="w-5 h-5" />
-          </a>
+          <div className="bg-white/5 backdrop-blur-md border border-white/12 rounded-2xl p-3 shadow-2xl">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-2">
+              {/* Check-in */}
+              <div className="relative">
+                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-amber-400/60 pointer-events-none" />
+                <input
+                  type="date"
+                  value={checkIn}
+                  min={today}
+                  onChange={(e) => {
+                    setCheckIn(e.target.value);
+                    if (checkOut && checkOut <= e.target.value) setCheckOut("");
+                  }}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl pl-9 pr-3 py-3 text-white text-sm focus:outline-none focus:border-amber-400/40 transition-all [color-scheme:dark]"
+                  placeholder="Check-in"
+                />
+                <label className="absolute -top-1.5 left-3 text-[10px] font-bold text-white/30 uppercase tracking-wider bg-transparent px-1">Check-in</label>
+              </div>
+              {/* Check-out */}
+              <div className="relative">
+                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-amber-400/60 pointer-events-none" />
+                <input
+                  type="date"
+                  value={checkOut}
+                  min={checkIn || today}
+                  onChange={(e) => setCheckOut(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl pl-9 pr-3 py-3 text-white text-sm focus:outline-none focus:border-amber-400/40 transition-all [color-scheme:dark]"
+                  placeholder="Check-out"
+                />
+                <label className="absolute -top-1.5 left-3 text-[10px] font-bold text-white/30 uppercase tracking-wider bg-transparent px-1">Check-out</label>
+              </div>
+              {/* Guests */}
+              <div className="relative">
+                <Users className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-amber-400/60 pointer-events-none" />
+                <select
+                  value={guests}
+                  onChange={(e) => setGuests(Number(e.target.value))}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl pl-9 pr-3 py-3 text-white text-sm focus:outline-none focus:border-amber-400/40 transition-all appearance-none cursor-pointer [color-scheme:dark]"
+                >
+                  {[1, 2, 3, 4].map((n) => (
+                    <option key={n} value={n} className="bg-[#0D1B0E] text-white">
+                      {n} Guest{n > 1 ? "s" : ""}
+                    </option>
+                  ))}
+                </select>
+                <label className="absolute -top-1.5 left-3 text-[10px] font-bold text-white/30 uppercase tracking-wider bg-transparent px-1">Guests</label>
+              </div>
+            </div>
+            <p className="text-[11px] text-white/30 text-right px-1 -mt-1">
+              Travelling with more than 4 guests? Add multiple rooms.
+            </p>
+            <button
+              onClick={handleCheckAvailability}
+              disabled={!checkIn || !checkOut || bookLoading}
+              className="w-full flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed text-black font-bold py-3.5 rounded-xl transition-all duration-200 hover:scale-[1.01] active:scale-[0.99] text-sm shadow-lg shadow-amber-500/25"
+            >
+              {bookLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <><ArrowRight className="w-4 h-4" /> Check Availability & Book</>
+              )}
+            </button>
+          </div>
+          <div className="mt-4 flex items-center justify-center gap-4 text-xs text-white/30">
+            <a href="#rooms" className="hover:text-white/60 transition-colors flex items-center gap-1">
+              Explore rooms <ChevronDown className="w-3 h-3" />
+            </a>
+            <span>·</span>
+            <Link href="/hotel/the-urban-escape-bhilai" className="hover:text-white/60 transition-colors">
+              View all rooms without dates
+            </Link>
+          </div>
         </motion.div>
 
         {/* Rating strip */}

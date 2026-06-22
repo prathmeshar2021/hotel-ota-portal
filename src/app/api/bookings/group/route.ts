@@ -225,8 +225,20 @@ export async function POST(req: NextRequest) {
 
     const primary = created[0];
 
-    // ── PAY AT HOTEL: confirmed now, notify ──
+    // ── PAY AT HOTEL: confirmed now, auto-allot rooms, then notify ──
     if (data.payMode === "PAY_AT_HOTEL") {
+      const { autoAllotGroup } = await import("@/lib/services/room-allotment");
+      await autoAllotGroup({
+        hotelId: data.hotelId,
+        bookings: created.map((b) => ({
+          id: b.id,
+          roomCategory: b.roomCategory!,
+          checkInDate: b.checkInDate,
+          checkOutDate: b.checkOutDate,
+          roomId: b.roomId,
+        })),
+      });
+
       const guest = await prisma.guest.findUnique({ where: { id: guestId }, select: { phone: true, email: true, name: true } });
       const hotelName = (await prisma.hotel.findUnique({ where: { id: data.hotelId }, select: { name: true } }))?.name ?? "The Hotel";
       const groupNotifData = {
