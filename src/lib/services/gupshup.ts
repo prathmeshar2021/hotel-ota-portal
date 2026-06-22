@@ -275,15 +275,10 @@ export const gupshup = {
     pdfUrl: string;
   }) => {
     if (process.env.GUPSHUP_TEMPLATE_INVOICE) {
-      // Document media template: header is the PDF, body params are text fields.
-      // In Gupshup dashboard create this as a UTILITY template with:
-      //   Header type: Document  (URL = {{1}})
-      //   Body: Dear {{2}}, your GST invoice {{3}} from {{4}} is attached. Thank you for staying with us!
       return sendTemplate(phone, process.env.GUPSHUP_TEMPLATE_INVOICE, [
-        data.pdfUrl,
         data.guestName,
         data.invoiceNumber,
-        data.hotelName,
+        data.pdfUrl,
       ]);
     }
     // Fallback: session document message (requires 24h opt-in window)
