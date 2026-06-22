@@ -266,6 +266,17 @@ export async function POST(req: NextRequest) {
       totalAmount: totals.totalAmount,
       payAtHotel: true,
     };
+    const ownerAlertData = {
+      guestName: guestContact?.name ?? "",
+      guestPhone: guestContact?.phone ?? undefined,
+      bookingRef,
+      roomType: categoryMeta.displayName,
+      checkIn: format(checkIn, "dd MMM yyyy"),
+      checkOut: format(checkOut, "dd MMM yyyy"),
+      nights: noOfNights,
+      totalAmount: totals.totalAmount,
+      payMode: "PAY_AT_HOTEL",
+    };
     await Promise.allSettled([
       guestContact?.phone
         ? gupshup.sendBookingConfirmation(guestContact.phone, notifData)
@@ -273,6 +284,8 @@ export async function POST(req: NextRequest) {
       guestContact?.email
         ? email.sendBookingConfirmation(guestContact.email, notifData)
         : Promise.resolve(),
+      gupshup.sendOwnerBookingAlert(ownerAlertData),
+      email.sendOwnerBookingAlert(ownerAlertData),
     ]);
 
     return NextResponse.json({

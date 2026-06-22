@@ -251,6 +251,17 @@ export async function POST(req: NextRequest) {
         totalAmount: groupTotal,
         payAtHotel: true,
       };
+      const ownerAlertData = {
+        guestName: guest?.name ?? "",
+        guestPhone: guest?.phone ?? undefined,
+        bookingRef: primary.bookingRef,
+        roomType: rows.length > 1 ? `${rows.length} rooms` : getCategoryMeta(rows[0].roomCategory).displayName,
+        checkIn: format(checkIn, "dd MMM yyyy"),
+        checkOut: format(checkOut, "dd MMM yyyy"),
+        nights: noOfNights,
+        totalAmount: groupTotal,
+        payMode: "PAY_AT_HOTEL",
+      };
       await Promise.allSettled([
         guest?.phone
           ? gupshup.sendBookingConfirmation(guest.phone, groupNotifData)
@@ -258,6 +269,8 @@ export async function POST(req: NextRequest) {
         guest?.email
           ? email.sendBookingConfirmation(guest.email, groupNotifData)
           : Promise.resolve(),
+        gupshup.sendOwnerBookingAlert(ownerAlertData),
+        email.sendOwnerBookingAlert(ownerAlertData),
       ]);
       return NextResponse.json({
         bookingGroupId,

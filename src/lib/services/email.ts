@@ -208,4 +208,44 @@ export const email = {
     `);
     return send(to, `Reply from ${BUSINESS.brand} – Support`, html);
   },
+
+  sendOwnerBookingAlert: (data: {
+    guestName: string;
+    guestPhone?: string;
+    bookingRef: string;
+    roomType: string;
+    checkIn: string;
+    checkOut: string;
+    nights: number;
+    totalAmount: number;
+    payMode: string;
+  }) => {
+    const ownerEmail = process.env.OWNER_EMAIL;
+    if (!ownerEmail) return Promise.resolve(undefined);
+
+    const payLabel =
+      data.payMode === "PAY_AT_HOTEL" ? "Pay at Hotel" :
+      data.payMode === "PAY_PARTIAL"  ? "Partial Payment" : "Paid Online";
+
+    const html = shell(`
+      <p style="margin:0 0 4px;color:#333;font-size:16px;font-weight:700;">New Booking Received</p>
+      <p style="margin:0 0 24px;color:#666;font-size:14px;">A new booking has just been confirmed on the portal.</p>
+
+      <div style="background:#f9f9f7;border-radius:8px;padding:16px 20px;margin-bottom:20px;">
+        <table width="100%" cellpadding="0" cellspacing="0">
+          ${row("Booking Ref", data.bookingRef)}
+          ${row("Guest", data.guestName + (data.guestPhone ? ` · ${data.guestPhone}` : ""))}
+          ${row("Room", data.roomType)}
+          ${row("Check-in", data.checkIn)}
+          ${row("Check-out", data.checkOut)}
+          ${row("Nights", String(data.nights))}
+          ${row("Total Amount", `₹${data.totalAmount.toLocaleString("en-IN")}`)}
+          ${row("Payment Mode", payLabel)}
+        </table>
+      </div>
+
+      <a href="${APP_URL}/hotel-admin/bookings" style="display:block;background:#F59E0B;color:#000;font-weight:700;font-size:14px;text-align:center;padding:13px 24px;border-radius:8px;text-decoration:none;">View in Admin Panel →</a>
+    `);
+    return send(ownerEmail, `New Booking – ${data.bookingRef} | ${data.roomType}`, html);
+  },
 };

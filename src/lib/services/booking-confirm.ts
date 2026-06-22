@@ -114,6 +114,17 @@ export async function confirmPaidBooking(params: {
     onlinePaid: isPartial ? captured : undefined,
     balanceDue: isPartial ? expectedTotal - captured : undefined,
   };
+  const ownerAlertData = {
+    guestName: booking.primaryGuest.name,
+    guestPhone: booking.primaryGuest.phone ?? undefined,
+    bookingRef: booking.bookingRef,
+    roomType,
+    checkIn: format(booking.checkInDate, "dd MMM yyyy"),
+    checkOut: format(booking.checkOutDate, "dd MMM yyyy"),
+    nights: booking.noOfNights,
+    totalAmount: expectedTotal,
+    payMode: isPartial ? "PAY_PARTIAL" : "PAY_NOW",
+  };
   await Promise.allSettled([
     booking.primaryGuest.phone
       ? gupshup.sendBookingConfirmation(booking.primaryGuest.phone, notifData)
@@ -121,6 +132,8 @@ export async function confirmPaidBooking(params: {
     booking.primaryGuest.email
       ? email.sendBookingConfirmation(booking.primaryGuest.email, notifData)
       : Promise.resolve(),
+    gupshup.sendOwnerBookingAlert(ownerAlertData),
+    email.sendOwnerBookingAlert(ownerAlertData),
   ]);
 
   // Sync each room booking to AppSheet.

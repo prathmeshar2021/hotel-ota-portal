@@ -179,6 +179,38 @@ export const gupshup = {
     });
   },
 
+  sendOwnerBookingAlert: (data: {
+    guestName: string;
+    guestPhone?: string;
+    bookingRef: string;
+    roomType: string;
+    checkIn: string;
+    checkOut: string;
+    nights: number;
+    totalAmount: number;
+    payMode: string;
+    source?: string;
+  }) => {
+    const ownerPhone = process.env.OWNER_WHATSAPP;
+    if (!ownerPhone) return Promise.resolve(null);
+
+    const OTA_SOURCES = ["MMT", "GOIBIBO", "BOOKING_COM"];
+    const payLabel =
+      data.payMode === "PAY_AT_HOTEL" ? "Pay at Hotel" :
+      data.payMode === "PAY_PARTIAL"  ? "Partial Paid" : "Paid Online";
+
+    return send({
+      to: ownerPhone,
+      message:
+        `🔔 *New Booking — ${data.bookingRef}*\n\n` +
+        `👤 ${data.guestName}` + (data.guestPhone ? ` · ${data.guestPhone}` : "") + `\n` +
+        `🛏️ ${data.roomType}\n` +
+        `📅 ${data.checkIn} → ${data.checkOut} (${data.nights}N)\n` +
+        `💰 ₹${data.totalAmount.toLocaleString("en-IN")} · ${payLabel}` +
+        (data.source && OTA_SOURCES.includes(data.source) ? `\n📡 via ${data.source}` : ""),
+    });
+  },
+
   sendCheckinReminder: (phone: string, data: {
     guestName: string;
     bookingRef: string;
