@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
   // leaking which phone numbers have accounts (enumeration).
   const ok = NextResponse.json({
     success: true,
-    message: "If an account exists for this number, a reset code has been sent on WhatsApp.",
+    message: "If an account exists for this number, a reset code has been sent via WhatsApp and email.",
   });
   if (!parsed.success) return ok;
 
