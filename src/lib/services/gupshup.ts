@@ -1,4 +1,8 @@
-const GUPSHUP_API_URL = "https://api.gupshup.io/wa/api/v1/msg";
+// ─── Session messaging (free-form, requires 24h opt-in window) ───────────────
+const SESSION_API = "https://api.gupshup.io/wa/api/v1/msg";
+
+// ─── Template messaging (no opt-in required, requires Meta-approved templates) ─
+const TEMPLATE_API = "https://api.gupshup.io/sm/api/v1/template/msg";
 
 interface WhatsAppTextMessage {
   to: string;
@@ -17,6 +21,7 @@ interface WhatsAppDocumentMessage {
 
 type WhatsAppMessage = WhatsAppTextMessage | WhatsAppDocumentMessage;
 
+// ─── Session send (free-form) ─────────────────────────────────────────────────
 async function send(payload: WhatsAppMessage) {
   const source = process.env.GUPSHUP_SOURCE_NUMBER!;
   const apiKey = process.env.GUPSHUP_API_KEY!;
@@ -46,7 +51,7 @@ async function send(payload: WhatsAppMessage) {
     "src.name": appName,
   });
 
-  const res = await fetch(GUPSHUP_API_URL, {
+  const res = await fetch(SESSION_API, {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
@@ -57,10 +62,55 @@ async function send(payload: WhatsAppMessage) {
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Gupshup error ${res.status}: ${text}`);
+    throw new Error(`Gupshup session error ${res.status}: ${text}`);
   }
 
   return res.json();
+}
+
+// ─── Template send (works without user opt-in) ────────────────────────────────
+// templateId  : the ID returned by Gupshup after Meta approves the template
+// params      : ordered list matching {{1}}, {{2}}, ... placeholders in the template
+async function sendTemplate(phone: string, templateId: string, params: string[]) {
+  const source = process.env.GUPSHUP_SOURCE_NUMBER!;
+  const apiKey = process.env.GUPSHUP_API_KEY!;
+  const appName = process.env.GUPSHUP_APP_NAME!;
+
+  const destination = phone.startsWith("91") ? phone : `91${phone}`;
+
+  const body = new URLSearchParams({
+    channel: "whatsapp",
+    source,
+    destination,
+    template: JSON.stringify({ id: templateId, params }),
+    "src.name": appName,
+  });
+
+  const res = await fetch(TEMPLATE_API, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      apikey: apiKey,
+    },
+    body: body.toString(),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Gupshup template error ${res.status}: ${text}`);
+  }
+
+  return res.json();
+}
+
+// ─── Check whether template IDs are configured ───────────────────────────────
+// Returns true once you've set the env vars after Meta approval.
+function hasTemplates() {
+  return !!(
+    process.env.GUPSHUP_TEMPLATE_BOOKING_CONFIRMED &&
+    process.env.GUPSHUP_TEMPLATE_OTP &&
+    process.env.GUPSHUP_TEMPLATE_CANCELLATION
+  );
 }
 
 export const gupshup = {
@@ -72,9 +122,32 @@ export const gupshup = {
     checkIn: string;
     checkOut: string;
     totalAmount: number;
-    payAtHotel?: boolean; // if true, show "Amount due at hotel" instead of "Amount paid"
-  }) =>
-    send({
+    payAtHotel?: boolean;
+    isPartial?: boolean;
+    onlinePaid?: number;
+    balanceDue?: number;
+  }) => {
+    // Use approved template when available (reaches all users regardless of opt-in)
+    if (hasTemplates()) {
+      const amountLine = data.payAtHotel
+        ? `₹${data.totalAmount} due at hotel`
+        : data.isPartial
+          ? `₹${data.onlinePaid} paid · ₹${data.balanceDue} due at hotel`
+          : `₹${data.totalAmount} paid`;
+
+      return sendTemplate(phone, process.env.GUPSHUP_TEMPLATE_BOOKING_CONFIRMED!, [
+        data.guestName,
+        data.bookingRef,
+        data.hotelName,
+        data.checkIn,
+        data.checkOut,
+        amountLine,
+        `${process.env.NEXT_PUBLIC_APP_URL}/checkin/${data.bookingRef}`,
+      ]);
+    }
+
+    // Fallback: session message (only works within 24h opt-in window)
+    return send({
       to: phone,
       message:
         `✅ *Booking Confirmed!*\n\n` +
@@ -90,7 +163,22 @@ export const gupshup = {
         `\nComplete your *online check-in* at:\n` +
         `${process.env.NEXT_PUBLIC_APP_URL}/checkin/${data.bookingRef}\n\n` +
         `This saves you time at the hotel. 🙏`,
-    }),
+    });
+  },
+
+  sendPasswordResetOtp: (phone: string, data: { otp: string; name?: string }) => {
+    if (hasTemplates()) {
+      return sendTemplate(phone, process.env.GUPSHUP_TEMPLATE_OTP!, [data.otp]);
+    }
+    return send({
+      to: phone,
+      message:
+        `🔐 *Password Reset*\n\n` +
+        (data.name ? `Hi ${data.name},\n\n` : "") +
+        `Your password reset code is:\n\n*${data.otp}*\n\n` +
+        `It is valid for 10 minutes. If you didn't request this, you can ignore this message.`,
+    });
+  },
 
   sendCheckinReminder: (phone: string, data: {
     guestName: string;
@@ -109,10 +197,10 @@ export const gupshup = {
   sendCoupon: (phone: string, data: {
     code: string;
     hotelName: string;
-    discountLabel: string; // e.g. "₹200 off" or "15% off"
-    expiry?: string; // formatted expiry date, optional
+    discountLabel: string;
+    expiry?: string;
     guestName?: string;
-    note?: string; // optional custom line (e.g. promotion name)
+    note?: string;
   }) =>
     send({
       to: phone,
@@ -136,16 +224,6 @@ export const gupshup = {
       documentUrl: data.pdfUrl,
       caption: `Dear ${data.guestName}, please read the attached declaration. Reply *I Agree* to confirm.`,
       filename: "Guest_Consent.pdf",
-    }),
-
-  sendPasswordResetOtp: (phone: string, data: { otp: string; name?: string }) =>
-    send({
-      to: phone,
-      message:
-        `🔐 *Password Reset*\n\n` +
-        (data.name ? `Hi ${data.name},\n\n` : "") +
-        `Your password reset code is:\n\n*${data.otp}*\n\n` +
-        `It is valid for 10 minutes. If you didn't request this, you can ignore this message.`,
     }),
 
   sendInvoiceDocument: (phone: string, data: {
