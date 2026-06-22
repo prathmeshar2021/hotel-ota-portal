@@ -218,7 +218,8 @@ export const gupshup = {
     if (process.env.GUPSHUP_TEMPLATE_OWNER_ALERT) {
       return sendTemplate(ownerPhone, process.env.GUPSHUP_TEMPLATE_OWNER_ALERT, [
         data.bookingRef,
-        data.guestName + (data.guestPhone ? ` · ${data.guestPhone}` : ""),
+        data.guestName,
+        data.guestPhone ?? "Not provided",
         data.roomType,
         `${data.checkIn} to ${data.checkOut} (${data.nights} nights)`,
         `₹${data.totalAmount.toLocaleString("en-IN")} - ${payLabel}`,
