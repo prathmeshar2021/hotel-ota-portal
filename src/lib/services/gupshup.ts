@@ -108,8 +108,7 @@ async function sendTemplate(phone: string, templateId: string, params: string[])
 function hasTemplates() {
   return !!(
     process.env.GUPSHUP_TEMPLATE_BOOKING_CONFIRMED &&
-    process.env.GUPSHUP_TEMPLATE_OTP &&
-    process.env.GUPSHUP_TEMPLATE_CANCELLATION
+    process.env.GUPSHUP_TEMPLATE_OTP
   );
 }
 
@@ -201,8 +200,18 @@ export const gupshup = {
     expiry?: string;
     guestName?: string;
     note?: string;
-  }) =>
-    send({
+  }) => {
+    if (process.env.GUPSHUP_TEMPLATE_COUPON) {
+      return sendTemplate(phone, process.env.GUPSHUP_TEMPLATE_COUPON, [
+        data.guestName ?? "Guest",
+        data.hotelName,
+        data.note ?? "",
+        data.code,
+        data.discountLabel,
+        data.expiry ?? "No expiry",
+      ]);
+    }
+    return send({
       to: phone,
       message:
         `🎁 *A Special Offer from ${data.hotelName}!*\n\n` +
@@ -212,7 +221,8 @@ export const gupshup = {
         `🏷️ *${data.discountLabel}* on your stay.\n` +
         (data.expiry ? `⏳ Valid until *${data.expiry}*.\n` : "") +
         `\nBook directly with us to redeem. We look forward to hosting you! 🌿`,
-    }),
+    });
+  },
 
   sendConsentDocument: (phone: string, data: {
     guestName: string;
@@ -231,8 +241,21 @@ export const gupshup = {
     hotelName: string;
     invoiceNumber: string;
     pdfUrl: string;
-  }) =>
-    send({
+  }) => {
+    if (process.env.GUPSHUP_TEMPLATE_INVOICE) {
+      // Document media template: header is the PDF, body params are text fields.
+      // In Gupshup dashboard create this as a UTILITY template with:
+      //   Header type: Document  (URL = {{1}})
+      //   Body: Dear {{2}}, your GST invoice {{3}} from {{4}} is attached. Thank you for staying with us!
+      return sendTemplate(phone, process.env.GUPSHUP_TEMPLATE_INVOICE, [
+        data.pdfUrl,
+        data.guestName,
+        data.invoiceNumber,
+        data.hotelName,
+      ]);
+    }
+    // Fallback: session document message (requires 24h opt-in window)
+    return send({
       to: phone,
       type: "document",
       documentUrl: data.pdfUrl,
@@ -241,5 +264,6 @@ export const gupshup = {
         `Dear ${data.guestName}, please find your GST invoice (${data.invoiceNumber}) attached. ` +
         `Thank you for staying with us! 🌿`,
       filename: `Invoice_${data.invoiceNumber}.pdf`,
-    }),
+    });
+  },
 };
