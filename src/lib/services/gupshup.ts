@@ -69,9 +69,15 @@ async function send(payload: WhatsAppMessage) {
 }
 
 // ─── Template send (works without user opt-in) ────────────────────────────────
-// templateId  : the ID returned by Gupshup after Meta approves the template
-// params      : ordered list matching {{1}}, {{2}}, ... placeholders in the template
-async function sendTemplate(phone: string, templateId: string, params: string[]) {
+// templateId     : the ID returned by Gupshup after Meta approves the template
+// params         : ordered list matching {{1}}, {{2}}, ... placeholders in the body
+// headerDocument : when the template has a Document header, pass the dynamic PDF URL + filename here
+async function sendTemplate(
+  phone: string,
+  templateId: string,
+  params: string[],
+  headerDocument?: { url: string; filename: string },
+) {
   const source = process.env.GUPSHUP_SOURCE_NUMBER!;
   const apiKey = process.env.GUPSHUP_API_KEY!;
   const appName = process.env.GUPSHUP_APP_NAME!;
@@ -85,6 +91,17 @@ async function sendTemplate(phone: string, templateId: string, params: string[])
     template: JSON.stringify({ id: templateId, params }),
     "src.name": appName,
   });
+
+  if (headerDocument) {
+    body.append(
+      "message",
+      JSON.stringify({
+        type: "file",
+        url: headerDocument.url,
+        filename: headerDocument.filename,
+      }),
+    );
+  }
 
   const res = await fetch(TEMPLATE_API, {
     method: "POST",
@@ -275,11 +292,12 @@ export const gupshup = {
     pdfUrl: string;
   }) => {
     if (process.env.GUPSHUP_TEMPLATE_INVOICE) {
-      return sendTemplate(phone, process.env.GUPSHUP_TEMPLATE_INVOICE, [
-        data.guestName,
-        data.invoiceNumber,
-        data.pdfUrl,
-      ]);
+      return sendTemplate(
+        phone,
+        process.env.GUPSHUP_TEMPLATE_INVOICE,
+        [data.guestName, data.invoiceNumber, data.hotelName],
+        { url: data.pdfUrl, filename: `Invoice_${data.invoiceNumber}.pdf` },
+      );
     }
     // Fallback: session document message (requires 24h opt-in window)
     return send({
