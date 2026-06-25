@@ -85,12 +85,15 @@ async function sendTemplate(
 
   const destination = phone.startsWith("91") ? phone : `91${phone}`;
 
+  console.log(`[gupshup template] key=${apiKey.slice(0, 10)}... src=${source} app=${appName} dest=${destination} templateId=${templateId}`);
+
   const body = new URLSearchParams({
     channel: "whatsapp",
     source,
     destination,
     template: JSON.stringify({ id: templateId, params }),
     "src.name": appName,
+    apikey: apiKey,  // also in body, in case SM API reads it from there
   });
 
   if (headerDocument) {
@@ -103,7 +106,7 @@ async function sendTemplate(
     );
   }
 
-  const res = await fetch(TEMPLATE_API, {
+  const res = await fetch(`${TEMPLATE_API}?apikey=${encodeURIComponent(apiKey)}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
