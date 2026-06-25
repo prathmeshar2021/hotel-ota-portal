@@ -203,6 +203,7 @@ export async function POST(req: NextRequest) {
             balanceDue: r.totalAmount,
             couponId: r.couponId,
             specialRequests: i === 0 ? data.specialRequests : undefined,
+            guestPhone: data.guestPhone,
           },
         });
         bookings.push(b);
@@ -251,9 +252,10 @@ export async function POST(req: NextRequest) {
         totalAmount: groupTotal,
         payAtHotel: true,
       };
+      const groupNotifPhone = guest?.phone ?? data.guestPhone;
       const ownerAlertData = {
         guestName: guest?.name ?? "",
-        guestPhone: guest?.phone ?? undefined,
+        guestPhone: groupNotifPhone ?? undefined,
         bookingRef: primary.bookingRef,
         roomType: rows.length > 1 ? `${rows.length} rooms` : getCategoryMeta(rows[0].roomCategory).displayName,
         checkIn: format(checkIn, "dd MMM yyyy"),
@@ -263,8 +265,8 @@ export async function POST(req: NextRequest) {
         payMode: "PAY_AT_HOTEL",
       };
       await Promise.allSettled([
-        guest?.phone
-          ? gupshup.sendBookingConfirmation(guest.phone, groupNotifData)
+        groupNotifPhone
+          ? gupshup.sendBookingConfirmation(groupNotifPhone, groupNotifData)
           : Promise.resolve(),
         guest?.email
           ? email.sendBookingConfirmation(guest.email, groupNotifData)

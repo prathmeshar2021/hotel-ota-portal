@@ -114,9 +114,10 @@ export async function confirmPaidBooking(params: {
     onlinePaid: isPartial ? captured : undefined,
     balanceDue: isPartial ? expectedTotal - captured : undefined,
   };
+  const notifPhone = booking.primaryGuest.phone ?? booking.guestPhone ?? undefined;
   const ownerAlertData = {
     guestName: booking.primaryGuest.name,
-    guestPhone: booking.primaryGuest.phone ?? undefined,
+    guestPhone: notifPhone,
     bookingRef: booking.bookingRef,
     roomType,
     checkIn: format(booking.checkInDate, "dd MMM yyyy"),
@@ -126,8 +127,8 @@ export async function confirmPaidBooking(params: {
     payMode: isPartial ? "PAY_PARTIAL" : "PAY_NOW",
   };
   await Promise.allSettled([
-    booking.primaryGuest.phone
-      ? gupshup.sendBookingConfirmation(booking.primaryGuest.phone, notifData)
+    notifPhone
+      ? gupshup.sendBookingConfirmation(notifPhone, notifData)
       : Promise.resolve(),
     booking.primaryGuest.email
       ? email.sendBookingConfirmation(booking.primaryGuest.email, notifData)

@@ -306,6 +306,7 @@ model Booking {
   couponId        String?
   specialRequests String?
   guestGstin      String?
+  guestPhone      String?   // phone entered at booking time (fallback when primaryGuest has no phone)
 
   onlineCheckinDone Boolean   @default(false)
   checkedInAt       DateTime?

@@ -220,6 +220,7 @@ export async function POST(req: NextRequest) {
         couponId,
         specialRequests: data.specialRequests,
         guestGstin: data.guestGstin,
+        guestPhone: data.guestPhone,
       },
     });
 
@@ -266,9 +267,10 @@ export async function POST(req: NextRequest) {
       totalAmount: totals.totalAmount,
       payAtHotel: true,
     };
+    const notifPhone = guestContact?.phone ?? data.guestPhone;
     const ownerAlertData = {
       guestName: guestContact?.name ?? "",
-      guestPhone: guestContact?.phone ?? undefined,
+      guestPhone: notifPhone ?? undefined,
       bookingRef,
       roomType: categoryMeta.displayName,
       checkIn: format(checkIn, "dd MMM yyyy"),
@@ -278,8 +280,8 @@ export async function POST(req: NextRequest) {
       payMode: "PAY_AT_HOTEL",
     };
     await Promise.allSettled([
-      guestContact?.phone
-        ? gupshup.sendBookingConfirmation(guestContact.phone, notifData)
+      notifPhone
+        ? gupshup.sendBookingConfirmation(notifPhone, notifData)
         : Promise.resolve(),
       guestContact?.email
         ? email.sendBookingConfirmation(guestContact.email, notifData)
@@ -325,6 +327,7 @@ export async function POST(req: NextRequest) {
       couponId,
       specialRequests: data.specialRequests,
       guestGstin: data.guestGstin,
+      guestPhone: data.guestPhone,
     },
   });
 

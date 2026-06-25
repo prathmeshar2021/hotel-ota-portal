@@ -200,7 +200,7 @@ export default async function BookingDetailPage({
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <InfoRow label="Full Name" value={booking.primaryGuest.name} icon={<User className="w-3.5 h-3.5" />} />
-              <InfoRow label="Phone" value={`+91 ${booking.primaryGuest.phone}`} icon={<Phone className="w-3.5 h-3.5" />} />
+              <InfoRow label="Phone" value={(booking.primaryGuest.phone ?? booking.guestPhone) ? `+91 ${booking.primaryGuest.phone ?? booking.guestPhone}` : undefined} icon={<Phone className="w-3.5 h-3.5" />} />
               <InfoRow label="Email" value={booking.primaryGuest.email} icon={<Mail className="w-3.5 h-3.5" />} />
               {booking.primaryGuest.idType && (
                 <InfoRow
@@ -595,7 +595,7 @@ export default async function BookingDetailPage({
                 <GstInvoiceButton
                   bookingId={booking.id}
                   invoiceNumber={booking.gstInvoice?.invoiceNumber ?? null}
-                  guestPhone={booking.primaryGuest.phone}
+                  guestPhone={booking.primaryGuest.phone ?? booking.guestPhone}
                 />
               </div>
             )}
