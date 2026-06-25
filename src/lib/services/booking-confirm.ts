@@ -126,8 +126,7 @@ export async function confirmPaidBooking(params: {
     totalAmount: expectedTotal,
     payMode: isPartial ? "PAY_PARTIAL" : "PAY_NOW",
   };
-  console.log(`[confirm notif] phone=${notifPhone} email=${booking.primaryGuest.email} templateId=${process.env.GUPSHUP_TEMPLATE_BOOKING_CONFIRMED}`);
-  const confirmResults = await Promise.allSettled([
+  await Promise.allSettled([
     notifPhone
       ? gupshup.sendBookingConfirmation(notifPhone, notifData)
       : Promise.resolve(),
@@ -137,10 +136,6 @@ export async function confirmPaidBooking(params: {
     gupshup.sendOwnerBookingAlert(ownerAlertData),
     email.sendOwnerBookingAlert(ownerAlertData),
   ]);
-  confirmResults.forEach((r, i) => {
-    if (r.status === "rejected") console.error(`[confirm notif #${i}]`, r.reason);
-    else console.log(`[confirm notif #${i}] ok`, JSON.stringify(r.value)?.slice(0, 300));
-  });
 
   // Sync each room booking to AppSheet.
   for (const b of groupBookings) {
