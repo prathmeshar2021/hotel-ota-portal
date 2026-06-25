@@ -79,7 +79,7 @@ async function sendTemplate(
   headerDocument?: { url: string; filename: string },
 ) {
   const source = process.env.GUPSHUP_SOURCE_NUMBER!;
-  const apiKey = process.env.GUPSHUP_API_KEY!;
+  const apiKey = process.env.GUPSHUP_TEMPLATE_API_KEY ?? process.env.GUPSHUP_API_KEY!;
   const appName = process.env.GUPSHUP_APP_NAME!;
 
   const destination = phone.startsWith("91") ? phone : `91${phone}`;
