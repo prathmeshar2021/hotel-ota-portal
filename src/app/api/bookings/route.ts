@@ -279,7 +279,7 @@ export async function POST(req: NextRequest) {
       totalAmount: totals.totalAmount,
       payMode: "PAY_AT_HOTEL",
     };
-    await Promise.allSettled([
+    const notifResults = await Promise.allSettled([
       notifPhone
         ? gupshup.sendBookingConfirmation(notifPhone, notifData)
         : Promise.resolve(),
@@ -289,6 +289,10 @@ export async function POST(req: NextRequest) {
       gupshup.sendOwnerBookingAlert(ownerAlertData),
       email.sendOwnerBookingAlert(ownerAlertData),
     ]);
+    notifResults.forEach((r, i) => {
+      if (r.status === "rejected") console.error(`[booking notif #${i}]`, r.reason);
+      else console.log(`[booking notif #${i}] ok`, JSON.stringify(r.value)?.slice(0, 200));
+    });
 
     return NextResponse.json({
       bookingId: booking.id,
