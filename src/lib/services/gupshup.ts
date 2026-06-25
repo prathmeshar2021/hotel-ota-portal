@@ -120,14 +120,6 @@ async function sendTemplate(
   return res.json();
 }
 
-// ─── Check whether template IDs are configured ───────────────────────────────
-// Returns true once you've set the env vars after Meta approval.
-function hasTemplates() {
-  return !!(
-    process.env.GUPSHUP_TEMPLATE_BOOKING_CONFIRMED &&
-    process.env.GUPSHUP_TEMPLATE_OTP
-  );
-}
 
 export const gupshup = {
   sendBookingConfirmation: (phone: string, data: {
@@ -143,15 +135,14 @@ export const gupshup = {
     onlinePaid?: number;
     balanceDue?: number;
   }) => {
-    // Use approved template when available (reaches all users regardless of opt-in)
-    if (hasTemplates()) {
+    if (process.env.GUPSHUP_TEMPLATE_BOOKING_CONFIRMED) {
       const amountLine = data.payAtHotel
         ? `₹${data.totalAmount} due at hotel`
         : data.isPartial
           ? `₹${data.onlinePaid} paid · ₹${data.balanceDue} due at hotel`
           : `₹${data.totalAmount} paid`;
 
-      return sendTemplate(phone, process.env.GUPSHUP_TEMPLATE_BOOKING_CONFIRMED!, [
+      return sendTemplate(phone, process.env.GUPSHUP_TEMPLATE_BOOKING_CONFIRMED, [
         data.guestName,
         data.bookingRef,
         data.hotelName,
@@ -183,8 +174,8 @@ export const gupshup = {
   },
 
   sendPasswordResetOtp: (phone: string, data: { otp: string; name?: string }) => {
-    if (hasTemplates()) {
-      return sendTemplate(phone, process.env.GUPSHUP_TEMPLATE_OTP!, [data.otp]);
+    if (process.env.GUPSHUP_TEMPLATE_OTP) {
+      return sendTemplate(phone, process.env.GUPSHUP_TEMPLATE_OTP, [data.otp]);
     }
     return send({
       to: phone,
