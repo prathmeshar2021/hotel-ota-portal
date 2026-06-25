@@ -69,8 +69,10 @@ async function send(payload: WhatsAppMessage) {
 }
 
 // ─── Template send (works without user opt-in) ────────────────────────────────
-// Uses the WA API endpoint (same as session) with template message type — this
-// avoids needing a separate partner API key for the SM API.
+// Uses the SM API with the account-level API key (GUPSHUP_TEMPLATE_API_KEY).
+// templateId     : UUID from the Gupshup template dashboard
+// params         : ordered values matching {{1}}, {{2}}, ... in the template body
+// headerDocument : for document-header templates — pass the dynamic PDF URL + filename
 async function sendTemplate(
   phone: string,
   templateId: string,
@@ -78,33 +80,30 @@ async function sendTemplate(
   headerDocument?: { url: string; filename: string },
 ) {
   const source = process.env.GUPSHUP_SOURCE_NUMBER!;
-  const apiKey = process.env.GUPSHUP_API_KEY!;
+  const apiKey = process.env.GUPSHUP_TEMPLATE_API_KEY ?? process.env.GUPSHUP_API_KEY!;
   const appName = process.env.GUPSHUP_APP_NAME!;
 
   const destination = phone.startsWith("91") ? phone : `91${phone}`;
-
-  const msg: Record<string, unknown> = {
-    type: "template",
-    template: { id: templateId, params },
-  };
-
-  if (headerDocument) {
-    msg.header = {
-      type: "document",
-      document: { link: headerDocument.url, filename: headerDocument.filename },
-    };
-  }
 
   const body = new URLSearchParams({
     channel: "whatsapp",
     source,
     destination,
-    message: JSON.stringify(msg),
+    template: JSON.stringify({ id: templateId, params }),
     "src.name": appName,
-    isHSM: "true",
   });
 
-  const res = await fetch(SESSION_API, {
+  if (headerDocument) {
+    body.append(
+      "message",
+      JSON.stringify({
+        type: "document",
+        document: { link: headerDocument.url, filename: headerDocument.filename },
+      }),
+    );
+  }
+
+  const res = await fetch(TEMPLATE_API, {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
