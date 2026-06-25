@@ -101,6 +101,7 @@ async function sendTemplate(
     destination,
     message: JSON.stringify(msg),
     "src.name": appName,
+    isHSM: "true",
   });
 
   const res = await fetch(SESSION_API, {
