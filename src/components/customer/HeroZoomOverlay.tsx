@@ -31,7 +31,7 @@ const TARGET_LAT = 21.2145;
 const TARGET_LNG = 81.3503;
 const START_ALT = 38400; // km (dramatic orbital start)
 
-const EARTH_SRC  = "/intro/earth.png";     // real full-disk Earth photo (DSCOVR EPIC)
+const EARTH_SRC  = "/intro/earth.webp";    // real full-disk Earth photo (DSCOVR EPIC)
 const INDIA_SRC  = "/intro/india.jpg";     // ESRI — subcontinent
 const REGION_SRC = "/intro/region.jpg";    // ESRI — central India
 const BHILAI_SRC = "/intro/bhilai.jpg";    // ESRI — Bhilai city
