@@ -217,10 +217,10 @@ export default function HeroSection({ heroImage, galleryImages, avgRating, revie
           transition={{ delay: 1.15, duration: 0.7, ease }}
           className="w-full max-w-2xl mx-auto"
         >
-          <div className="bg-white/5 backdrop-blur-md border border-white/12 rounded-2xl p-3 pt-5 shadow-2xl overflow-hidden">
+          <div className="bg-white/5 backdrop-blur-md border border-white/12 rounded-2xl p-3 pt-5 shadow-2xl">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-2">
               {/* Check-in */}
-              <div className="relative min-w-0">
+              <div className="relative min-w-0 bg-white/5 border border-white/10 rounded-xl focus-within:border-amber-400/40 transition-all">
                 <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-amber-400/60 pointer-events-none" />
                 <input
                   type="date"
@@ -230,23 +230,31 @@ export default function HeroSection({ heroImage, galleryImages, avgRating, revie
                     setCheckIn(e.target.value);
                     if (checkOut && checkOut <= e.target.value) setCheckOut("");
                   }}
-                  className="w-full max-w-full bg-white/5 border border-white/10 rounded-xl pl-9 pr-3 py-3 text-white text-sm focus:outline-none focus:border-amber-400/40 transition-all [color-scheme:dark]"
-                  placeholder="Check-in"
+                  className="w-full bg-transparent border-none pl-9 pr-3 py-3 text-white text-sm focus:outline-none [color-scheme:dark]"
                 />
-                <label className="absolute -top-1.5 left-3 text-[10px] font-bold text-white/30 uppercase tracking-wider bg-transparent px-1">Check-in</label>
+                {!checkIn && (
+                  <span className="absolute left-9 top-1/2 -translate-y-1/2 text-sm text-white/35 pointer-events-none select-none">
+                    Select date
+                  </span>
+                )}
+                <label className="absolute -top-2.5 left-3 text-[10px] font-bold text-white/30 uppercase tracking-wider bg-transparent px-1">Check-in</label>
               </div>
               {/* Check-out */}
-              <div className="relative min-w-0">
+              <div className="relative min-w-0 bg-white/5 border border-white/10 rounded-xl focus-within:border-amber-400/40 transition-all">
                 <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-amber-400/60 pointer-events-none" />
                 <input
                   type="date"
                   value={checkOut}
                   min={checkIn || today}
                   onChange={(e) => setCheckOut(e.target.value)}
-                  className="w-full max-w-full bg-white/5 border border-white/10 rounded-xl pl-9 pr-3 py-3 text-white text-sm focus:outline-none focus:border-amber-400/40 transition-all [color-scheme:dark]"
-                  placeholder="Check-out"
+                  className="w-full bg-transparent border-none pl-9 pr-3 py-3 text-white text-sm focus:outline-none [color-scheme:dark]"
                 />
-                <label className="absolute -top-1.5 left-3 text-[10px] font-bold text-white/30 uppercase tracking-wider bg-transparent px-1">Check-out</label>
+                {!checkOut && (
+                  <span className="absolute left-9 top-1/2 -translate-y-1/2 text-sm text-white/35 pointer-events-none select-none">
+                    Select date
+                  </span>
+                )}
+                <label className="absolute -top-2.5 left-3 text-[10px] font-bold text-white/30 uppercase tracking-wider bg-transparent px-1">Check-out</label>
               </div>
               {/* Guests */}
               <div className="relative">
