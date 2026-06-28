@@ -91,6 +91,7 @@ export default function BookingForm({
   const [availStatus, setAvailStatus] = useState<AvailStatus>("idle");
   const [availReason, setAvailReason] = useState("");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const oauthRestoreRef = useRef(false);
 
   useEffect(() => {
     if (!localCheckIn || !localCheckOut || localNights < 1) {
@@ -135,6 +136,32 @@ export default function BookingForm({
   const [guestEmail, setGuestEmail] = useState(defaultEmail ?? session?.user?.email ?? "");
   const [specialRequests, setSpecialRequests] = useState("");
   const [noOfPersons, setNoOfPersons] = useState(guests);
+
+  // ── Post-OAuth form restore ──────────────────────────────────────────────────
+  // After Google sign-in the page reloads fresh (full OAuth redirect). We save
+  // the typed phone + selected dates to sessionStorage before triggering OAuth
+  // so we can restore them once the session resolves on return.
+  useEffect(() => {
+    if (!session?.user || oauthRestoreRef.current) return;
+    oauthRestoreRef.current = true;
+
+    const raw = sessionStorage.getItem("booking_form_draft");
+    if (raw) {
+      try {
+        const draft = JSON.parse(raw) as { guestPhone?: string; localCheckIn?: string; localCheckOut?: string; };
+        if (draft.guestPhone) setGuestPhone(draft.guestPhone);
+        if (draft.localCheckIn) setLocalCheckIn(draft.localCheckIn);
+        if (draft.localCheckOut) setLocalCheckOut(draft.localCheckOut);
+      } catch { /* ignore malformed draft */ }
+      sessionStorage.removeItem("booking_form_draft");
+    }
+
+    // Sync name/email from session when fields are still empty (first Google login)
+    if (!guestName && session.user.name) setGuestName(session.user.name);
+    if (!guestEmail && session.user.email) setGuestEmail(session.user.email);
+  // Only fire when the user's identity first becomes available
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user?.id]);
 
   // Coupon
   const [couponCode, setCouponCode] = useState("");
@@ -415,7 +442,13 @@ export default function BookingForm({
           {/* Google sign-in */}
           <button
             type="button"
-            onClick={() => signIn("google", { callbackUrl: window.location.href })}
+            onClick={() => {
+              sessionStorage.setItem("booking_form_draft", JSON.stringify({ guestPhone, localCheckIn, localCheckOut }));
+              const cbUrl = new URL(window.location.href);
+              cbUrl.searchParams.set("checkIn", localCheckIn);
+              cbUrl.searchParams.set("checkOut", localCheckOut);
+              signIn("google", { callbackUrl: cbUrl.toString() });
+            }}
             className="w-full flex items-center justify-center gap-2.5 text-sm font-bold py-3 rounded-xl bg-white text-gray-800 hover:bg-gray-100 transition-all mb-3"
           >
             <svg viewBox="0 0 24 24" className="w-4 h-4 shrink-0" xmlns="http://www.w3.org/2000/svg">
@@ -428,13 +461,20 @@ export default function BookingForm({
           </button>
 
           {/* Mobile login */}
-          <a
-            href={`/auth/login?callbackUrl=${encodeURIComponent(window.location.href)}`}
+          <button
+            type="button"
+            onClick={() => {
+              sessionStorage.setItem("booking_form_draft", JSON.stringify({ guestPhone, localCheckIn, localCheckOut }));
+              const cbUrl = new URL(window.location.href);
+              cbUrl.searchParams.set("checkIn", localCheckIn);
+              cbUrl.searchParams.set("checkOut", localCheckOut);
+              window.location.href = `/auth/login?callbackUrl=${encodeURIComponent(cbUrl.toString())}`;
+            }}
             className="w-full flex items-center justify-center gap-2 text-sm font-bold py-3 rounded-xl bg-white/8 hover:bg-white/12 border border-white/10 text-white/80 hover:text-white transition-all mb-4"
           >
             <Phone className="w-4 h-4" />
             Login with Mobile Number
-          </a>
+          </button>
 
           <div className="relative mb-4">
             <div className="absolute inset-0 flex items-center">
@@ -618,7 +658,17 @@ export default function BookingForm({
           {!session?.user && (
             <button
               type="button"
-              onClick={() => signIn("google", { callbackUrl: window.location.href })}
+              onClick={() => {
+                sessionStorage.setItem("booking_form_draft", JSON.stringify({
+                  guestPhone,
+                  localCheckIn,
+                  localCheckOut,
+                }));
+                const cbUrl = new URL(window.location.href);
+                cbUrl.searchParams.set("checkIn", localCheckIn);
+                cbUrl.searchParams.set("checkOut", localCheckOut);
+                signIn("google", { callbackUrl: cbUrl.toString() });
+              }}
               className="flex items-center gap-1.5 text-[11px] font-semibold text-white/40 hover:text-white/70 border border-white/10 hover:border-white/20 bg-white/3 hover:bg-white/6 px-3 py-1.5 rounded-xl transition-all"
             >
               <svg viewBox="0 0 24 24" className="w-3 h-3 shrink-0" xmlns="http://www.w3.org/2000/svg">
