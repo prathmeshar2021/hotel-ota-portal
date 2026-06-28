@@ -16,7 +16,7 @@ export const BUSINESS = {
   email: "saubhagyamangalam@gmail.com",
   emailHref: "mailto:saubhagyamangalam@gmail.com",
   checkInTime: "12:00 PM",
-  checkOutTime: "11:00 AM",
+  checkOutTime: "10:00 AM",
   refundWindow: "5–7 business days",
   // Last reviewed date for the policy documents (keep current on edits).
   policiesUpdated: "10 June 2026",

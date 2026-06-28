@@ -100,7 +100,7 @@ export async function POST(
       purpose:               data.purpose,
       vehicleNo:             data.vehicleNo,
       expectedCheckInTime:   currentTime,
-      expectedCheckOutTime:  "11:00",
+      expectedCheckOutTime:  "10:00",
       completedAt:           now,
     },
     update: {

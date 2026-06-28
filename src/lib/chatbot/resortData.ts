@@ -8,7 +8,7 @@ export const RESORT = {
   email: "saubhagyamangalam@gmail.com",
   googleMaps: "https://maps.app.goo.gl/tm4cHuKkTpe39ymd6",
   checkInTime: "12:00 PM",
-  checkOutTime: "11:00 AM",
+  checkOutTime: "10:00 AM",
   hotelSlug: "the-urban-escape-bhilai",
 
   // The resort has 3 main categories (15 rooms total):
