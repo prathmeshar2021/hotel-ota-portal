@@ -1,4 +1,6 @@
-export const dynamic = "force-dynamic";
+// Pricing and room info change infrequently; serve cached pages and
+// revalidate in the background every 30 s.
+export const revalidate = 30;
 
 import { notFound } from "next/navigation";
 import Image from "next/image";

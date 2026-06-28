@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { computeTotals, REFUNDABLE_DEPOSIT, PARTIAL_PAYMENT_AMOUNT, universalDiscountAmount, discountedNightlyPrice, type UniversalDiscount } from "@/lib/utils/booking-calc";
 import { signIn } from "next-auth/react";
+import Script from "next/script";
 import { useCart } from "@/lib/cart/CartContext";
 import { ShoppingCart, Plus, Minus } from "lucide-react";
 
@@ -406,6 +407,7 @@ export default function BookingForm({
   ];
 
   return (
+    <>
     <div className="space-y-5">
 
       {/* ── Login prompt (shown to guests until dismissed) ─────────────────── */}
@@ -985,6 +987,9 @@ export default function BookingForm({
         )}
       </div>
     </div>
+    {/* Preload Razorpay SDK so it's ready the moment the user clicks Pay */}
+    <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="afterInteractive" />
+    </>
   );
 }
 

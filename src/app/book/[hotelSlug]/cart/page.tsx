@@ -13,6 +13,7 @@ import {
 import Navbar from "@/components/customer/Navbar";
 import { useCart } from "@/lib/cart/CartContext";
 import { computeTotals, REFUNDABLE_DEPOSIT, PARTIAL_PAYMENT_AMOUNT } from "@/lib/utils/booking-calc";
+import Script from "next/script";
 
 declare global {
   interface Window {
@@ -231,6 +232,8 @@ export default function CartPage() {
   const inputCls = "w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/25 text-sm focus:outline-none focus:border-amber-400/40";
 
   return (
+    <>
+    <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="afterInteractive" />
     <div className="min-h-screen bg-[#071209]">
       <Navbar />
       <div className="max-w-5xl mx-auto px-4 pb-28 pt-24">
@@ -417,5 +420,6 @@ export default function CartPage() {
         </div>
       </div>
     </div>
+    </>
   );
 }

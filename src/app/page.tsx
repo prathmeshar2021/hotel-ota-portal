@@ -1,4 +1,6 @@
-export const dynamic = "force-dynamic";
+// Revalidate the homepage every 60 s (ISR). Hotel info, rooms and reviews
+// change infrequently — no need to hit the DB on every visitor request.
+export const revalidate = 60;
 
 import Link from "next/link";
 import Image from "next/image";
