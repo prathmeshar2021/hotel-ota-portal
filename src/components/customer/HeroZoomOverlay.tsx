@@ -24,7 +24,7 @@ import { forwardRef, useEffect, useRef, useState } from "react";
 import { MapPin } from "lucide-react";
 
 const SESSION_KEY = "hero-zoom-played";
-const DURATION = 10000; // ms
+const DURATION = 6000; // ms
 
 // Bhilai / The Urban Escape target coordinates
 const TARGET_LAT = 21.2145;
