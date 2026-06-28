@@ -188,10 +188,10 @@ export default async function HomePage() {
       <section className="bg-[#0D1B0E] border-b border-white/5">
         <Stagger className="max-w-5xl mx-auto px-5 py-7 grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
           {[
-            { to: 15,    suffix: "",   label: "Rooms & Cottages" },
             { to: 6,     suffix: "+",  label: "Luxury Cottages"  },
-            { to: "24/7", suffix: "",  label: "Front Desk"        },
+            { to: 5,     suffix: "+",  label: "Room Categories"  },
             { to: 100,   suffix: "%",  label: "Nature Surrounds"  },
+            { to: 4.9,   suffix: "★",  label: "Guest Rating"      },
           ].map((s) => (
             <StaggerItem key={s.label}>
               <p className="text-2xl font-bold text-amber-400">
@@ -277,8 +277,8 @@ export default async function HomePage() {
 
             {/* Floating card */}
             <div className="absolute -bottom-5 -right-3 glass-card glass-top-highlight rounded-2xl px-5 py-4">
-              <p className="text-white/40 text-[10px] uppercase tracking-wider mb-0.5">Total Rooms</p>
-              <p className="text-white font-bold text-2xl">15 <span className="text-xs font-normal text-white/40">unique rooms</span></p>
+              <p className="text-white/40 text-[10px] uppercase tracking-wider mb-0.5">Guest Rating</p>
+              <p className="text-white font-bold text-2xl">4.9 <span className="text-xs font-normal text-white/40">out of 5</span></p>
             </div>
           </SlideIn>
 

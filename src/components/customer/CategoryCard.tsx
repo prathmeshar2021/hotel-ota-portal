@@ -87,7 +87,7 @@ export default function CategoryCard({
           ) : (
             <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-black/50 text-white/80 flex items-center gap-1.5">
               <CheckCircle2 className="w-3 h-3 text-green-400" />
-              {availableRooms} of {meta.totalRooms} available
+              Available
             </span>
           )}
         </div>
@@ -110,7 +110,7 @@ export default function CategoryCard({
           </p>
           <p className="flex items-center gap-1.5 text-sm text-white/45 mb-3">
             <BedDouble className="w-3.5 h-3.5" style={{ color: accentColor }} />
-            {meta.totalRooms} room{meta.totalRooms !== 1 ? "s" : ""} available
+            Private room
           </p>
 
           <p className="text-xs text-white/35 leading-relaxed line-clamp-2">

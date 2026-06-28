@@ -151,7 +151,7 @@ export default function CategoryBrowser({
                       </p>
                       <p className="flex items-center gap-1.5 text-sm text-white/45 mb-3">
                         <BedDouble className="w-3.5 h-3.5" style={{ color: s.accentColor }} />
-                        {s.totalRooms} room{s.totalRooms !== 1 ? "s" : ""}
+                        Private room
                       </p>
                       <p className="text-xs text-white/35 leading-relaxed line-clamp-2">{s.description}</p>
                     </div>

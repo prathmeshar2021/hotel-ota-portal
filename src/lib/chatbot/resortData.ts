@@ -84,7 +84,6 @@ export const RESORT = {
 
   amenities: [
     "Free Parking",
-    "24/7 Front Desk",
     "Power Backup",
     "Room Service",
     "Lush Garden",
