@@ -7,11 +7,12 @@ import ChatBotWrapper from "@/components/customer/ChatBotWrapper";
 import { CartProvider } from "@/lib/cart/CartContext";
 import CartBar from "@/components/customer/CartBar";
 import { BUSINESS, SITE_URL } from "@/lib/constants/business";
+import { GEO, LOCAL_KEYWORDS } from "@/lib/constants/seo";
 
 const inter = Inter({ subsets: ["latin"] });
 
 const TAGLINE = "Book cottages & rooms at a forest retreat in Bhilai";
-const DESCRIPTION = `Book your stay at ${BUSINESS.brand} — luxury cottages, AC and non-AC rooms at a peaceful forest retreat in ${BUSINESS.city}, ${BUSINESS.state}. Best prices, instant WhatsApp confirmation and secure online payment.`;
+const DESCRIPTION = `Book your stay at ${BUSINESS.brand} — luxury cottages, AC and non-AC rooms at a peaceful forest retreat in ${BUSINESS.city}, ${BUSINESS.state}. 20 min from Durg, 45 min from Raipur. Best prices, instant WhatsApp confirmation and secure online payment.`;
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -23,9 +24,16 @@ export const metadata: Metadata = {
   applicationName: BUSINESS.brand,
   keywords: [
     BUSINESS.brand, "Bhilai resort", "Bhilai hotel", "cottages in Bhilai",
-    "forest retreat Bhilai", "Chhattisgarh resort", "weekend getaway Bhilai",
+    "forest retreat Bhilai", "Chhattisgarh resort", ...LOCAL_KEYWORDS,
   ],
   alternates: { canonical: "/" },
+  // Local-SEO geo tags (Bing/legacy crawlers; harmless for Google).
+  other: {
+    "geo.region": "IN-CT",
+    "geo.placename": `${BUSINESS.city}, ${BUSINESS.state}`,
+    "geo.position": `${GEO.lat};${GEO.lng}`,
+    ICBM: `${GEO.lat}, ${GEO.lng}`,
+  },
   openGraph: {
     type: "website",
     siteName: BUSINESS.brand,

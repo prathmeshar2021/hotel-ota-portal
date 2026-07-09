@@ -37,6 +37,32 @@ interface Props {
   searchParams: Promise<{ checkIn?: string; checkOut?: string; guests?: string }>;
 }
 
+/** Per-hotel SEO metadata — title/description with local intent keywords. */
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const hotel = await prisma.hotel.findUnique({
+    where: { slug, isActive: true },
+    select: { name: true, city: true, state: true, description: true, images: true },
+  });
+  if (!hotel) return { title: "Hotel not found" };
+  // Absolute title — avoids the "| Brand" template doubling the brand name.
+  const title = { absolute: `Rooms & Cottages in ${hotel.city} — ${hotel.name}` };
+  const description =
+    `Book cottages and rooms at ${hotel.name}, ${hotel.city}, ${hotel.state}. ` +
+    `Live availability, best direct rates, instant WhatsApp confirmation. ` +
+    `An easy weekend getaway from Durg, Raipur and Bilaspur.`;
+  return {
+    title,
+    description,
+    alternates: { canonical: `/hotel/${slug}` },
+    openGraph: {
+      title,
+      description,
+      images: hotel.images?.[0] ? [{ url: hotel.images[0], width: 1200, height: 630 }] : undefined,
+    },
+  };
+}
+
 const AMENITY_ICONS: Record<string, React.ReactNode> = {
   WiFi: <Wifi className="w-4 h-4" />,
   Parking: <Car className="w-4 h-4" />,

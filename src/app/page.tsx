@@ -16,6 +16,8 @@ import { getCategoryImages } from "@/lib/utils/room-categories";
 import { getUniversalDiscount } from "@/lib/utils/booking";
 import { discountedNightlyPrice } from "@/lib/utils/booking-calc";
 import HeroZoomOverlay from "@/components/customer/HeroZoomOverlay";
+import { BUSINESS, SITE_URL } from "@/lib/constants/business";
+import { FAQS, GEO, NEARBY_CITIES } from "@/lib/constants/seo";
 
 async function getResort() {
   return prisma.hotel.findUnique({
@@ -165,8 +167,85 @@ export default async function HomePage() {
     });
   }
 
+  // ── Structured data (SEO/AEO): Resort + FAQ + WebSite ─────────────
+  // Search engines and AI answer engines read this to surface the resort
+  // for "resort near Raipur/Durg/Bhilai"-style queries.
+  const prices = (resort?.rooms ?? []).map((r) => r.basePrice);
+  const priceRange =
+    prices.length > 0
+      ? `₹${Math.min(...prices).toLocaleString("en-IN")} - ₹${Math.max(...prices).toLocaleString("en-IN")}`
+      : "₹1,200 - ₹4,500";
+
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": ["Resort", "LodgingBusiness"],
+        "@id": `${SITE_URL}/#resort`,
+        name: BUSINESS.brand,
+        alternateName: `${BUSINESS.brand} By ${BUSINESS.legalName}`,
+        description: `Forest-side resort with luxury pine-wood cottages, AC & non-AC rooms in Kohka, Bhilai — an easy weekend getaway from Durg, Raipur and Bilaspur.`,
+        url: SITE_URL,
+        telephone: BUSINESS.phone,
+        email: BUSINESS.email,
+        priceRange,
+        image: (resort?.images ?? []).slice(0, 5).map((img) =>
+          img.startsWith("http") ? img : `${SITE_URL}${img}`
+        ),
+        address: {
+          "@type": "PostalAddress",
+          streetAddress: "Kohka",
+          addressLocality: BUSINESS.city,
+          addressRegion: BUSINESS.state,
+          addressCountry: "IN",
+        },
+        geo: { "@type": "GeoCoordinates", latitude: GEO.lat, longitude: GEO.lng },
+        hasMap: "https://maps.app.goo.gl/tm4cHuKkTpe39ymd6",
+        checkinTime: "12:00",
+        checkoutTime: "10:00",
+        petsAllowed: false,
+        amenityFeature: [
+          "Free Parking", "Power Backup", "Room Service", "Lush Garden",
+          "Forest View", "Online Check-in", "Smart TV", "Air Conditioning",
+        ].map((name) => ({ "@type": "LocationFeatureSpecification", name, value: true })),
+        ...(avgRating && resort && resort.reviews.length > 0
+          ? {
+              aggregateRating: {
+                "@type": "AggregateRating",
+                ratingValue: avgRating.toFixed(1),
+                reviewCount: resort.reviews.length,
+                bestRating: 5,
+              },
+            }
+          : {}),
+      },
+      {
+        "@type": "WebSite",
+        "@id": `${SITE_URL}/#website`,
+        name: BUSINESS.brand,
+        url: SITE_URL,
+        inLanguage: "en-IN",
+      },
+      {
+        "@type": "FAQPage",
+        "@id": `${SITE_URL}/#faq`,
+        mainEntity: FAQS.map((f) => ({
+          "@type": "Question",
+          name: f.q,
+          acceptedAnswer: { "@type": "Answer", text: f.a },
+        })),
+      },
+    ],
+  };
+
   return (
     <>
+      {/* Structured data for search engines & AI answer engines */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+
       {/* Cinematic zoom-from-space intro — plays once per session */}
       <HeroZoomOverlay heroImage={heroImage} />
 
@@ -442,6 +521,44 @@ export default async function HomePage() {
             ✅ Instant WhatsApp confirmation &nbsp;·&nbsp; 📱 Online check-in &nbsp;·&nbsp; 💰 Best rate guarantee
           </p>
         </FadeUp>
+      </section>
+
+      {/* ════════════════════════════════════════════════════════
+          9.5 FAQ — visible content backing the FAQPage JSON-LD
+      ════════════════════════════════════════════════════════ */}
+      <section id="faq" className="bg-[#071209] py-20 px-5 relative overflow-hidden">
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/5 to-transparent pointer-events-none" />
+        <div className="max-w-3xl mx-auto relative z-10">
+          <FadeUp className="text-center mb-10">
+            <p className="text-amber-400 font-bold text-xs tracking-[0.2em] uppercase mb-3">Good to Know</p>
+            <h2 className="text-3xl font-bold text-white">Frequently Asked Questions</h2>
+          </FadeUp>
+
+          {/* Nearby cities — local search intent */}
+          <FadeUp className="grid grid-cols-3 gap-3 mb-10">
+            {NEARBY_CITIES.map((c) => (
+              <div key={c.city} className="glass-card rounded-2xl p-4 text-center border border-white/8">
+                <p className="text-white font-bold text-sm">{c.city}</p>
+                <p className="text-amber-300/90 text-xs font-semibold mt-1">{c.distance}</p>
+                <p className="text-white/35 text-[11px] mt-0.5">{c.drive} away</p>
+              </div>
+            ))}
+          </FadeUp>
+
+          <div className="space-y-3">
+            {FAQS.map((f) => (
+              <FadeUp key={f.q}>
+                <details className="group bg-white/[0.04] border border-white/8 rounded-2xl overflow-hidden transition-colors hover:border-white/15 open:border-amber-400/25">
+                  <summary className="flex items-center justify-between gap-4 cursor-pointer list-none px-5 py-4 text-white/85 font-semibold text-sm select-none [&::-webkit-details-marker]:hidden">
+                    {f.q}
+                    <span className="shrink-0 text-amber-400/70 transition-transform duration-200 group-open:rotate-45 text-lg leading-none">+</span>
+                  </summary>
+                  <p className="px-5 pb-5 text-sm text-white/45 leading-relaxed">{f.a}</p>
+                </details>
+              </FadeUp>
+            ))}
+          </div>
+        </div>
       </section>
 
       {/* ════════════════════════════════════════════════════════
