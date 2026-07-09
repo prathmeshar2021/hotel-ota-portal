@@ -9,6 +9,25 @@ import { BUSINESS, SITE_URL } from "@/lib/constants/business";
 // Resort geo coordinates (same as the intro fly-in target).
 export const GEO = { lat: 21.2145, lng: 81.3503 } as const;
 
+/**
+ * Entity links (schema.org `sameAs`) — connect this website to the SAME
+ * business across the web. This is a strong signal for Google's Knowledge
+ * Graph & AI Overviews: linking to your own Google Business, Instagram,
+ * Facebook and even your OTA (MakeMyTrip/Goibibo) listings tells Google
+ * "the official site and these listings are one entity", which helps the
+ * official booking site surface alongside the OTAs.
+ *
+ * ⚠️ Fill these with your REAL profile URLs. Leave blank ones out — a wrong
+ * URL hurts more than a missing one.
+ */
+export const SAME_AS: string[] = [
+  // "https://www.instagram.com/...",
+  // "https://www.facebook.com/...",
+  // "https://www.google.com/maps/place/...",   // Google Business Profile share link
+  // "https://www.makemytrip.com/hotels/...",
+  // "https://www.goibibo.com/hotels/...",
+].filter(Boolean);
+
 /** Nearby cities we target for local search — shown on-page and in metadata. */
 export const NEARBY_CITIES = [
   { city: "Durg",     distance: "≈ 10 km", drive: "about 20 minutes" },

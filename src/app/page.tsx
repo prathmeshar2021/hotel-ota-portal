@@ -12,12 +12,12 @@ import ReviewMarquee from "@/components/customer/ReviewMarquee";
 import { prisma } from "@/lib/db/prisma";
 import { Mail, MapPin, Phone, Shield, Tv2, Wind, Zap, Droplets, Car, Wifi, Flame, ArrowRight } from "lucide-react";
 import type { ShowcaseRoom } from "@/components/customer/RoomShowcase";
-import { getCategoryImages } from "@/lib/utils/room-categories";
+import { getCategoryImages, categoryToSlug, type RoomCategoryType } from "@/lib/utils/room-categories";
 import { getUniversalDiscount } from "@/lib/utils/booking";
 import { discountedNightlyPrice } from "@/lib/utils/booking-calc";
 import HeroZoomOverlay from "@/components/customer/HeroZoomOverlay";
 import { BUSINESS, SITE_URL } from "@/lib/constants/business";
-import { FAQS, GEO, NEARBY_CITIES } from "@/lib/constants/seo";
+import { FAQS, GEO, NEARBY_CITIES, SAME_AS } from "@/lib/constants/seo";
 
 async function getResort() {
   return prisma.hotel.findUnique({
@@ -176,6 +176,27 @@ export default async function HomePage() {
       ? `₹${Math.min(...prices).toLocaleString("en-IN")} - ₹${Math.max(...prices).toLocaleString("en-IN")}`
       : "₹1,200 - ₹4,500";
 
+  const bookBase = `${SITE_URL}/hotel/the-urban-escape-bhilai`;
+
+  // One Offer per room category — gives Google a real "from ₹X, bookable here"
+  // signal for the official site, the same thing OTAs surface.
+  const offers = showcaseRooms.map((r) => ({
+    "@type": "Offer",
+    name: `${r.label} — book direct`,
+    category: "LodgingReservation",
+    price: r.price,
+    priceCurrency: "INR",
+    availability: "https://schema.org/InStock",
+    url: `${SITE_URL}/book/the-urban-escape-bhilai/${categoryToSlug(r.type as RoomCategoryType)}`,
+    priceSpecification: {
+      "@type": "UnitPriceSpecification",
+      price: r.price,
+      priceCurrency: "INR",
+      unitText: "per night",
+    },
+    seller: { "@id": `${SITE_URL}/#resort` },
+  }));
+
   const jsonLd = {
     "@context": "https://schema.org",
     "@graph": [
@@ -204,10 +225,34 @@ export default async function HomePage() {
         checkinTime: "12:00",
         checkoutTime: "10:00",
         petsAllowed: false,
+        currenciesAccepted: "INR",
         amenityFeature: [
           "Free Parking", "Power Backup", "Room Service", "Lush Garden",
           "Forest View", "Online Check-in", "Smart TV", "Air Conditioning",
         ].map((name) => ({ "@type": "LocationFeatureSpecification", name, value: true })),
+        // Booking action — signals this is the official site that takes reservations.
+        potentialAction: {
+          "@type": "ReserveAction",
+          target: {
+            "@type": "EntryPoint",
+            urlTemplate: bookBase,
+            inLanguage: "en-IN",
+            actionPlatform: [
+              "http://schema.org/DesktopWebPlatform",
+              "http://schema.org/MobileWebPlatform",
+              "http://schema.org/AndroidPlatform",
+              "http://schema.org/IOSPlatform",
+            ],
+          },
+          result: {
+            "@type": "LodgingReservation",
+            name: `Book your stay at ${BUSINESS.brand}`,
+          },
+        },
+        // Per-room offers with real nightly prices.
+        makesOffer: offers,
+        // Entity links across the web (populate SAME_AS with real profiles).
+        ...(SAME_AS.length > 0 ? { sameAs: SAME_AS } : {}),
         ...(avgRating && resort && resort.reviews.length > 0
           ? {
               aggregateRating: {
