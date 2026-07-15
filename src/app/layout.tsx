@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
@@ -64,6 +65,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <ChatBotWrapper />
           </CartProvider>
         </SessionWrapper>
+        {/* Microsoft Clarity — heatmaps & session recordings (production only) */}
+        {process.env.NODE_ENV === "production" && (
+          <Script id="microsoft-clarity" strategy="afterInteractive">
+            {`(function(c,l,a,r,i,t,y){
+                c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+                t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+                y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+              })(window, document, "clarity", "script", "xmyvpcq03v");`}
+          </Script>
+        )}
       </body>
     </html>
   );

@@ -9,6 +9,7 @@ import HeroSection from "@/components/customer/HeroSection";
 import RoomShowcase from "@/components/customer/RoomShowcase";
 import { FadeUp, FadeIn, SlideIn, ScaleIn, Stagger, StaggerItem, CountUpStat } from "@/components/customer/AnimatedSection";
 import ReviewMarqueeLazy from "@/components/customer/ReviewMarqueeLazy";
+import MobileBookBar from "@/components/customer/MobileBookBar";
 import { prisma } from "@/lib/db/prisma";
 import { Mail, MapPin, Phone, Shield, Tv2, Wind, Zap, Droplets, Car, Wifi, Flame, ArrowRight } from "lucide-react";
 import type { ShowcaseRoom } from "@/components/customer/RoomShowcase";
@@ -702,6 +703,9 @@ export default async function HomePage() {
           © {new Date().getFullYear()} The Urban Escape, By Saubhagya Mangalam. All rights reserved.
         </div>
       </footer>
+
+      {/* Sticky mobile booking bar — appears after scrolling past the hero */}
+      <MobileBookBar minPrice={Math.min(...showcaseRooms.map((r) => r.price))} />
     </>
   );
 }
