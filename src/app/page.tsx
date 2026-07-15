@@ -15,7 +15,6 @@ import type { ShowcaseRoom } from "@/components/customer/RoomShowcase";
 import { getCategoryImages, categoryToSlug, type RoomCategoryType } from "@/lib/utils/room-categories";
 import { getUniversalDiscount } from "@/lib/utils/booking";
 import { discountedNightlyPrice } from "@/lib/utils/booking-calc";
-import HeroZoomOverlay from "@/components/customer/HeroZoomOverlay";
 import { BUSINESS, SITE_URL } from "@/lib/constants/business";
 import { FAQS, GEO, NEARBY_CITIES, SAME_AS } from "@/lib/constants/seo";
 
@@ -290,9 +289,6 @@ export default async function HomePage() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
-
-      {/* Cinematic zoom-from-space intro — plays once per session */}
-      <HeroZoomOverlay heroImage={heroImage} />
 
       <Navbar />
 

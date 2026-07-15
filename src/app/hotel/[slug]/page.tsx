@@ -30,7 +30,6 @@ import {
   Sparkles,
 } from "lucide-react";
 import HotelDateSearch from "@/components/customer/HotelDateSearch";
-import HeroZoomOverlay from "@/components/customer/HeroZoomOverlay";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -230,9 +229,6 @@ export default async function HotelDetailPage({ params, searchParams }: Props) {
 
   return (
     <div className="min-h-screen bg-[#071209]">
-      {/* Cinematic zoom-from-space intro — plays once per session, zero cost */}
-      <HeroZoomOverlay heroImage={heroImage} />
-
       <Navbar />
 
       {/* ── Hero strip ─────────────────────────────── */}
@@ -241,6 +237,8 @@ export default async function HotelDetailPage({ params, searchParams }: Props) {
           src={heroImage}
           alt={hotel.name}
           fill
+          sizes="100vw"
+          quality={60}
           className="object-cover opacity-40"
           priority
         />

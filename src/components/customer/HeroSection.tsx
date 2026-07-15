@@ -99,7 +99,7 @@ export default function HeroSection({ heroImage, galleryImages, avgRating, revie
       <motion.div className="absolute inset-0 -z-10" style={{ y: bgY }}>
         <div className="absolute inset-0 bg-[#071209]" />
         {heroImage ? (
-          <Image src={heroImage} alt="The Urban Escape" fill className="object-cover opacity-40" priority />
+          <Image src={heroImage} alt="The Urban Escape" fill sizes="100vw" quality={60} className="object-cover opacity-40" priority />
         ) : (
           /* Atmospheric gradient when no photo */
           <div className="absolute inset-0">
