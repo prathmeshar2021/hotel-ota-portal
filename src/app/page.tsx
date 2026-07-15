@@ -8,7 +8,7 @@ import Navbar from "@/components/customer/Navbar";
 import HeroSection from "@/components/customer/HeroSection";
 import RoomShowcase from "@/components/customer/RoomShowcase";
 import { FadeUp, FadeIn, SlideIn, ScaleIn, Stagger, StaggerItem, CountUpStat } from "@/components/customer/AnimatedSection";
-import ReviewMarquee from "@/components/customer/ReviewMarquee";
+import ReviewMarqueeLazy from "@/components/customer/ReviewMarqueeLazy";
 import { prisma } from "@/lib/db/prisma";
 import { Mail, MapPin, Phone, Shield, Tv2, Wind, Zap, Droplets, Car, Wifi, Flame, ArrowRight } from "lucide-react";
 import type { ShowcaseRoom } from "@/components/customer/RoomShowcase";
@@ -343,7 +343,7 @@ export default async function HomePage() {
               {/* Main large image */}
               <div className="col-span-3 row-span-3 rounded-3xl overflow-hidden relative bg-gradient-to-br from-amber-900 to-amber-700">
                 {galleryImages[0] ? (
-                  <Image src={galleryImages[0]} alt="Resort" fill className="object-cover" />
+                  <Image src={galleryImages[0]} alt="Resort" fill sizes="(max-width: 768px) 60vw, 30vw" className="object-cover" />
                 ) : (
                   <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
                     {/* Decorative pine ceiling graphic */}
@@ -372,7 +372,7 @@ export default async function HomePage() {
               {/* Top right */}
               <div className="col-span-2 row-span-2 rounded-3xl overflow-hidden relative bg-gradient-to-br from-slate-900 to-slate-700">
                 {galleryImages[1] ? (
-                  <Image src={galleryImages[1]} alt="AC Room" fill className="object-cover" />
+                  <Image src={galleryImages[1]} alt="AC Room" fill sizes="(max-width: 768px) 40vw, 20vw" className="object-cover" />
                 ) : (
                   <div className="absolute inset-0 flex items-center justify-center">
                     {/* Blue LED pattern */}
@@ -385,7 +385,7 @@ export default async function HomePage() {
               {/* Bottom right */}
               <div className="col-span-2 row-span-1 rounded-3xl overflow-hidden relative bg-gradient-to-br from-[#102010] to-[#1A3D12]">
                 {galleryImages[2] ? (
-                  <Image src={galleryImages[2]} alt="Non-AC Room" fill className="object-cover" />
+                  <Image src={galleryImages[2]} alt="Non-AC Room" fill sizes="(max-width: 768px) 40vw, 20vw" className="object-cover" />
                 ) : (
                   <div className="absolute inset-0 flex items-center justify-center">
                     <div className="text-green-600/20 text-4xl">🌿</div>
@@ -481,7 +481,7 @@ export default async function HomePage() {
               {galleryImages.slice(0, 6).map((img, i) => (
                 <StaggerItem key={i}>
                   <div className={`relative overflow-hidden rounded-2xl ${i === 0 ? "md:col-span-2 h-64" : "h-48"}`}>
-                    <Image src={img} alt={`Gallery ${i + 1}`} fill className="object-cover hover:scale-105 transition-transform duration-500" />
+                    <Image src={img} alt={`Gallery ${i + 1}`} fill sizes="(max-width: 768px) 100vw, 33vw" className="object-cover hover:scale-105 transition-transform duration-500" />
                   </div>
                 </StaggerItem>
               ))}
@@ -530,7 +530,7 @@ export default async function HomePage() {
           8. REVIEWS — infinite marquee
       ════════════════════════════════════════════════════════ */}
       {resort && resort.reviews.length > 0 && (
-        <ReviewMarquee reviews={resort.reviews} avgRating={avgRating} />
+        <ReviewMarqueeLazy reviews={resort.reviews} avgRating={avgRating} />
       )}
 
       {/* ════════════════════════════════════════════════════════

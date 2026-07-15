@@ -63,6 +63,7 @@ export default function CategoryCard({
           src={imageSrc}
           alt={meta.displayName}
           fill
+          sizes="(max-width: 640px) 100vw, 224px"
           className={`object-cover transition-transform duration-500 ${!isBooked ? "group-hover:scale-105" : ""}`}
         />
         <div className={`absolute inset-0 bg-gradient-to-r ${meta.accentGradient}`} />

@@ -117,6 +117,7 @@ export default function CategoryBrowser({
                       src={imageSrc}
                       alt={s.displayName}
                       fill
+                      sizes="(max-width: 640px) 100vw, 224px"
                       className={`object-cover transition-transform duration-500 ${!soldOut ? "group-hover:scale-105" : ""}`}
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />

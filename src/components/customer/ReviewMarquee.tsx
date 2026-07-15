@@ -6,10 +6,10 @@
  * Pauses on hover. Uses pure CSS animation (GPU-composited, no layout thrash).
  */
 
-import { motion } from "framer-motion";
 import { Star } from "lucide-react";
+import { FadeUp } from "./AnimatedSection";
 
-interface Review {
+export interface Review {
   id: string;
   rating: number;
   title?: string | null;
@@ -86,13 +86,7 @@ export default function ReviewMarquee({
   return (
     <section className="bg-[#0D1B0E] py-20 overflow-hidden">
       <div className="max-w-6xl mx-auto px-5 mb-12">
-        <motion.div
-          initial={{ opacity: 0, y: 36 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-80px" }}
-          transition={{ duration: 0.75, ease: [0.21, 0.47, 0.32, 0.98] }}
-          className="text-center"
-        >
+        <FadeUp className="text-center">
           <p className="text-amber-400 font-bold text-xs tracking-[0.25em] uppercase mb-3">
             Guest Reviews
           </p>
@@ -115,7 +109,7 @@ export default function ReviewMarquee({
               </span>
             </div>
           )}
-        </motion.div>
+        </FadeUp>
       </div>
 
       {/* Marquee rows — pause on hover */}

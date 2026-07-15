@@ -51,7 +51,7 @@ export default function RoomShowcase({ rooms }: { rooms: ShowcaseRoom[] }) {
           {/* Photo overlay */}
           {room.imageSrc && (
             <div className="absolute inset-0 opacity-[0.35]">
-              <Image src={room.imageSrc} alt={room.label} fill className="object-cover" priority />
+              <Image src={room.imageSrc} alt={room.label} fill sizes="100vw" quality={60} className="object-cover" />
             </div>
           )}
           {/* Depth gradient */}
@@ -164,7 +164,7 @@ export default function RoomShowcase({ rooms }: { rooms: ShowcaseRoom[] }) {
               {/* Main image card */}
               <div className="relative h-[440px] rounded-[28px] overflow-hidden border border-white/10 shadow-2xl">
                 {room.imageSrc ? (
-                  <Image src={room.imageSrc} alt={room.label} fill className="object-cover" />
+                  <Image src={room.imageSrc} alt={room.label} fill sizes="50vw" className="object-cover" />
                 ) : (
                   <div className="absolute inset-0" style={{ background: room.bgGradient }} />
                 )}

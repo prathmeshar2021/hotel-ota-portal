@@ -186,8 +186,8 @@ const WELCOME: Message = {
 
 // ─── Main ChatBot component ───────────────────────────────────────────────────
 
-export default function ChatBot() {
-  const [open, setOpen] = useState(false);
+export default function ChatBot({ initialOpen = false }: { initialOpen?: boolean }) {
+  const [open, setOpen] = useState(initialOpen);
   const [messages, setMessages] = useState<Message[]>([WELCOME]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
