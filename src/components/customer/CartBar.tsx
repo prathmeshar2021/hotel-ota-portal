@@ -13,6 +13,8 @@ export default function CartBar() {
   if (totalRooms === 0 || !hotelSlug) return null;
   // Don't show it on the cart page itself.
   if (pathname?.endsWith("/cart")) return null;
+  // Never over the locked kiosk.
+  if (pathname?.startsWith("/kiosk")) return null;
 
   const categories = items.length;
 
