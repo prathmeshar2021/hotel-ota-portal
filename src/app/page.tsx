@@ -10,6 +10,7 @@ import RoomShowcase from "@/components/customer/RoomShowcase";
 import { FadeUp, FadeIn, SlideIn, ScaleIn, Stagger, StaggerItem, CountUpStat } from "@/components/customer/AnimatedSection";
 import ReviewMarqueeLazy from "@/components/customer/ReviewMarqueeLazy";
 import MobileBookBar from "@/components/customer/MobileBookBar";
+import PackagesSection from "@/components/customer/PackagesSection";
 import { prisma } from "@/lib/db/prisma";
 import { Mail, MapPin, Phone, Shield, Tv2, Wind, Zap, Droplets, Car, Wifi, Flame, ArrowRight } from "lucide-react";
 import type { ShowcaseRoom } from "@/components/customer/RoomShowcase";
@@ -328,6 +329,11 @@ export default async function HomePage() {
           3. ROOM SHOWCASE — full-screen interactive switcher
       ════════════════════════════════════════════════════════ */}
       <RoomShowcase rooms={showcaseRooms} />
+
+      {/* ════════════════════════════════════════════════════════
+          3.5 WEEKEND PACKAGES — occasion-based (couples & groups)
+      ════════════════════════════════════════════════════════ */}
+      <PackagesSection />
 
       {/* ════════════════════════════════════════════════════════
           4. ABOUT — split with floating photo mosaic
@@ -678,6 +684,8 @@ export default async function HomePage() {
           <div className="flex flex-wrap gap-5 text-xs justify-center">
             {[
               { label: "Rooms", href: "#rooms" },
+              { label: "Packages", href: "#packages" },
+              { label: "Weekend from Raipur", href: "/weekend-getaway-from-raipur" },
               { label: "Amenities", href: "#amenities" },
               { label: "Contact", href: "/contact" },
               { label: "My Bookings", href: "/my-bookings" },
