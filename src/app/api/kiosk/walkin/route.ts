@@ -169,6 +169,7 @@ export async function POST(req: NextRequest) {
       balanceDue: totals.totalAmount,
       refundableDeposit: REFUNDABLE_DEPOSIT,
       guestPhone: d.guestPhone,
+      viaKiosk: true,
     },
     select: { bookingRef: true, totalAmount: true },
   });

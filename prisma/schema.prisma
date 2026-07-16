@@ -156,6 +156,9 @@ model Hotel {
   checkInTime  String @default("12:00")
   checkOutTime String @default("11:00")
 
+  // Reception kiosk staff-exit PIN (bcrypt hash; null = no PIN, exit passes through)
+  kioskExitPinHash String?
+
   isActive       Boolean @default(true)
   isApproved     Boolean @default(false)
   commissionRate Float   @default(0)
@@ -364,6 +367,7 @@ model Booking {
   guestPhone      String?   // phone entered at booking time (fallback when primaryGuest has no phone)
 
   onlineCheckinDone Boolean   @default(false)
+  viaKiosk          Boolean   @default(false) // created or checked in at the reception kiosk
   checkedInAt       DateTime?
   checkedOutAt      DateTime?
 

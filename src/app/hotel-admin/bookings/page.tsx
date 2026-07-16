@@ -255,6 +255,11 @@ export default async function BookingsPage({ searchParams }: Props) {
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-full border shrink-0 ${status.cls}`}>
                       {status.label}
                     </span>
+                    {b.viaKiosk && (
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full border shrink-0 bg-amber-500/15 text-amber-300 border-amber-500/30">
+                        Kiosk
+                      </span>
+                    )}
                     {(b.refundStatus === "PENDING" || b.refundStatus === "FAILED") && (
                       <span className="text-xs font-semibold px-2 py-0.5 rounded-full border shrink-0 bg-amber-500/15 text-amber-300 border-amber-500/30">
                         Refund pending

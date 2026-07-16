@@ -79,10 +79,15 @@ export async function POST(req: NextRequest) {
     throw e;
   }
 
-  // Consume the session so the token can't be replayed.
+  // Consume the session so the token can't be replayed; tag the booking as
+  // kiosk-completed (staff badge on the bookings dashboard).
   await prisma.kioskLookup.update({
     where: { id: lookup.id },
     data: { status: "USED" },
+  });
+  await prisma.booking.update({
+    where: { id: booking.id },
+    data: { viaKiosk: true },
   });
 
   // The booking's onlineCheckinDone flag is the staff signal on the bookings

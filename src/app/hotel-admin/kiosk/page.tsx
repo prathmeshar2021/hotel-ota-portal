@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { MonitorSmartphone, Plus, Loader2, Trash2, Copy, Check } from "lucide-react";
+import { MonitorSmartphone, Plus, Loader2, Trash2, Copy, Check, KeyRound } from "lucide-react";
 
 interface KioskDevice {
   id: string;
@@ -34,6 +34,10 @@ export default function KioskAdminPage() {
   const [generating, setGenerating] = useState(false);
   const [pairing, setPairing] = useState<PairingCode | null>(null);
   const [copied, setCopied] = useState(false);
+  const [exitPinSet, setExitPinSet] = useState(false);
+  const [pinInput, setPinInput] = useState("");
+  const [pinSaving, setPinSaving] = useState(false);
+  const [pinMsg, setPinMsg] = useState("");
 
   const load = useCallback(async () => {
     const res = await fetch("/api/hotel-admin/kiosk");
@@ -44,8 +48,25 @@ export default function KioskAdminPage() {
     }
     const data = await res.json();
     setDevices(data.devices ?? []);
+    setExitPinSet(!!data.exitPinSet);
     setLoading(false);
   }, []);
+
+  async function savePin(clear = false) {
+    setPinSaving(true);
+    setPinMsg("");
+    const res = await fetch("/api/hotel-admin/kiosk", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pin: clear ? "" : pinInput }),
+    });
+    setPinSaving(false);
+    const data = await res.json();
+    if (!res.ok) { setPinMsg(data.error ?? "Failed to save PIN."); return; }
+    setExitPinSet(data.exitPinSet);
+    setPinInput("");
+    setPinMsg(clear ? "PIN cleared." : "PIN saved.");
+  }
 
   useEffect(() => { load(); }, [load]);
 
@@ -157,6 +178,46 @@ export default function KioskAdminPage() {
           ))}
         </div>
       )}
+
+      {/* Staff-exit PIN */}
+      <div className="mt-8 bg-white/[0.03] border border-white/8 rounded-2xl p-5">
+        <div className="flex items-center gap-2 mb-1">
+          <KeyRound className="w-4 h-4 text-amber-400" />
+          <h2 className="font-bold text-white">Staff-exit PIN</h2>
+          <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${exitPinSet ? "bg-green-500/15 text-green-400" : "bg-white/8 text-white/40"}`}>
+            {exitPinSet ? "Set" : "Not set"}
+          </span>
+        </div>
+        <p className="text-white/40 text-sm mb-4">
+          Required to leave kiosk mode (5 taps on the top-left corner). If unset, staff can exit without a PIN.
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            value={pinInput}
+            onChange={(e) => setPinInput(e.target.value.replace(/\D/g, "").slice(0, 8))}
+            inputMode="numeric"
+            placeholder="4–8 digits"
+            className="h-11 w-40 rounded-xl bg-white/5 border border-white/12 px-4 text-white tracking-widest focus:outline-none focus:border-amber-400/40"
+          />
+          <button
+            onClick={() => savePin(false)}
+            disabled={pinSaving || pinInput.length < 4}
+            className="h-11 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-black font-bold text-sm"
+          >
+            {exitPinSet ? "Update PIN" : "Set PIN"}
+          </button>
+          {exitPinSet && (
+            <button
+              onClick={() => savePin(true)}
+              disabled={pinSaving}
+              className="h-11 px-4 rounded-xl bg-white/5 hover:bg-white/10 text-white/60 text-sm font-semibold"
+            >
+              Clear
+            </button>
+          )}
+          {pinMsg && <span className="text-sm text-white/50">{pinMsg}</span>}
+        </div>
+      </div>
     </div>
   );
 }
