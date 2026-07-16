@@ -61,7 +61,8 @@ export default function ChatBotWrapper() {
   if (
     pathname.startsWith("/admin") ||
     pathname.startsWith("/auth") ||
-    pathname.startsWith("/checkin")
+    pathname.startsWith("/checkin") ||
+    pathname.startsWith("/kiosk")
   ) {
     return null;
   }

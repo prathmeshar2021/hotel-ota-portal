@@ -21,6 +21,7 @@ import {
   Crown,
   Plane,
   MessageCircle,
+  MonitorSmartphone,
 } from "lucide-react";
 
 interface AdminNavProps {
@@ -39,6 +40,7 @@ const NAV_LINKS = [
   { href: "/hotel-admin/gommt-finance", label: "GoMMT Finance", icon: Plane },
   { href: "/hotel-admin/ledger", label: "Ledger", icon: BookOpenText },
   { href: "/hotel-admin/support", label: "Support Chat", icon: MessageCircle },
+  { href: "/hotel-admin/kiosk", label: "Kiosk Devices", icon: MonitorSmartphone },
 ];
 
 export default function AdminNav({ staffName, staffRole, hotelName, pendingOtps = 0 }: AdminNavProps) {

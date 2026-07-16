@@ -7,7 +7,7 @@ export default function robots(): MetadataRoute.Robots {
       userAgent: "*",
       allow: "/",
       // Keep private/auth/admin/API surfaces out of search results.
-      disallow: ["/admin", "/hotel-admin", "/api/", "/auth/", "/my-bookings", "/checkin", "/booking/confirmation"],
+      disallow: ["/admin", "/hotel-admin", "/api/", "/auth/", "/my-bookings", "/checkin", "/booking/confirmation", "/kiosk"],
     },
     sitemap: `${SITE_URL}/sitemap.xml`,
     host: SITE_URL,

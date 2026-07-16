@@ -180,6 +180,44 @@ model Hotel {
   inventory       RoomInventory[]
   promotions      PromotionScheme[]
   adminOtps       AdminOtp[]
+  kioskDevices    KioskDevice[]
+  kioskPairings   KioskPairingCode[]
+}
+
+// ─── KIOSK (reception self-check-in tablet) ───────────────────────────────────
+
+// A paired reception device. Holds a scoped token that is accepted ONLY on the
+// /api/kiosk/* endpoints — never a staff session. tokenHash is the SHA-256 of a
+// high-entropy random token (the token itself is shown once, at pairing).
+model KioskDevice {
+  id         String    @id @default(cuid())
+  hotelId    String
+  name       String
+  tokenHash  String    @unique
+  isActive   Boolean   @default(true)
+  pairedAt   DateTime  @default(now())
+  lastSeenAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  hotel Hotel @relation(fields: [hotelId], references: [id])
+
+  @@index([hotelId, isActive])
+}
+
+// Short-lived, single-use code an admin generates to pair a new device.
+// Redeeming it mints a KioskDevice + token. `code` is the lookup key (6 digits),
+// protected by short expiry, single use, and rate-limited redemption.
+model KioskPairingCode {
+  id        String    @id @default(cuid())
+  hotelId   String
+  name      String
+  code      String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  hotel Hotel @relation(fields: [hotelId], references: [id])
 }
 
 // ─── HOTEL STAFF ──────────────────────────────────────────────────────────────
