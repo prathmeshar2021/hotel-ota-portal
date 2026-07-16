@@ -220,6 +220,23 @@ model KioskPairingCode {
   hotel Hotel @relation(fields: [hotelId], references: [id])
 }
 
+// The lookup→verify→check-in challenge for a single kiosk self-check-in.
+// `token` is a high-entropy bearer id returned to the tablet; it becomes the
+// check-in session credential once `status` flips to VERIFIED. Device-bound,
+// attempt-limited, single-use, short-lived.
+model KioskLookup {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  deviceId  String
+  bookingId String
+  method    String // "LAST4" | "OTP"
+  otpHash   String? // bcrypt hash, when method = OTP
+  status    String   @default("PENDING") // PENDING | VERIFIED | USED
+  attempts  Int      @default(0)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
 // ─── HOTEL STAFF ──────────────────────────────────────────────────────────────
 
 model HotelStaff {

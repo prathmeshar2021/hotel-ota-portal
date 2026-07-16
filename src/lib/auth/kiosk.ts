@@ -29,12 +29,27 @@ export function hashKioskToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
-/** Generate a 6-digit pairing code (short-lived, single-use). */
-export function generatePairingCode(): string {
-  // randomInt-free, avoids modulo bias by rejection on the rare overflow.
-  let n = randomBytes(4).readUInt32BE(0);
-  n = n % 1_000_000;
+/** Generate a 6-digit code (pairing codes, OTPs). */
+export function generate6DigitCode(): string {
+  const n = randomBytes(4).readUInt32BE(0) % 1_000_000;
   return String(n).padStart(6, "0");
+}
+
+/** Back-compat alias. */
+export const generatePairingCode = generate6DigitCode;
+
+/** High-entropy opaque bearer token (lookup / check-in session ids). */
+export function randomToken(): string {
+  return randomBytes(24).toString("hex"); // 48 chars
+}
+
+/** Mask a guest name for pre-verification display: "Rohit Sharma" → "R•••• Sharma". */
+export function maskName(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "Guest";
+  const first = parts[0];
+  const masked = first.length <= 1 ? first : first[0] + "•".repeat(Math.min(4, Math.max(1, first.length - 1)));
+  return [masked, ...parts.slice(1)].join(" ");
 }
 
 export interface KioskContext {
