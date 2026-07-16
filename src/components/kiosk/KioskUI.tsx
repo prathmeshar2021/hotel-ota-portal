@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, ArrowRight, Delete, Loader2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Delete, Loader2, Minus, Plus } from "lucide-react";
 
 /**
  * Shared kiosk wizard UI: a step frame (progress dots + big Back/Next) and
@@ -137,6 +137,36 @@ function KeypadKey({ children, onClick }: { children: React.ReactNode; onClick: 
     >
       {children}
     </button>
+  );
+}
+
+// ── Stepper (guests / nights) ────────────────────────────────────────────────
+export function Stepper({
+  label, value, min, max, onChange,
+}: { label: string; value: number; min: number; max: number; onChange: (v: number) => void }) {
+  return (
+    <div className="flex items-center justify-between bg-white/5 border border-white/12 rounded-2xl px-5 py-4">
+      <span className="text-xl font-semibold">{label}</span>
+      <div className="flex items-center gap-4">
+        <button
+          onClick={() => onChange(Math.max(min, value - 1))}
+          disabled={value <= min}
+          className="w-14 h-14 rounded-2xl bg-white/8 hover:bg-white/16 disabled:opacity-30 flex items-center justify-center transition-colors"
+          aria-label="Decrease"
+        >
+          <Minus className="w-6 h-6" />
+        </button>
+        <span className="w-10 text-center text-3xl font-bold tabular-nums">{value}</span>
+        <button
+          onClick={() => onChange(Math.min(max, value + 1))}
+          disabled={value >= max}
+          className="w-14 h-14 rounded-2xl bg-amber-500 hover:bg-amber-400 text-black disabled:opacity-30 flex items-center justify-center transition-colors"
+          aria-label="Increase"
+        >
+          <Plus className="w-6 h-6" />
+        </button>
+      </div>
+    </div>
   );
 }
 
