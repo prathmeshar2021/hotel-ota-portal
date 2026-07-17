@@ -27,7 +27,7 @@ export async function PATCH(
   // Verify booking belongs to this hotel
   const booking = await prisma.booking.findFirst({
     where: { id, hotelId: session.user.hotelId },
-    select: { id: true, status: true, roomId: true, refundableDeposit: true },
+    select: { id: true, status: true, roomId: true, refundableDeposit: true, checkInDate: true },
   });
 
   if (!booking) {
@@ -40,6 +40,19 @@ export async function PATCH(
       { error: `Cannot transition from ${booking.status} to ${newStatus}` },
       { status: 400 }
     );
+  }
+
+  // A booking can only be a no-show once its stay has started — you can't
+  // no-show a future reservation. Compare against the start of the check-in day.
+  if (newStatus === "NO_SHOW") {
+    const checkInDay = new Date(booking.checkInDate);
+    checkInDay.setHours(0, 0, 0, 0);
+    if (Date.now() < checkInDay.getTime()) {
+      return NextResponse.json(
+        { error: "Can't mark No Show before the check-in date." },
+        { status: 400 }
+      );
+    }
   }
 
   const now = new Date();

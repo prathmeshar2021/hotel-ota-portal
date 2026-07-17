@@ -146,7 +146,11 @@ export default async function BookingDetailPage({
                 totalAmount={booking.totalAmount}
                 depositAmount={booking.refundableDeposit}
               />
-              <NoShowButton bookingId={booking.id} />
+              {/* No-show only makes sense once the stay has started — hide it for
+                  future reservations so a booking can't be wrongly no-showed. */}
+              {new Date(booking.checkInDate).setHours(0, 0, 0, 0) <= Date.now() && (
+                <NoShowButton bookingId={booking.id} />
+              )}
               {/* Counter check-in opens the full form modal. Always pre-fill from
                   whatever we already hold: the primary guest's stored ID (captured
                   at booking / a previous stay) and any companions added at booking,
