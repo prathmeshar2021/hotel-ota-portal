@@ -44,3 +44,6 @@ next-env.d.ts
 
 # Claude Code local settings
 .claude/
+
+# AppSheet import data (contains guest PII — never commit)
+scripts/appsheet/
