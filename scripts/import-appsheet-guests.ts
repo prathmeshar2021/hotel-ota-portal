@@ -8,8 +8,16 @@
  *   3. Dry run (no writes):   npx tsx scripts/import-appsheet-guests.ts --dry-run
  *   4. Real run:              npx tsx scripts/import-appsheet-guests.ts
  *
+ * Identity & uniqueness (both enforced; safe to re-run):
+ *   • Government ID is the primary key — the same ID across multiple rows
+ *     collapses into ONE guest, so every ID is unique.
+ *   • Phone is the secondary key and stays unique — if a phone is already held
+ *     by a DIFFERENT-named person, the new row never takes that number (it is
+ *     imported phone-less by ID instead, or skipped if it has no ID).
+ *   • A phone-less guest (companion) can adopt a free phone from a later row
+ *     that shares its ID.
+ *
  * Behaviour:
- *   • Upserts by normalized 10-digit phone. Safe to re-run.
  *   • NEW guests: all mapped fields are written.
  *   • EXISTING guests (incl. portal customers): only EMPTY fields are filled —
  *     nothing a guest or staff already entered is ever overwritten.
@@ -161,85 +169,101 @@ async function main() {
     return p;
   };
 
-  // Preload existing guests that carry an ID, keyed by normalized ID — lets
-  // phone-less rows (secondary/companion guests) dedup by government ID.
-  const byNormId = new Map<string, GapFields & { id: string }>();
+  type GuestRec = GapFields & { id: string; name: string; phone: string | null };
+  const sameName = (a: string, b: string) =>
+    a.trim().toLowerCase().replace(/\s+/g, " ") === b.trim().toLowerCase().replace(/\s+/g, " ");
+
+  // Preload EVERY guest into two indexes — by phone and by normalized ID —
+  // so both uniqueness rules hold and dedup works even in --dry-run.
+  // The same record object is shared between both maps, so an update via one is
+  // seen by the other.
+  const byPhone = new Map<string, GuestRec>();
+  const byNormId = new Map<string, GuestRec>();
   for (const g of await prisma.guest.findMany({
-    where: { idNumber: { not: null } },
-    select: { id: true, idNumber: true, gender: true, address: true, occupation: true, idType: true, idFrontUrl: true, idBackUrl: true },
+    select: { id: true, name: true, phone: true, gender: true, address: true, occupation: true, idType: true, idNumber: true, idFrontUrl: true, idBackUrl: true },
   })) {
+    const rec = g as GuestRec;
+    if (g.phone) byPhone.set(g.phone, rec);
     const k = normalizeId(g.idNumber ?? "");
-    if (k && !byNormId.has(k)) byNormId.set(k, g as GapFields & { id: string });
+    if (k && !byNormId.has(k)) byNormId.set(k, rec);
   }
 
   let createdPhone = 0, createdId = 0, updated = 0, unchanged = 0;
   const skipped: { reason: string; row: Record<string, string> }[] = [];
+  let dryId = 0;
+
+  async function createGuest(name: string, phone: string | null, inc: GapFields, normId: string | null): Promise<GuestRec> {
+    let id = `dry_${dryId++}`;
+    if (!DRY_RUN) {
+      const g = await prisma.guest.create({ data: { name, phone: phone ?? undefined, ...undefinedify(inc) }, select: { id: true } });
+      id = g.id;
+    }
+    const rec: GuestRec = { id, name, phone, ...inc };
+    if (phone) byPhone.set(phone, rec);
+    if (normId) byNormId.set(normId, rec);
+    return rec;
+  }
+
+  async function fillGaps(rec: GuestRec, patch: Record<string, unknown>) {
+    if (Object.keys(patch).length === 0) { unchanged++; return; }
+    if (!DRY_RUN) await prisma.guest.update({ where: { id: rec.id }, data: patch });
+    if (typeof patch.phone === "string") byPhone.set(patch.phone, rec); // newly-added phone → index it
+    Object.assign(rec, patch);
+    updated++;
+    console.log(`✏️   Filled ${Object.keys(patch).join(", ")}  →  ${rec.name}`);
+  }
 
   for (const row of rows) {
-    const name       = col(row, "Name");
+    const name       = col(row, "Name").trim();
     const phoneRaw   = col(row, "Contactno.", "Contact no", "Contactno", "Phone");
     const phone      = normalizePhone(phoneRaw);
-    const gender     = mapGender(col(row, "Gender"));
-    const address    = col(row, "Address") || null;
-    const occupation = col(row, "Occupation") || null;
-    const idType     = mapIdType(col(row, "ID Type", "IDType", "id_type"));
-    const idNumber   = col(row, "ID number", "ID Number", "id_number") || null;
-    const idFrontUrl = urlOrNull(col(row, "ID_front", "id_front"));
-    const idBackUrl  = urlOrNull(col(row, "ID_back", "id_back"));
-    const inc: GapFields = { gender, address, occupation, idType, idNumber, idFrontUrl, idBackUrl };
+    const idNumberRaw= col(row, "ID number", "ID Number", "id_number") || null;
+    const normId     = normalizeId(idNumberRaw ?? "");
+    const inc: GapFields = {
+      gender:     mapGender(col(row, "Gender")),
+      address:    col(row, "Address") || null,
+      occupation: col(row, "Occupation") || null,
+      idType:     mapIdType(col(row, "ID Type", "IDType", "id_type")),
+      idNumber:   idNumberRaw,
+      idFrontUrl: urlOrNull(col(row, "ID_front", "id_front")),
+      idBackUrl:  urlOrNull(col(row, "ID_back", "id_back")),
+    };
 
-    if (!name.trim()) { skipped.push({ reason: "no name", row }); continue; }
+    if (!name) { skipped.push({ reason: "no name", row }); continue; }
 
     try {
-      // ── Path 1: valid phone → upsert by phone ──────────────────────────────
-      if (phone) {
-        const existing = await prisma.guest.findUnique({ where: { phone } });
-        if (existing) {
-          const patch = patchOf(existing, inc);
-          if (Object.keys(patch).length === 0) unchanged++;
-          else {
-            if (!DRY_RUN) await prisma.guest.update({ where: { phone }, data: patch });
-            updated++;
-            console.log(`✏️   Filled ${Object.keys(patch).join(", ")}  →  ${existing.name} (${phone})`);
-          }
-        } else {
-          let id = "dry";
-          if (!DRY_RUN) {
-            const g = await prisma.guest.create({ data: { name: name.trim(), phone, ...undefinedify(inc) }, select: { id: true } });
-            id = g.id;
-          }
-          createdPhone++;
-          const k = normalizeId(idNumber ?? "");
-          if (k && !byNormId.has(k)) byNormId.set(k, { id, ...inc });
-          console.log(`✅  Created  ${name.trim()} (${phone})`);
-        }
+      // 1) Same government ID = same person (strongest identity). Merge into it.
+      const rec = normId ? byNormId.get(normId) : undefined;
+      if (rec) {
+        const patch = patchOf(rec, inc);
+        // A phone-less record can adopt a free phone from a later row.
+        if (!rec.phone && phone && !byPhone.has(phone)) patch.phone = phone;
+        await fillGaps(rec, patch);
         continue;
       }
 
-      // ── Path 2: no phone → upsert by government ID ─────────────────────────
-      const normId = normalizeId(idNumber ?? "");
-      if (!normId) { skipped.push({ reason: `no phone & no usable ID ("${phoneRaw}")`, row }); continue; }
-
-      const cached = byNormId.get(normId);
-      if (cached) {
-        const patch = patchOf(cached, inc);
-        if (Object.keys(patch).length === 0) unchanged++;
-        else {
-          if (!DRY_RUN) await prisma.guest.update({ where: { id: cached.id }, data: patch });
-          updated++;
-          Object.assign(cached, patch); // keep the cache current for later dup rows
-          console.log(`✏️   Filled ${Object.keys(patch).join(", ")}  →  ${name.trim()} (ID ${idNumber})`);
+      // 2) Phone already taken by a DIFFERENT-named person → never reuse it.
+      if (phone) {
+        const holder = byPhone.get(phone);
+        if (holder && !sameName(holder.name, name)) {
+          if (normId) { await createGuest(name, null, inc, normId); createdId++; console.log(`✅  Created  ${name} (shared phone → kept phone-less · ID ${idNumberRaw})`); }
+          else skipped.push({ reason: `phone "${phoneRaw}" already used by "${holder.name}", no ID to separate`, row });
+          continue;
         }
-      } else {
-        let id = "dry";
-        if (!DRY_RUN) {
-          const g = await prisma.guest.create({ data: { name: name.trim(), ...undefinedify(inc) }, select: { id: true } });
-          id = g.id;
+        if (holder) { // same name on that phone → same person, just fill gaps (+ID)
+          await fillGaps(holder, patchOf(holder, inc));
+          if (normId && !byNormId.has(normId)) byNormId.set(normId, holder);
+          continue;
         }
-        createdId++;
-        byNormId.set(normId, { id, ...inc });
-        console.log(`✅  Created  ${name.trim()} (no phone · ID ${idNumber})`);
+        // Fresh person with a free phone.
+        await createGuest(name, phone, inc, normId); createdPhone++;
+        console.log(`✅  Created  ${name} (${phone})`);
+        continue;
       }
+
+      // 3) No phone. Create by ID, else nothing to identify them by → skip.
+      if (normId) { await createGuest(name, null, inc, normId); createdId++; console.log(`✅  Created  ${name} (no phone · ID ${idNumberRaw})`); }
+      else skipped.push({ reason: `no phone & no usable ID ("${phoneRaw}")`, row });
     } catch (e) {
       skipped.push({ reason: `db error: ${e instanceof Error ? e.message : e}`, row });
     }
