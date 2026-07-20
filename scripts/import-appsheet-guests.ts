@@ -27,7 +27,7 @@
 import { config } from "dotenv";
 config({ path: ".env.local" });
 
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, Gender, IdType } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
 import fs from "fs";
@@ -75,7 +75,7 @@ function parseCSV(text: string): Record<string, string>[] {
 }
 
 // ─── Mappers (AppSheet enum values → Prisma enums) ────────────────────────────
-function mapGender(raw: string): "MALE" | "FEMALE" | "OTHER" | null {
+function mapGender(raw: string): Gender | null {
   const v = raw.trim().toUpperCase();
   if (v === "MALE" || v === "M") return "MALE";
   if (v === "FEMALE" || v === "F") return "FEMALE";
@@ -84,7 +84,7 @@ function mapGender(raw: string): "MALE" | "FEMALE" | "OTHER" | null {
 }
 
 // AppSheet values: "Aadhar card" | "Driving License" | "any id photo and address proof"
-function mapIdType(raw: string): "AADHAR" | "DRIVING_LICENSE" | "PASSPORT" | "VOTER_ID" | "OTHER" | null {
+function mapIdType(raw: string): IdType | null {
   const v = raw.trim().toUpperCase();
   if (!v) return null;
   if (v.includes("AADHAR") || v.includes("AADHAAR")) return "AADHAR";
@@ -109,6 +109,21 @@ function urlOrNull(raw: string): string | null {
   return /^https?:\/\//i.test(v) ? v : null;
 }
 
+/**
+ * Normalized ID key for de-duplication — strip spaces/punctuation, uppercase.
+ * "296853607805" and "CG08 20100000104" collapse to a stable comparable key.
+ * Returns null for values too short to be a real government ID.
+ */
+function normalizeId(raw: string): string | null {
+  const key = raw.replace(/[\s-]/g, "").toUpperCase();
+  return key.length >= 6 ? key : null;
+}
+
+/** null → undefined so Prisma create skips empty optional fields. */
+function undefinedify<T extends Record<string, unknown>>(o: T): { [K in keyof T]: NonNullable<T[K]> | undefined } {
+  return Object.fromEntries(Object.entries(o).map(([k, v]) => [k, v ?? undefined])) as never;
+}
+
 function col(row: Record<string, string>, ...names: string[]): string {
   for (const n of names) {
     const key = Object.keys(row).find((k) => k.trim().toLowerCase() === n.toLowerCase());
@@ -129,7 +144,35 @@ async function main() {
   const rows = parseCSV(fs.readFileSync(csvPath, "utf-8"));
   console.log(`📋  ${rows.length} rows in CSV${DRY_RUN ? "   (DRY RUN — no writes)" : ""}\n`);
 
-  let created = 0, updated = 0, unchanged = 0;
+  // Fields we import; used for gap-fill comparisons in both dedup paths.
+  type GapFields = {
+    gender: Gender | null; address: string | null; occupation: string | null;
+    idType: IdType | null; idNumber: string | null; idFrontUrl: string | null; idBackUrl: string | null;
+  };
+  const patchOf = (ex: GapFields, inc: GapFields): Record<string, unknown> => {
+    const p: Record<string, unknown> = {};
+    if (!ex.gender && inc.gender)         p.gender = inc.gender;
+    if (!ex.address && inc.address)       p.address = inc.address;
+    if (!ex.occupation && inc.occupation) p.occupation = inc.occupation;
+    if (!ex.idType && inc.idType)         p.idType = inc.idType;
+    if (!ex.idNumber && inc.idNumber)     p.idNumber = inc.idNumber;
+    if (!ex.idFrontUrl && inc.idFrontUrl) p.idFrontUrl = inc.idFrontUrl;
+    if (!ex.idBackUrl && inc.idBackUrl)   p.idBackUrl = inc.idBackUrl;
+    return p;
+  };
+
+  // Preload existing guests that carry an ID, keyed by normalized ID — lets
+  // phone-less rows (secondary/companion guests) dedup by government ID.
+  const byNormId = new Map<string, GapFields & { id: string }>();
+  for (const g of await prisma.guest.findMany({
+    where: { idNumber: { not: null } },
+    select: { id: true, idNumber: true, gender: true, address: true, occupation: true, idType: true, idFrontUrl: true, idBackUrl: true },
+  })) {
+    const k = normalizeId(g.idNumber ?? "");
+    if (k && !byNormId.has(k)) byNormId.set(k, g as GapFields & { id: string });
+  }
+
+  let createdPhone = 0, createdId = 0, updated = 0, unchanged = 0;
   const skipped: { reason: string; row: Record<string, string> }[] = [];
 
   for (const row of rows) {
@@ -143,54 +186,65 @@ async function main() {
     const idNumber   = col(row, "ID number", "ID Number", "id_number") || null;
     const idFrontUrl = urlOrNull(col(row, "ID_front", "id_front"));
     const idBackUrl  = urlOrNull(col(row, "ID_back", "id_back"));
+    const inc: GapFields = { gender, address, occupation, idType, idNumber, idFrontUrl, idBackUrl };
 
     if (!name.trim()) { skipped.push({ reason: "no name", row }); continue; }
-    if (!phone) { skipped.push({ reason: `invalid phone "${phoneRaw}"`, row }); continue; }
 
     try {
-      const existing = await prisma.guest.findUnique({ where: { phone } });
-
-      if (existing) {
-        // Fill gaps only — never overwrite anything already present.
-        const patch: Record<string, unknown> = {};
-        if (!existing.gender && gender)         patch.gender = gender;
-        if (!existing.address && address)       patch.address = address;
-        if (!existing.occupation && occupation) patch.occupation = occupation;
-        if (!existing.idType && idType)         patch.idType = idType;
-        if (!existing.idNumber && idNumber)     patch.idNumber = idNumber;
-        if (!existing.idFrontUrl && idFrontUrl) patch.idFrontUrl = idFrontUrl;
-        if (!existing.idBackUrl && idBackUrl)   patch.idBackUrl = idBackUrl;
-
-        if (Object.keys(patch).length === 0) {
-          unchanged++;
+      // ── Path 1: valid phone → upsert by phone ──────────────────────────────
+      if (phone) {
+        const existing = await prisma.guest.findUnique({ where: { phone } });
+        if (existing) {
+          const patch = patchOf(existing, inc);
+          if (Object.keys(patch).length === 0) unchanged++;
+          else {
+            if (!DRY_RUN) await prisma.guest.update({ where: { phone }, data: patch });
+            updated++;
+            console.log(`✏️   Filled ${Object.keys(patch).join(", ")}  →  ${existing.name} (${phone})`);
+          }
         } else {
-          if (!DRY_RUN) await prisma.guest.update({ where: { phone }, data: patch });
+          let id = "dry";
+          if (!DRY_RUN) {
+            const g = await prisma.guest.create({ data: { name: name.trim(), phone, ...undefinedify(inc) }, select: { id: true } });
+            id = g.id;
+          }
+          createdPhone++;
+          const k = normalizeId(idNumber ?? "");
+          if (k && !byNormId.has(k)) byNormId.set(k, { id, ...inc });
+          console.log(`✅  Created  ${name.trim()} (${phone})`);
+        }
+        continue;
+      }
+
+      // ── Path 2: no phone → upsert by government ID ─────────────────────────
+      const normId = normalizeId(idNumber ?? "");
+      if (!normId) { skipped.push({ reason: `no phone & no usable ID ("${phoneRaw}")`, row }); continue; }
+
+      const cached = byNormId.get(normId);
+      if (cached) {
+        const patch = patchOf(cached, inc);
+        if (Object.keys(patch).length === 0) unchanged++;
+        else {
+          if (!DRY_RUN) await prisma.guest.update({ where: { id: cached.id }, data: patch });
           updated++;
-          console.log(`✏️   Filled ${Object.keys(patch).join(", ")}  →  ${existing.name} (${phone})`);
+          Object.assign(cached, patch); // keep the cache current for later dup rows
+          console.log(`✏️   Filled ${Object.keys(patch).join(", ")}  →  ${name.trim()} (ID ${idNumber})`);
         }
       } else {
+        let id = "dry";
         if (!DRY_RUN) {
-          await prisma.guest.create({
-            data: {
-              name: name.trim(),
-              phone,
-              gender:     gender     ?? undefined,
-              address:    address    ?? undefined,
-              occupation: occupation ?? undefined,
-              idType:     idType     ?? undefined,
-              idNumber:   idNumber   ?? undefined,
-              idFrontUrl: idFrontUrl ?? undefined,
-              idBackUrl:  idBackUrl  ?? undefined,
-            },
-          });
+          const g = await prisma.guest.create({ data: { name: name.trim(), ...undefinedify(inc) }, select: { id: true } });
+          id = g.id;
         }
-        created++;
-        console.log(`✅  Created  ${name.trim()} (${phone})`);
+        createdId++;
+        byNormId.set(normId, { id, ...inc });
+        console.log(`✅  Created  ${name.trim()} (no phone · ID ${idNumber})`);
       }
     } catch (e) {
       skipped.push({ reason: `db error: ${e instanceof Error ? e.message : e}`, row });
     }
   }
+  const created = createdPhone + createdId;
 
   // Skipped-rows report for manual review
   if (skipped.length > 0) {
@@ -208,7 +262,7 @@ async function main() {
   }
 
   console.log(`\n─────────────────────────────`);
-  console.log(`✅  Created  : ${created}`);
+  console.log(`✅  Created  : ${created}   (${createdPhone} by phone · ${createdId} by ID, no phone)`);
   console.log(`✏️   Updated  : ${updated}  (gaps filled on existing guests)`);
   console.log(`⏭️   Unchanged: ${unchanged}`);
   console.log(`⚠️   Skipped  : ${skipped.length}`);
