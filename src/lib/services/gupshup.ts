@@ -87,11 +87,19 @@ async function sendTemplate(
 
   const destination = phone.startsWith("91") ? phone : `91${phone}`;
 
+  // WhatsApp/Meta rejects a template send if ANY parameter is empty or contains
+  // newlines/tabs — the whole message silently fails. Sanitise every param so a
+  // missing value (e.g. a coupon with no promo name) can't break delivery.
+  const safeParams = params.map((p) => {
+    const v = (p ?? "").replace(/[\t\n\r]+/g, " ").trim();
+    return v === "" ? "-" : v;
+  });
+
   const body = new URLSearchParams({
     channel: "whatsapp",
     source,
     destination,
-    template: JSON.stringify({ id: templateId, params }),
+    template: JSON.stringify({ id: templateId, params: safeParams }),
     "src.name": appName,
   });
 
@@ -258,7 +266,7 @@ export const gupshup = {
       return sendTemplate(phone, process.env.GUPSHUP_TEMPLATE_COUPON, [
         data.guestName ?? "Guest",
         data.hotelName,
-        data.note ?? "",
+        data.note?.trim() || "Here's an exclusive discount on your next stay",
         data.code,
         data.discountLabel,
         data.expiry ?? "No expiry",
