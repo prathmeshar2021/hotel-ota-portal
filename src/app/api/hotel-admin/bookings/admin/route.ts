@@ -32,7 +32,8 @@ const AdminBookingSchema = z.object({
   paymentMode: z.enum(["CASH", "ONLINE", "MIXED"]),
   cashPaid: z.number().min(0).default(0),
   onlinePaid: z.number().min(0).default(0),
-  refundableDeposit: z.number().min(0).default(0),
+  depositCollected: z.number().min(0).default(0),
+  depositMode: z.enum(["CASH", "ONLINE"]).optional(),
   couponCode: z.string().optional(),
   specialRequests: z.string().optional(),
 });
@@ -170,6 +171,8 @@ export async function POST(req: NextRequest) {
       onlinePaid: d.onlinePaid,
       balanceDue,
       refundableDeposit: REFUNDABLE_DEPOSIT,
+      depositCollected: d.depositCollected,
+      depositMode: d.depositCollected > 0 ? (d.depositMode ?? "CASH") : undefined,
       specialRequests: d.specialRequests || undefined,
     },
   });

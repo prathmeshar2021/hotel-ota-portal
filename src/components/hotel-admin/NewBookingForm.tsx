@@ -90,6 +90,9 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
   const [paymentMode, setPaymentMode] = useState<"CASH" | "ONLINE" | "MIXED">("CASH");
   const [cashPaid, setCashPaid] = useState("");
   const [onlinePaid, setOnlinePaid] = useState("");
+  const [collectDeposit, setCollectDeposit] = useState(true);
+  const [depositAmt, setDepositAmt] = useState(String(REFUNDABLE_DEPOSIT));
+  const [depositMode, setDepositMode] = useState<"CASH" | "ONLINE">("CASH");
   const [specialRequests, setSpecialRequests] = useState("");
   // Coupon
   const [couponCode, setCouponCode] = useState("");
@@ -243,7 +246,8 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
           paymentMode,
           cashPaid: Number(cashPaid) || 0,
           onlinePaid: Number(onlinePaid) || 0,
-          refundableDeposit: REFUNDABLE_DEPOSIT,
+          depositCollected: collectDeposit ? Number(depositAmt) || 0 : 0,
+          depositMode,
           couponCode: appliedCoupon ? couponCode.trim().toUpperCase() : undefined,
           specialRequests: specialRequests || undefined,
         }),
@@ -695,13 +699,28 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
                     placeholder="0" className={inputCls} />
                 </div>
               )}
-              {/* Fixed deposit — not editable */}
-              <div className="flex items-center justify-between bg-green-500/5 border border-green-500/15 rounded-xl px-4 py-3">
-                <div className="flex items-center gap-2 text-green-400/80 text-sm font-semibold">
-                  <ShieldCheck className="w-4 h-4 shrink-0" />
-                  Refundable Security Deposit
-                </div>
-                <span className="font-bold text-green-400">₹{REFUNDABLE_DEPOSIT}</span>
+              {/* Refundable deposit — collect now (editable) or skip / take at check-in */}
+              <div className="bg-green-500/5 border border-green-500/15 rounded-xl px-4 py-3 space-y-3">
+                <label className="flex items-center justify-between cursor-pointer">
+                  <span className="flex items-center gap-2 text-green-400/80 text-sm font-semibold">
+                    <ShieldCheck className="w-4 h-4 shrink-0" /> Collect refundable deposit now
+                  </span>
+                  <input type="checkbox" checked={collectDeposit} onChange={e => setCollectDeposit(e.target.checked)} className="accent-green-500 w-4 h-4" />
+                </label>
+                {collectDeposit ? (
+                  <div className="flex gap-2">
+                    <input type="number" min={0} value={depositAmt} onChange={e => setDepositAmt(e.target.value)}
+                      placeholder="Amount" className={`${inputCls} flex-1`} />
+                    {(["CASH", "ONLINE"] as const).map(m => (
+                      <button type="button" key={m} onClick={() => setDepositMode(m)}
+                        className={`px-3 rounded-xl text-xs font-semibold border transition-all ${depositMode === m ? "bg-white/10 border-white/25 text-white" : "border-white/10 text-white/40"}`}>
+                        {m === "CASH" ? "Cash" : "UPI"}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-white/35">Deposit can be collected at check-in instead.</p>
+                )}
               </div>
 
               {/* Coupon code */}
