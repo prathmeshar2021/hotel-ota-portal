@@ -9,6 +9,20 @@ export const authConfig = {
   pages: { signIn: "/auth/login" },
   providers: [], // providers live in auth.ts (Node.js only)
   callbacks: {
+    // Keep post-login redirects on our own site. The default only honours an
+    // absolute callbackUrl when its origin EXACTLY matches AUTH_URL — so a
+    // www ↔ apex mismatch silently sends the user home. Treat www and apex as
+    // the same site, and always honour relative URLs.
+    redirect({ url, baseUrl }) {
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
+      try {
+        const target = new URL(url);
+        const base = new URL(baseUrl);
+        const strip = (h: string) => h.replace(/^www\./, "");
+        if (strip(target.hostname) === strip(base.hostname)) return url;
+      } catch { /* malformed url → fall through */ }
+      return baseUrl;
+    },
     jwt({ token, user }) {
       // user is only present on initial sign-in
       if (user) {

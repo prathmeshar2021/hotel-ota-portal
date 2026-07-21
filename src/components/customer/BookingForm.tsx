@@ -449,7 +449,7 @@ export default function BookingForm({
               const cbUrl = new URL(window.location.href);
               cbUrl.searchParams.set("checkIn", localCheckIn);
               cbUrl.searchParams.set("checkOut", localCheckOut);
-              signIn("google", { callbackUrl: cbUrl.toString() });
+              signIn("google", { callbackUrl: cbUrl.pathname + cbUrl.search });
             }}
             className="w-full flex items-center justify-center gap-2.5 text-sm font-bold py-3 rounded-xl bg-white text-gray-800 hover:bg-gray-100 transition-all mb-3"
           >
@@ -470,7 +470,7 @@ export default function BookingForm({
               const cbUrl = new URL(window.location.href);
               cbUrl.searchParams.set("checkIn", localCheckIn);
               cbUrl.searchParams.set("checkOut", localCheckOut);
-              window.location.href = `/auth/login?callbackUrl=${encodeURIComponent(cbUrl.toString())}`;
+              window.location.href = `/auth/login?callbackUrl=${encodeURIComponent(cbUrl.pathname + cbUrl.search)}`;
             }}
             className="w-full flex items-center justify-center gap-2 text-sm font-bold py-3 rounded-xl bg-white/8 hover:bg-white/12 border border-white/10 text-white/80 hover:text-white transition-all mb-4"
           >
@@ -669,7 +669,7 @@ export default function BookingForm({
                 const cbUrl = new URL(window.location.href);
                 cbUrl.searchParams.set("checkIn", localCheckIn);
                 cbUrl.searchParams.set("checkOut", localCheckOut);
-                signIn("google", { callbackUrl: cbUrl.toString() });
+                signIn("google", { callbackUrl: cbUrl.pathname + cbUrl.search });
               }}
               className="flex items-center gap-1.5 text-[11px] font-semibold text-white/40 hover:text-white/70 border border-white/10 hover:border-white/20 bg-white/3 hover:bg-white/6 px-3 py-1.5 rounded-xl transition-all"
             >
