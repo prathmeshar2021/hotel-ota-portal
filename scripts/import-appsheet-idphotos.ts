@@ -110,6 +110,17 @@ async function uploadRemote(imageUrl: string, folder = FOLDER): Promise<string> 
   return data.secure_url as string;
 }
 
+/**
+ * A guest ID uploaded as a PDF is stored by Cloudinary with a .pdf URL, which
+ * (a) an <img> tag can't render and (b) Cloudinary blocks from direct delivery.
+ * Rewrite it to deliver the first page rasterized to JPG, which renders fine.
+ */
+export function toImageUrl(url: string): string {
+  return /\.pdf$/i.test(url)
+    ? url.replace("/upload/", "/upload/pg_1/").replace(/\.pdf$/i, ".jpg")
+    : url;
+}
+
 /** Upload a Drive file id via Cloudinary remote fetch (CDN URL, then download URL). */
 async function migratePhoto(fileId: string): Promise<string> {
   const candidates = [
@@ -118,7 +129,7 @@ async function migratePhoto(fileId: string): Promise<string> {
   ];
   let lastErr: unknown;
   for (const url of candidates) {
-    try { return await uploadRemote(url); } catch (e) { lastErr = e; }
+    try { return toImageUrl(await uploadRemote(url)); } catch (e) { lastErr = e; }
   }
   throw lastErr;
 }
