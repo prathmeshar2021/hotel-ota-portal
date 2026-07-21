@@ -187,6 +187,7 @@ export default async function BookingDetailPage({
               bookingId={booking.id}
               currentStatus={booking.status}
               depositAmount={booking.refundableDeposit}
+              balanceDue={booking.balanceDue}
             />
           )}
         </div>

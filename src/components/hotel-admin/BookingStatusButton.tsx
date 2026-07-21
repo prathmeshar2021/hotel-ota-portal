@@ -12,11 +12,12 @@ interface Props {
   bookingId: string;
   currentStatus: string;
   depositAmount?: number; // refundableDeposit from booking
+  balanceDue?: number;    // outstanding amount owed by the guest
 }
 
 // ─── Check-In Button ──────────────────────────────────────────────────────────
 // Simple: just confirm then PATCH
-export default function BookingStatusButton({ bookingId, currentStatus, depositAmount = 0 }: Props) {
+export default function BookingStatusButton({ bookingId, currentStatus, depositAmount = 0, balanceDue = 0 }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [checkoutModalOpen, setCheckoutModalOpen] = useState(false);
@@ -110,6 +111,7 @@ export default function BookingStatusButton({ bookingId, currentStatus, depositA
         <CheckoutDepositModal
           bookingId={bookingId}
           depositAmount={depositAmount}
+          balanceDue={balanceDue}
           onClose={() => setCheckoutModalOpen(false)}
           onSuccess={() => { setCheckoutModalOpen(false); router.refresh(); }}
         />
@@ -123,22 +125,53 @@ export default function BookingStatusButton({ bookingId, currentStatus, depositA
 interface ModalProps {
   bookingId: string;
   depositAmount: number;
+  balanceDue: number;
   onClose: () => void;
   onSuccess: () => void;
 }
 
 type DepositDecision = "FULL_REFUND" | "PARTIAL_DEDUCTION" | "FULL_DEDUCTION";
 
-function CheckoutDepositModal({ bookingId, depositAmount, onClose, onSuccess }: ModalProps) {
+function CheckoutDepositModal({ bookingId, depositAmount, balanceDue, onClose, onSuccess }: ModalProps) {
   const [loading, setLoading] = useState(false);
   const [decision, setDecision] = useState<DepositDecision | null>(null);
   const [deductAmount, setDeductAmount] = useState("");
   const [notes, setNotes] = useState("");
 
+  // Outstanding balance the guest still owes — must be settled or explicitly
+  // waived before checkout can complete.
+  const [due, setDue] = useState(balanceDue);
+  const [collecting, setCollecting] = useState(false);
+  const [payMode, setPayMode] = useState<"CASH" | "ONLINE">("CASH");
+  const [waivePending, setWaivePending] = useState(false);
+
   // derived
   const deduct = Number(deductAmount) || 0;
   const refundBack = Math.max(0, depositAmount - deduct);
   const damageExtra = deduct > depositAmount ? deduct - depositAmount : 0;
+
+  // Checkout is blocked while money is owed, unless staff explicitly waive it.
+  const dueBlocks = due > 0 && !waivePending;
+
+  async function collectDue() {
+    setCollecting(true);
+    try {
+      const res = await fetch(`/api/hotel-admin/bookings/${bookingId}/payment`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount: due, mode: payMode, notes: "Collected at checkout" }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setDue(data.newBalance ?? 0);
+        toast.success(data.message ?? "Payment collected");
+      } else {
+        toast.error(data.error ?? "Failed to record payment");
+      }
+    } finally {
+      setCollecting(false);
+    }
+  }
 
   async function doCheckout(opts: { depositRefunded: boolean; depositDeducted: number; depositNotes?: string }) {
     setLoading(true);
@@ -192,6 +225,48 @@ function CheckoutDepositModal({ bookingId, depositAmount, onClose, onSuccess }: 
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* ⚠️ Outstanding balance due — prompt to collect before checkout */}
+        {due > 0 && (
+          <div className="bg-red-500/8 border border-red-500/25 rounded-xl px-4 py-3.5 mb-5">
+            <p className="text-sm text-red-300 font-bold flex items-center gap-1.5">
+              <AlertTriangle className="w-4 h-4" />
+              ₹{due.toLocaleString("en-IN")} payment due — collect from the guest
+            </p>
+            <div className="flex gap-2 mt-3">
+              {(["CASH", "ONLINE"] as const).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setPayMode(m)}
+                  disabled={collecting}
+                  className={`flex-1 py-2 rounded-lg text-xs font-semibold border transition-all ${
+                    payMode === m ? "bg-white/10 border-white/25 text-white" : "border-white/10 text-white/40 hover:text-white/70"
+                  }`}
+                >
+                  {m === "CASH" ? "Cash" : "UPI / Online"}
+                </button>
+              ))}
+              <button
+                onClick={collectDue}
+                disabled={collecting}
+                className="flex-[1.4] py-2 rounded-lg text-xs font-bold bg-green-500/20 hover:bg-green-500/30 border border-green-500/30 text-green-300 transition-all disabled:opacity-50"
+              >
+                {collecting ? "Recording…" : `Mark ₹${due.toLocaleString("en-IN")} collected`}
+              </button>
+            </div>
+            <label className="flex items-center gap-2 mt-3 text-xs text-white/40 cursor-pointer">
+              <input type="checkbox" checked={waivePending} onChange={(e) => setWaivePending(e.target.checked)} className="accent-red-400" />
+              Check out with dues still pending
+            </label>
+          </div>
+        )}
+        {due === 0 && balanceDue > 0 && (
+          <div className="bg-green-500/8 border border-green-500/20 rounded-xl px-4 py-2.5 mb-5">
+            <p className="text-sm text-green-300 font-semibold flex items-center gap-1.5">
+              <CheckCircle2 className="w-4 h-4" /> Payment settled
+            </p>
+          </div>
+        )}
 
         {/* Deposit info */}
         {depositAmount > 0 && (
@@ -326,13 +401,15 @@ function CheckoutDepositModal({ bookingId, depositAmount, onClose, onSuccess }: 
             onClick={depositAmount === 0
               ? () => doCheckout({ depositRefunded: true, depositDeducted: 0 })
               : handleCheckout}
-            disabled={loading || (depositAmount > 0 && !decision)}
+            disabled={loading || collecting || dueBlocks || (depositAmount > 0 && !decision)}
             className="flex-1 py-3 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/25 text-amber-400 hover:text-amber-300 text-sm font-bold transition-all disabled:opacity-50"
           >
             {loading ? (
               <span className="flex items-center justify-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin" /> Checking out…
               </span>
+            ) : dueBlocks ? (
+              "Collect payment first"
             ) : (
               "Confirm Checkout"
             )}
