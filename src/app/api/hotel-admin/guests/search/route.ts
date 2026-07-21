@@ -34,11 +34,15 @@ export async function GET(req: NextRequest) {
     where: {
       AND: [
         { OR: matchOr },
-        // Only guests connected to this hotel (privacy + relevance).
+        // Guests connected to this hotel (privacy + relevance), plus imported /
+        // standalone guests that have no booking history anywhere yet — those
+        // belong to no other hotel, so surfacing them here is safe and lets
+        // staff pick a returning guest imported from the old system.
         {
           OR: [
             { bookings: { some: { hotelId } } },
             { companionIn: { some: { booking: { hotelId } } } },
+            { AND: [{ bookings: { none: {} } }, { companionIn: { none: {} } }] },
           ],
         },
       ],
