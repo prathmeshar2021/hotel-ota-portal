@@ -127,7 +127,6 @@ export async function POST(req: NextRequest) {
         roomRentPerNight: pricePerNight,
         noOfNights,
         couponDiscount,
-        refundableDeposit: REFUNDABLE_DEPOSIT, // per room
       });
       for (let i = 0; i < item.qty; i++) {
         rows.push({

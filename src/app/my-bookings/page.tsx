@@ -182,7 +182,7 @@ export default async function MyBookingsPage() {
                           ) : booking.refundableDeposit > 0 ? (
                             <p className="text-[10px] text-green-400/70 mt-0.5 flex items-center gap-0.5">
                               <ShieldCheck className="w-2.5 h-2.5" />
-                              incl. ₹{booking.refundableDeposit} deposit
+                              + ₹{booking.refundableDeposit} deposit at check-in
                             </p>
                           ) : null}
                         </div>

@@ -145,7 +145,7 @@ export async function POST(req: NextRequest) {
 
   const universal = await getUniversalDiscount(ctx.hotelId);
   const nightly = discountedNightlyPrice(universal, room.basePrice);
-  const totals = computeTotals({ roomRentPerNight: nightly, noOfNights: nights, refundableDeposit: REFUNDABLE_DEPOSIT });
+  const totals = computeTotals({ roomRentPerNight: nightly, noOfNights: nights });
   const bookingRef = await generateBookingRef();
 
   // Category-level, unpaid — staff assign room + collect payment at the desk.

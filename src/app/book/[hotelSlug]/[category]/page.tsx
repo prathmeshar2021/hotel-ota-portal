@@ -216,15 +216,13 @@ export default async function BookingPage({ params, searchParams }: Props) {
                       </div>
                     </>
                   )}
-                  <div className="flex justify-between text-green-400 text-xs">
-                    <span className="flex items-center gap-1">
-                      <ShieldCheck className="w-3 h-3" /> Refundable deposit
-                    </span>
-                    <span>₹{REFUNDABLE_DEPOSIT}</span>
-                  </div>
                   <div className="flex justify-between font-bold text-white text-base pt-2 border-t border-white/8">
-                    <span>Total</span>
+                    <span>Total payable now</span>
                     <span style={{ color: meta.accentColor }}>₹{totals.totalAmount.toLocaleString("en-IN")}</span>
+                  </div>
+                  <div className="flex items-start gap-1.5 text-green-400/80 text-xs pt-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5 shrink-0 mt-px" />
+                    <span>+ ₹{REFUNDABLE_DEPOSIT} refundable deposit, collected at check-in (not now)</span>
                   </div>
                 </div>
 

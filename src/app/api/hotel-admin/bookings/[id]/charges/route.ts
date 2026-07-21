@@ -64,11 +64,13 @@ export async function POST(
         mode: "CASH", // default — collected via CollectPaymentModal at checkout
       },
     }),
+    // Extra charges accrue into additionalCharges. They are NOT room revenue
+    // (kept out of totalAmount/balanceDue) — at checkout they are offset by the
+    // refundable deposit and only any excess is collected.
     prisma.booking.update({
       where: { id },
       data: {
-        totalAmount: { increment: amount },
-        balanceDue: { increment: amount },
+        additionalCharges: { increment: amount },
       },
     }),
   ]);

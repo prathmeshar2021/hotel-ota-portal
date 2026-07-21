@@ -8,6 +8,7 @@ import {
   ShieldCheck, Upload,
 } from "lucide-react";
 import GuestSearch, { type GuestResult } from "./GuestSearch";
+import { REFUNDABLE_DEPOSIT } from "@/lib/utils/booking-calc";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -198,6 +199,11 @@ export default function CounterCheckinModal({
   const [purpose, setPurpose]       = useState(existingData?.purpose ?? "");
   const [vehicleNo, setVehicleNo]   = useState(existingData?.vehicleNo ?? "");
 
+  // Refundable deposit — editable, may be skipped.
+  const [collectDeposit, setCollectDeposit] = useState(true);
+  const [depositAmount, setDepositAmount]   = useState(String(REFUNDABLE_DEPOSIT));
+  const [depositMode, setDepositMode]       = useState<"CASH" | "ONLINE">("CASH");
+
   // Companions
   const initCompanions = (): CompanionData[] => {
     if (existingData?.companions?.length) {
@@ -362,6 +368,8 @@ export default function CounterCheckinModal({
           idType, idNumber: idNumber.trim(), idFrontUrl, idBackUrl,
           comingFrom: comingFrom.trim(), goingTo: goingTo.trim(),
           purpose, vehicleNo: vehicleNo.trim() || undefined,
+          depositCollected: collectDeposit ? Number(depositAmount) || 0 : 0,
+          depositMode,
           companions: companions.filter(c => c.name.trim()),
         }),
       });
@@ -533,6 +541,37 @@ export default function CounterCheckinModal({
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Refundable deposit — editable, may be skipped */}
+          <div className="rounded-2xl p-5 border bg-white/2 border-white/6 space-y-3">
+            <label className="flex items-center justify-between cursor-pointer">
+              <span className="font-semibold text-white flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-green-400" /> Collect refundable deposit
+              </span>
+              <input type="checkbox" checked={collectDeposit} onChange={e => setCollectDeposit(e.target.checked)} className="accent-green-500 w-4 h-4" />
+            </label>
+            {collectDeposit ? (
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label className={labelCls}>Amount (₹)</label>
+                  <input type="number" min={0} value={depositAmount} onChange={e => setDepositAmount(e.target.value)} className={inputCls} />
+                </div>
+                <div className="flex-1">
+                  <label className={labelCls}>Mode</label>
+                  <div className="flex gap-2">
+                    {(["CASH", "ONLINE"] as const).map(m => (
+                      <button type="button" key={m} onClick={() => setDepositMode(m)}
+                        className={`flex-1 h-11 rounded-xl text-sm font-semibold border transition-all ${depositMode === m ? "bg-white/10 border-white/25 text-white" : "border-white/10 text-white/40 hover:text-white/70"}`}>
+                        {m === "CASH" ? "Cash" : "UPI"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-white/35">No deposit will be collected — it can still be taken later.</p>
+            )}
           </div>
 
           {/* Section 3 — Companions */}

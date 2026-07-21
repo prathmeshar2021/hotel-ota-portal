@@ -109,7 +109,6 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
         roomRentPerNight: selectedRoom.basePrice,
         noOfNights: nights,
         couponDiscount: appliedCoupon?.discount ?? 0,
-        refundableDeposit: REFUNDABLE_DEPOSIT,
       })
     : null;
 

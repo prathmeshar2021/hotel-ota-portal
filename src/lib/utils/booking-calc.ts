@@ -13,22 +13,27 @@ export function calculateGST(roomRentPerNight: number) {
   return { cgstRate: 9, sgstRate: 9 };
 }
 
-export const REFUNDABLE_DEPOSIT = 200; // Rs 200 fixed deposit — always collected, always refunded
+export const REFUNDABLE_DEPOSIT = 200; // Rs 200 default refundable deposit — collected at check-in (NOT in the booking total), editable by staff
 export const PARTIAL_PAYMENT_AMOUNT = 500; // advance paid upfront for PAY_PARTIAL; subject to cancellation policy
 
+/**
+ * Room-charge totals for a booking. The refundable deposit is NO LONGER part of
+ * `totalAmount` — it is collected separately at check-in and tracked on the
+ * booking (refundableDeposit = expected, depositCollected = actual), then netted
+ * against the balance at checkout. So `totalAmount = roomRent − coupon + GST`.
+ */
 export function computeTotals(params: {
   roomRentPerNight: number;
   noOfNights: number;
   couponDiscount?: number;
-  refundableDeposit?: number;
 }) {
-  const { roomRentPerNight, noOfNights, couponDiscount = 0, refundableDeposit = REFUNDABLE_DEPOSIT } = params;
+  const { roomRentPerNight, noOfNights, couponDiscount = 0 } = params;
   const roomRent = roomRentPerNight * noOfNights;
   const { cgstRate, sgstRate } = calculateGST(roomRentPerNight);
   const taxableAmount = roomRent - couponDiscount;
   const cgst = +(taxableAmount * (cgstRate / 100)).toFixed(2);
   const sgst = +(taxableAmount * (sgstRate / 100)).toFixed(2);
-  const totalAmount = +(taxableAmount + cgst + sgst + refundableDeposit).toFixed(2);
+  const totalAmount = +(taxableAmount + cgst + sgst).toFixed(2);
 
   return { roomRent, taxableAmount, cgst, sgst, totalAmount, cgstRate, sgstRate };
 }

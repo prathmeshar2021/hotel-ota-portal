@@ -186,7 +186,8 @@ export default async function BookingDetailPage({
             <BookingStatusButton
               bookingId={booking.id}
               currentStatus={booking.status}
-              depositAmount={booking.refundableDeposit}
+              depositCollected={booking.depositCollected}
+              additionalCharges={booking.additionalCharges}
               balanceDue={booking.balanceDue}
             />
           )}
@@ -489,18 +490,24 @@ export default async function BookingDetailPage({
                   </div>
                 </>
               )}
-              {booking.refundableDeposit > 0 && (
-                <div className="flex justify-between text-green-400/70 text-xs">
-                  <span className="flex items-center gap-1">
-                    <ShieldCheck className="w-3 h-3" /> Refundable deposit
-                  </span>
-                  <span>₹{booking.refundableDeposit.toLocaleString("en-IN")}</span>
-                </div>
-              )}
               <div className="flex justify-between font-bold text-white border-t border-white/8 pt-2 mt-2">
-                <span>Total Amount</span>
+                <span>Room Total</span>
                 <span style={{ color: accent }}>₹{booking.totalAmount.toLocaleString("en-IN")}</span>
               </div>
+              {booking.additionalCharges > 0 && (
+                <div className="flex justify-between text-amber-300/80 text-xs">
+                  <span>Extra charges (tea, damage…)</span>
+                  <span>₹{booking.additionalCharges.toLocaleString("en-IN")}</span>
+                </div>
+              )}
+              {booking.refundableDeposit > 0 && (
+                <div className="flex justify-between text-green-400/70 text-xs pt-0.5">
+                  <span className="flex items-center gap-1">
+                    <ShieldCheck className="w-3 h-3" /> Deposit {booking.depositCollected > 0 ? "held" : "(at check-in)"}
+                  </span>
+                  <span>₹{(booking.depositCollected > 0 ? booking.depositCollected : booking.refundableDeposit).toLocaleString("en-IN")}</span>
+                </div>
+              )}
               {isOta && (
                 <div className="mt-2 flex items-center justify-between gap-2 rounded-xl border border-red-500/20 bg-red-500/8 px-3 py-2">
                   <span className="flex items-center gap-1.5 text-red-300 text-xs font-semibold">
@@ -515,38 +522,35 @@ export default async function BookingDetailPage({
                   <span>₹{booking.balanceDue.toLocaleString("en-IN")}</span>
                 </div>
               )}
-              {/* Checkout deposit outcome */}
-              {booking.status === "CHECKED_OUT" && booking.refundableDeposit > 0 && (
+              {/* Checkout settlement outcome */}
+              {booking.status === "CHECKED_OUT" && (booking.depositCollected > 0 || booking.additionalCharges > 0) && (
                 <div className="mt-3 pt-3 border-t border-white/8 space-y-1.5">
                   <div className="flex items-center gap-1.5 text-white/40 text-xs font-semibold mb-2">
-                    <ShieldCheck className="w-3.5 h-3.5" /> Deposit Outcome
+                    <ShieldCheck className="w-3.5 h-3.5" /> Checkout Settlement
                   </div>
-                  {booking.depositDeducted === 0 ? (
-                    <div className="flex justify-between text-xs text-green-400/80">
-                      <span>Full deposit returned to guest</span>
-                      <span>₹{booking.refundableDeposit.toLocaleString("en-IN")}</span>
+                  {booking.depositCollected > 0 && (
+                    <div className="flex justify-between text-xs text-white/50">
+                      <span>Deposit held</span>
+                      <span>₹{booking.depositCollected.toLocaleString("en-IN")}</span>
                     </div>
-                  ) : (
-                    <>
-                      <div className="flex justify-between text-xs text-red-400/70">
-                        <span>Deducted for damage/dirt</span>
-                        <span>−₹{booking.depositDeducted.toLocaleString("en-IN")}</span>
-                      </div>
-                      {booking.depositDeducted <= booking.refundableDeposit ? (
-                        <div className="flex justify-between text-xs text-green-400/70">
-                          <span>Returned to guest</span>
-                          <span>₹{(booking.refundableDeposit - booking.depositDeducted).toLocaleString("en-IN")}</span>
-                        </div>
-                      ) : (
-                        <div className="flex justify-between text-xs text-amber-400/70">
-                          <span>Extra damage charge billed</span>
-                          <span>₹{(booking.depositDeducted - booking.refundableDeposit).toLocaleString("en-IN")}</span>
-                        </div>
-                      )}
-                    </>
                   )}
+                  {booking.additionalCharges > 0 && (
+                    <div className="flex justify-between text-xs text-amber-400/70">
+                      <span>Extra charges</span>
+                      <span>−₹{booking.additionalCharges.toLocaleString("en-IN")}</span>
+                    </div>
+                  )}
+                  {(() => {
+                    const refund = Math.max(0, booking.depositCollected - booking.depositDeducted);
+                    return refund > 0 ? (
+                      <div className="flex justify-between text-xs text-green-400/80 font-semibold pt-0.5 border-t border-white/8">
+                        <span>Refunded to guest</span>
+                        <span>₹{refund.toLocaleString("en-IN")}</span>
+                      </div>
+                    ) : null;
+                  })()}
                   {booking.depositNotes && (
-                    <p className="text-[10px] text-white/30 italic mt-1">Note: {booking.depositNotes}</p>
+                    <p className="text-[10px] text-white/30 italic mt-1">{booking.depositNotes}</p>
                   )}
                 </div>
               )}
@@ -561,10 +565,12 @@ export default async function BookingDetailPage({
                     <span>Cancellation charge</span>
                     <span>₹{(booking.cancellationCharge ?? 0).toLocaleString("en-IN")}</span>
                   </div>
-                  <div className="flex justify-between text-xs text-green-400/70">
-                    <span className="flex items-center gap-1"><ShieldCheck className="w-3 h-3" /> Deposit refund</span>
-                    <span>₹{booking.refundableDeposit.toLocaleString("en-IN")}</span>
-                  </div>
+                  {booking.depositCollected > 0 && (
+                    <div className="flex justify-between text-xs text-green-400/70">
+                      <span className="flex items-center gap-1"><ShieldCheck className="w-3 h-3" /> Deposit refund</span>
+                      <span>₹{booking.depositCollected.toLocaleString("en-IN")}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-sm font-semibold text-white/70 pt-1 border-t border-white/8">
                     <span>Total refund to guest</span>
                     <span className="text-green-400">₹{(booking.totalAmount - (booking.cancellationCharge ?? 0)).toLocaleString("en-IN")}</span>

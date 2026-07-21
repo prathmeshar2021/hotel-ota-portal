@@ -187,7 +187,6 @@ export async function POST(req: NextRequest) {
     roomRentPerNight: pricePerNight,
     noOfNights,
     couponDiscount,
-    refundableDeposit: REFUNDABLE_DEPOSIT, // always Rs 200, server-enforced
   });
 
   const bookingRef = await generateBookingRef();

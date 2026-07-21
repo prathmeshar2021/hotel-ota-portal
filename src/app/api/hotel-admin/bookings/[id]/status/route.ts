@@ -22,12 +22,16 @@ export async function PATCH(
 
   const { id } = await params;
   const body = await req.json();
-  const { status: newStatus, depositRefunded, depositDeducted, depositNotes } = body;
+  const { status: newStatus, settlement } = body;
 
   // Verify booking belongs to this hotel
   const booking = await prisma.booking.findFirst({
     where: { id, hotelId: session.user.hotelId },
-    select: { id: true, status: true, roomId: true, refundableDeposit: true, checkInDate: true },
+    select: {
+      id: true, status: true, roomId: true, checkInDate: true,
+      depositCollected: true, additionalCharges: true, balanceDue: true,
+      cashPaid: true, onlinePaid: true,
+    },
   });
 
   if (!booking) {
@@ -71,10 +75,31 @@ export async function PATCH(
 
   if (newStatus === "CHECKED_OUT") {
     updateData.checkedOutAt = now;
-    // Deposit decision — must be provided by the frontend
-    updateData.depositRefunded = depositRefunded ?? true;
-    updateData.depositDeducted = typeof depositDeducted === "number" ? depositDeducted : 0;
-    if (depositNotes) updateData.depositNotes = depositNotes;
+
+    // Final settlement (server-authoritative): the deposit held nets against
+    // everything still owed (unpaid room balance + extra charges).
+    //   net = depositCollected − (balanceDue + additionalCharges)
+    //   net ≥ 0 → refund net to guest;  net < 0 → collect −net from guest.
+    const owed = +(booking.balanceDue + booking.additionalCharges).toFixed(2);
+    const net = +(booking.depositCollected - owed).toFixed(2);
+    const refund = Math.max(0, net);
+    const collect = Math.max(0, -net);
+    const depositUsed = Math.min(booking.depositCollected, owed); // deposit applied to what was owed
+
+    updateData.balanceDue = 0; // everything is settled at checkout
+    updateData.depositDeducted = depositUsed;
+    updateData.depositRefunded = refund > 0;
+
+    // Record any amount collected now (excess beyond the deposit) as a payment.
+    if (collect > 0) {
+      const mode = settlement?.collectMode === "ONLINE" ? "ONLINE" : "CASH";
+      if (mode === "ONLINE") updateData.onlinePaid = booking.onlinePaid + collect;
+      else updateData.cashPaid = booking.cashPaid + collect;
+    }
+
+    const summary = refund > 0 ? `Refunded ₹${refund} deposit` : collect > 0 ? `Collected ₹${collect} at checkout` : "Settled — no refund/collection";
+    updateData.depositNotes = settlement?.notes ? `${summary} — ${settlement.notes}` : summary;
+
     // Free up the room if one was assigned
     if (booking.roomId) {
       await prisma.room.update({

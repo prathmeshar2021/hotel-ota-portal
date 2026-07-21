@@ -138,7 +138,6 @@ export async function POST(req: NextRequest) {
     roomRentPerNight: room.basePrice,
     noOfNights,
     couponDiscount,
-    refundableDeposit: REFUNDABLE_DEPOSIT,
   });
 
   const totalPaid = d.cashPaid + d.onlinePaid;

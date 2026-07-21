@@ -350,7 +350,9 @@ model Booking {
 
   roomRent          Float
   couponDiscount    Float @default(0)
-  refundableDeposit Float @default(0)
+  refundableDeposit Float @default(0)   // EXPECTED deposit (₹200) — shown as "collected at check-in"; NOT in totalAmount for new bookings
+  depositCollected  Float @default(0)   // ACTUAL deposit held (0 if skipped); set at check-in / counter booking
+  depositMode       PaymentMode?        // how the deposit was taken (cash / online)
   additionalCharges Float @default(0)
   taxableAmount     Float @default(0)
   cgst              Float @default(0)

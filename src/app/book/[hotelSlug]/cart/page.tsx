@@ -130,7 +130,6 @@ export default function CartPage() {
       roomRentPerNight: it.originalPricePerNight,
       noOfNights: nights,
       couponDiscount: universalPerRoom,
-      refundableDeposit: REFUNDABLE_DEPOSIT,
     });
     return { it, perRoom: t.totalAmount, lineTotal: t.totalAmount * it.qty, universalPerRoom };
   });
@@ -363,13 +362,13 @@ export default function CartPage() {
                     <span>₹{lineTotal.toLocaleString("en-IN")}</span>
                   </div>
                 ))}
-                <div className="flex justify-between text-green-400 text-xs pt-1">
-                  <span className="flex items-center gap-1"><ShieldCheck className="w-3 h-3" /> Refundable deposit ({totalRooms} × ₹{REFUNDABLE_DEPOSIT})</span>
-                  <span>₹{totalDeposit.toLocaleString("en-IN")}</span>
-                </div>
                 <div className="flex justify-between font-bold text-white text-base pt-2 border-t border-white/10">
-                  <span>Total</span>
+                  <span>Total payable now</span>
                   <span className="text-amber-400">₹{grandTotal.toLocaleString("en-IN")}</span>
+                </div>
+                <div className="flex items-start gap-1.5 text-green-400/80 text-xs pt-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 shrink-0 mt-px" />
+                  <span>+ ₹{totalDeposit.toLocaleString("en-IN")} refundable deposit ({totalRooms} × ₹{REFUNDABLE_DEPOSIT}), collected at check-in (not now)</span>
                 </div>
               </div>
 

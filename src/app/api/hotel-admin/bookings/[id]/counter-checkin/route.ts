@@ -22,6 +22,9 @@ const CounterCheckinSchema = z.object({
   goingTo:    z.string().min(1, "Going to is required"),
   purpose:    z.string().min(1, "Purpose of visit is required"),
   vehicleNo:  z.string().optional(),
+  // Refundable deposit collected at check-in (editable, may be 0 / skipped).
+  depositCollected: z.number().min(0).optional(),
+  depositMode:      z.enum(["CASH", "ONLINE"]).optional(),
   companions: z.array(CompanionSchema).optional(),
 });
 
@@ -171,10 +174,15 @@ export async function POST(
     });
   }
 
-  // 5. Transition booking; mark room occupied only if one has been assigned
+  // 5. Transition booking; mark room occupied only if one has been assigned.
+  //    Also record the refundable deposit if collected at the counter.
+  const depositTaken = typeof data.depositCollected === "number" && data.depositCollected > 0;
   await prisma.booking.update({
     where: { id: booking.id },
-    data: { status: "CHECKED_IN", checkedInAt: now, onlineCheckinDone: true },
+    data: {
+      status: "CHECKED_IN", checkedInAt: now, onlineCheckinDone: true,
+      ...(depositTaken ? { depositCollected: data.depositCollected, depositMode: data.depositMode ?? "CASH" } : {}),
+    },
   });
 
   if (booking.roomId) {

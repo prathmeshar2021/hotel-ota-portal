@@ -233,7 +233,7 @@ export default function BookingForm({
 
   // Recompute totals dynamically from selected dates (always includes Rs 200 deposit)
   const liveTotals = localNights > 0
-    ? computeTotals({ roomRentPerNight: room.basePrice, noOfNights: localNights, couponDiscount: effectiveDiscount, refundableDeposit: REFUNDABLE_DEPOSIT })
+    ? computeTotals({ roomRentPerNight: room.basePrice, noOfNights: localNights, couponDiscount: effectiveDiscount })
     : totals;
 
   const totalAfterCoupon = liveTotals.totalAmount;
