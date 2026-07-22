@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
 
 function staffGuard(role?: string) {
-  return role === "HOTEL_ADMIN" || role === "HOTEL_STAFF";
+  return role === "HOTEL_ADMIN" || role === "HOTEL_STAFF" || role === "SUPER_ADMIN";
 }
 
 interface Params { id: string; chargeId: string }

@@ -6,7 +6,11 @@ import type { Session } from "next-auth";
 
 function adminGuard(session: Session | null) {
   if (!session?.user?.hotelId) return false;
-  return session.user.role === "HOTEL_ADMIN" || session.user.role === "HOTEL_STAFF";
+  return (
+    session.user.role === "HOTEL_ADMIN" ||
+    session.user.role === "HOTEL_STAFF" ||
+    session.user.role === "SUPER_ADMIN"
+  );
 }
 
 const UpdateGuestSchema = z.object({

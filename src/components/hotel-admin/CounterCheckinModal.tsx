@@ -376,7 +376,7 @@ export default function CounterCheckinModal({
 
       const data = await res.json();
       if (res.ok) {
-        toast.success("Guest checked in successfully!");
+        toast.success(data.message ?? "Registration saved");
         onClose();
         router.refresh();
       } else {

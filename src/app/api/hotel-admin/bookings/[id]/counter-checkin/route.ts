@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
 import { z } from "zod";
+import { ensureRoomAssigned } from "@/lib/services/checkin-gate";
+import { ensureConsent } from "@/lib/services/consent";
 
 const CompanionSchema = z.object({
   name:       z.string().min(1, "Companion name is required"),
@@ -54,7 +56,10 @@ export async function POST(
 
   const booking = await prisma.booking.findFirst({
     where: { id, hotelId: session.user.hotelId, status: "CONFIRMED" },
-    select: { id: true, roomId: true, primaryGuestId: true, noOfPersons: true },
+    select: {
+      id: true, roomId: true, primaryGuestId: true, noOfPersons: true,
+      roomCategory: true, checkInDate: true, checkOutDate: true,
+    },
   });
 
   if (!booking) {
@@ -174,23 +179,40 @@ export async function POST(
     });
   }
 
-  // 5. Transition booking; mark room occupied only if one has been assigned.
-  //    Also record the refundable deposit if collected at the counter.
+  // 5. Save the registration (travel details + companions above) and record the
+  //    refundable deposit if collected at the counter. This does NOT complete the
+  //    check-in — a stay is only CHECKED_IN once a room is assigned AND the
+  //    consent form is signed/accepted, via the gated "Complete Check-In" action.
   const depositTaken = typeof data.depositCollected === "number" && data.depositCollected > 0;
   await prisma.booking.update({
     where: { id: booking.id },
     data: {
-      status: "CHECKED_IN", checkedInAt: now, onlineCheckinDone: true,
+      onlineCheckinDone: true,
       ...(depositTaken ? { depositCollected: data.depositCollected, depositMode: data.depositMode ?? "CASH" } : {}),
     },
   });
 
-  if (booking.roomId) {
-    await prisma.room.update({
-      where: { id: booking.roomId },
-      data: { status: "OCCUPIED" },
-    });
-  }
+  // 6. Assign a physical room now (auto-allot fallback) so it's ready for the
+  //    consent form and the final check-in step.
+  const roomId = await ensureRoomAssigned({
+    id: booking.id,
+    hotelId: session.user.hotelId,
+    roomId: booking.roomId,
+    roomCategory: booking.roomCategory,
+    checkInDate: booking.checkInDate,
+    checkOutDate: booking.checkOutDate,
+  });
 
-  return NextResponse.json({ success: true, message: "Guest checked in successfully" });
+  // 7. Ensure a consent record + token exists so staff can immediately print or
+  //    send the registration & consent form.
+  await ensureConsent(booking.id);
+
+  const roomMsg = roomId
+    ? "Room assigned."
+    : "No room could be auto-assigned — please assign one manually.";
+  return NextResponse.json({
+    success: true,
+    completed: false,
+    message: `Registration saved. ${roomMsg} Get the consent form signed or accepted, then click "Complete Check-In".`,
+  });
 }

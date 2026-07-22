@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
+import { ensureRoomAssigned, isConsentConfirmed, CHECKIN_GATE_MESSAGES } from "@/lib/services/checkin-gate";
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
   PENDING_PAYMENT: ["CONFIRMED", "CANCELLED"],
@@ -28,7 +29,8 @@ export async function PATCH(
   const booking = await prisma.booking.findFirst({
     where: { id, hotelId: session.user.hotelId },
     select: {
-      id: true, status: true, roomId: true, checkInDate: true,
+      id: true, status: true, roomId: true, checkInDate: true, checkOutDate: true,
+      hotelId: true, roomCategory: true,
       depositCollected: true, additionalCharges: true, balanceDue: true,
       cashPaid: true, onlinePaid: true,
     },
@@ -63,14 +65,28 @@ export async function PATCH(
   const updateData: Record<string, unknown> = { status: newStatus };
 
   if (newStatus === "CHECKED_IN") {
-    updateData.checkedInAt = now;
-    // Only mark room occupied if one has been assigned
-    if (booking.roomId) {
-      await prisma.room.update({
-        where: { id: booking.roomId },
-        data: { status: "OCCUPIED" },
-      });
+    // Gate: a stay cannot be checked in until (1) a physical room is assigned
+    // (auto-allot as a fallback) and (2) the guest's consent is confirmed.
+    const roomId = await ensureRoomAssigned({
+      id: booking.id,
+      hotelId: booking.hotelId,
+      roomId: booking.roomId,
+      roomCategory: booking.roomCategory,
+      checkInDate: booking.checkInDate,
+      checkOutDate: booking.checkOutDate,
+    });
+    if (!roomId) {
+      return NextResponse.json({ error: CHECKIN_GATE_MESSAGES.noRoom }, { status: 409 });
     }
+    if (!(await isConsentConfirmed(booking.id))) {
+      return NextResponse.json({ error: CHECKIN_GATE_MESSAGES.consent }, { status: 409 });
+    }
+
+    updateData.checkedInAt = now;
+    await prisma.room.update({
+      where: { id: roomId },
+      data: { status: "OCCUPIED" },
+    });
   }
 
   if (newStatus === "CHECKED_OUT") {
