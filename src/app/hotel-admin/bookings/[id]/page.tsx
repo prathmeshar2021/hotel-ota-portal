@@ -29,8 +29,10 @@ import {
 import { format } from "date-fns";
 import BookingStatusButton, { NoShowButton } from "@/components/hotel-admin/BookingStatusButton";
 import CounterCheckinButton from "@/components/hotel-admin/CounterCheckinButton";
+import CompleteCheckinButton from "@/components/hotel-admin/CompleteCheckinButton";
 import RefundStatus from "@/components/hotel-admin/RefundStatus";
 import GstInvoiceButton from "@/components/hotel-admin/GstInvoiceButton";
+import ConsentFormButton from "@/components/hotel-admin/ConsentFormButton";
 import CollectPaymentModal from "@/components/hotel-admin/CollectPaymentModal";
 import AddChargeModal from "@/components/hotel-admin/AddChargeModal";
 import DeleteChargeButton from "@/components/hotel-admin/DeleteChargeButton";
@@ -88,6 +90,7 @@ export default async function BookingDetailPage({
       payment: true,
       charges: { orderBy: { id: "asc" } },
       gstInvoice: { select: { invoiceNumber: true } },
+      consent: { select: { consentToken: true, primaryAcceptedAt: true } },
     },
   });
 
@@ -99,6 +102,8 @@ export default async function BookingDetailPage({
   const categoryRooms = CATEGORY_ROOMS[booking.roomCategory as never] ?? [];
   const status = STATUS_CONFIG[booking.status] ?? { label: booking.status, cls: "bg-white/8 text-white/40 border-white/10" };
   const isOta = isOtaPrepaid(booking.source);
+  // Hoisted once per request so the JSX doesn't call an impure clock during render.
+  const nowMs = new Date().getTime();
 
   const ID_LABELS: Record<string, string> = {
     AADHAR: "Aadhar Card",
@@ -148,7 +153,7 @@ export default async function BookingDetailPage({
               />
               {/* No-show only makes sense once the stay has started — hide it for
                   future reservations so a booking can't be wrongly no-showed. */}
-              {new Date(booking.checkInDate).setHours(0, 0, 0, 0) <= Date.now() && (
+              {new Date(booking.checkInDate).setHours(0, 0, 0, 0) <= nowMs && (
                 <NoShowButton bookingId={booking.id} />
               )}
               {/* Counter check-in opens the full form modal. Always pre-fill from
@@ -179,6 +184,11 @@ export default async function BookingDetailPage({
                   })),
                 }}
               />
+              {/* Final gated step — appears once registration is captured. The
+                  server blocks it until a room is assigned AND consent confirmed. */}
+              {booking.onlineCheckinDone && (
+                <CompleteCheckinButton bookingId={booking.id} />
+              )}
             </>
           )}
           {/* For post-CONFIRMED statuses (CHECKED_IN → CHECKED_OUT, etc.) */}
@@ -598,6 +608,20 @@ export default async function BookingDetailPage({
                 guestName={booking.primaryGuest.name}
                 bookingRef={booking.bookingRef}
               />
+            )}
+
+            {/* Guest registration & consent form — print for signature or send on WhatsApp.
+                Shown once registration data exists (online/counter check-in done). */}
+            {(booking.onlineCheckinDone ||
+              ["CHECKED_IN", "CHECKED_OUT"].includes(booking.status)) && (
+              <div className="mt-3">
+                <ConsentFormButton
+                  bookingId={booking.id}
+                  guestPhone={booking.primaryGuest.phone ?? booking.guestPhone}
+                  consentToken={booking.consent?.consentToken ?? null}
+                  acceptedAt={booking.consent?.primaryAcceptedAt?.toISOString() ?? null}
+                />
+              </div>
             )}
 
             {/* GST invoice — generate, download, send on WhatsApp */}

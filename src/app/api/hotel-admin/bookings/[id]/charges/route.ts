@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db/prisma";
 import { z } from "zod";
 
 function staffGuard(role?: string) {
-  return role === "HOTEL_ADMIN" || role === "HOTEL_STAFF";
+  return role === "HOTEL_ADMIN" || role === "HOTEL_STAFF" || role === "SUPER_ADMIN";
 }
 
 const AddChargeSchema = z.object({

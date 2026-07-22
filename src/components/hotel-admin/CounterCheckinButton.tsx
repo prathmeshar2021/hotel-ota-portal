@@ -52,10 +52,10 @@ export default function CounterCheckinButton({
           ? <ShieldCheck className="w-4 h-4" />
           : <LogIn className="w-4 h-4" />
         }
-        Check Guest In
+        Guest Registration
         {hasWebCheckin && (
           <span className="text-[10px] font-semibold bg-green-400/20 border border-green-400/30 px-1.5 py-0.5 rounded-full">
-            CI done
+            web CI done
           </span>
         )}
       </button>

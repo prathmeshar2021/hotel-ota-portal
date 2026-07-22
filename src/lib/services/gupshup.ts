@@ -285,17 +285,34 @@ export const gupshup = {
     });
   },
 
-  sendConsentDocument: (phone: string, data: {
+  sendConsentDocument: async (phone: string, data: {
     guestName: string;
     pdfUrl: string;
-  }) =>
-    send({
+    acceptUrl?: string;
+  }) => {
+    // 1. The registration & consent form itself, as a document.
+    const res = await send({
       to: phone,
       type: "document",
       documentUrl: data.pdfUrl,
-      caption: `Dear ${data.guestName}, please read the attached declaration. Reply *I Agree* to confirm.`,
-      filename: "Guest_Consent.pdf",
-    }),
+      caption:
+        `Dear ${data.guestName}, please review the attached Guest Registration & Consent Form for your check-in.`,
+      filename: "Guest_Consent_Form.pdf",
+    });
+
+    // 2. A follow-up text with the secure link to record electronic acceptance.
+    if (data.acceptUrl) {
+      await send({
+        to: phone,
+        message:
+          `✅ To complete your *paperless check-in*, tap below to review and accept:\n\n` +
+          `${data.acceptUrl}\n\n` +
+          `Your acceptance is recorded securely and is valid under the IT Act, 2000 & DPDP Act, 2023. 🙏`,
+      });
+    }
+
+    return res;
+  },
 
   sendInvoiceDocument: (phone: string, data: {
     guestName: string;
