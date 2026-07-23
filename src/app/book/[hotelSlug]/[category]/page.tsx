@@ -9,12 +9,21 @@ import { computeTotals, getUniversalDiscount } from "@/lib/utils/booking";
 import { REFUNDABLE_DEPOSIT, universalDiscountAmount, discountedNightlyPrice } from "@/lib/utils/booking-calc";
 import { getCategoryImages, getCategoryMeta, slugToCategory } from "@/lib/utils/room-categories";
 import { resolveCategoryPrice } from "@/lib/utils/pricing";
-import { Calendar, Users, Moon, ShieldCheck } from "lucide-react";
+import { resolveCategoryCapacity, inventoryHoldFilter } from "@/lib/utils/inventory";
+import { Calendar, Users, Moon, ShieldCheck, AlertTriangle } from "lucide-react";
+import { addDays, startOfToday, format } from "date-fns";
 import { auth } from "@/lib/auth/auth";
 
 interface Props {
   params: Promise<{ hotelSlug: string; category: string }>;
   searchParams: Promise<{ checkIn?: string; checkOut?: string; guests?: string }>;
+}
+
+/** Parse a strict YYYY-MM-DD as a local date, or null if malformed. */
+function parseYmd(s?: string): Date | null {
+  if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const d = new Date(`${s}T00:00:00`);
+  return isNaN(d.getTime()) ? null : d;
 }
 
 export default async function BookingPage({ params, searchParams }: Props) {
@@ -36,20 +45,51 @@ export default async function BookingPage({ params, searchParams }: Props) {
   });
   if (!hotel) notFound();
 
-  const checkIn  = sp.checkIn ?? "";
-  const checkOut = sp.checkOut ?? "";
-  const nights   = checkIn && checkOut
-    ? Math.max(1, Math.ceil((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / 86400000))
-    : 1;
+  // ── Deep-link params (Google Free Booking Links / OTA metasearch) ───────────
+  // Parse defensively: inbound links and Google's crawler may send missing,
+  // malformed, or past dates. Always resolve to a valid FUTURE stay so the page
+  // renders a real, matching rate — a rate/date mismatch fails Free Booking
+  // Links review and a past date can never be booked.
+  const today = startOfToday();
+  const rawIn = parseYmd(sp.checkIn);
+  const rawOut = parseYmd(sp.checkOut);
+  const checkInDate = rawIn && rawIn >= today ? rawIn : addDays(today, 1);
+  const checkOutDate = rawOut && rawOut > checkInDate ? rawOut : addDays(checkInDate, 1);
+
+  const checkIn = format(checkInDate, "yyyy-MM-dd");
+  const checkOut = format(checkOutDate, "yyyy-MM-dd");
+  const nights = Math.max(
+    1,
+    Math.round((checkOutDate.getTime() - checkInDate.getTime()) / 86400000)
+  );
+  // Clamp occupancy into what this category can actually hold.
+  const guests = Math.min(Math.max(1, parseInt(sp.guests ?? "2") || 2), meta.maxGuests);
 
   // Resolve the nightly price for the requested check-in date — honours any
   // date-wise override set by the super admin, else falls back to base price.
-  const checkInDate = checkIn ? new Date(checkIn) : undefined;
   const pricePerNight = await resolveCategoryPrice(
     hotel.id,
     categoryType as never,
     checkInDate
   );
+
+  // Live availability for these exact dates — never advertise a bookable rate
+  // when the category is sold out (dead click-throughs hurt Free Booking Links
+  // standing and mislead guests).
+  const [capacity, bookedCount] = await Promise.all([
+    resolveCategoryCapacity(hotel.id, categoryType as never, checkInDate, checkOutDate),
+    prisma.booking.count({
+      where: {
+        hotelId: hotel.id,
+        roomCategory: categoryType,
+        ...inventoryHoldFilter(),
+        checkInDate: { lt: checkOutDate },
+        checkOutDate: { gt: checkInDate },
+      },
+    }),
+  ]);
+  const roomsLeft = Math.max(0, capacity - bookedCount);
+  const soldOut = roomsLeft <= 0;
 
   // Fetch fresh contact info for logged-in customers — the JWT token can be stale
   // (e.g. user added a phone number after logging in).
@@ -104,6 +144,26 @@ export default async function BookingPage({ params, searchParams }: Props) {
 
           {/* Booking Form */}
           <div className="lg:col-span-3">
+            {soldOut ? (
+              <div className="mb-4 flex items-start gap-3 rounded-2xl border border-red-500/25 bg-red-500/[0.07] p-4">
+                <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-semibold text-red-300">
+                    Sold out for {checkIn} → {checkOut}
+                  </p>
+                  <p className="text-xs text-white/50 mt-0.5">
+                    No {meta.displayName} rooms are available for these dates. Pick different dates below to check availability.
+                  </p>
+                </div>
+              </div>
+            ) : roomsLeft <= 3 ? (
+              <div className="mb-4 flex items-center gap-2 rounded-xl border border-amber-500/25 bg-amber-500/[0.07] px-4 py-2.5">
+                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                <p className="text-xs font-medium text-amber-300">
+                  Only {roomsLeft} {meta.displayName} room{roomsLeft !== 1 ? "s" : ""} left for these dates
+                </p>
+              </div>
+            ) : null}
             <BookingForm
               hotel={hotel}
               room={{
@@ -116,7 +176,7 @@ export default async function BookingPage({ params, searchParams }: Props) {
               checkIn={checkIn}
               checkOut={checkOut}
               nights={nights}
-              guests={parseInt(sp.guests ?? "2")}
+              guests={guests}
               totals={totals}
               universal={universal}
               hotelSlug={hotelSlug}
@@ -218,7 +278,11 @@ export default async function BookingPage({ params, searchParams }: Props) {
                   )}
                   <div className="flex justify-between font-bold text-white text-base pt-2 border-t border-white/8">
                     <span>Total payable now</span>
-                    <span style={{ color: meta.accentColor }}>₹{totals.totalAmount.toLocaleString("en-IN")}</span>
+                    {soldOut ? (
+                      <span className="text-red-400 text-sm">Not available</span>
+                    ) : (
+                      <span style={{ color: meta.accentColor }}>₹{totals.totalAmount.toLocaleString("en-IN")}</span>
+                    )}
                   </div>
                   <div className="flex items-start gap-1.5 text-green-400/80 text-xs pt-1.5">
                     <ShieldCheck className="w-3.5 h-3.5 shrink-0 mt-px" />
