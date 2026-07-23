@@ -11,6 +11,10 @@ export async function createOrder(amountInPaise: number, bookingRef: string) {
     amount: amountInPaise,
     currency: "INR",
     receipt: bookingRef,
+    // Auto-capture the payment as soon as it's authorized, so `payment.captured`
+    // always fires and bookings never get stuck "authorized" but uncaptured —
+    // independent of the account-level capture setting.
+    payment_capture: true,
     notes: { bookingRef },
   });
 }
