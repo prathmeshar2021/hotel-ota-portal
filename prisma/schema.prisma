@@ -243,14 +243,15 @@ model KioskLookup {
 // ─── HOTEL STAFF ──────────────────────────────────────────────────────────────
 
 model HotelStaff {
-  id       String  @id @default(cuid())
-  hotelId  String
-  name     String
-  email    String  @unique
-  password String
-  role     Role    @default(HOTEL_STAFF)
-  phone    String?
-  isActive Boolean @default(true)
+  id         String  @id @default(cuid())
+  hotelId    String
+  name       String
+  email      String  @unique
+  password   String
+  role       Role    @default(HOTEL_STAFF)
+  phone      String?
+  idPhotoUrl String? // optional ID document captured at registration
+  isActive   Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -462,6 +463,10 @@ model Consent {
   primaryAcceptedAt   DateTime?
   secondaryAcceptedAt DateTime?
   consentToken        String?
+  // Staff who verified a physically-signed consent copy (null for electronic
+  // guest acceptance). Name is snapshotted so it survives staff record changes.
+  verifiedById        String?
+  verifiedByName      String?
 
   booking        Booking @relation(fields: [bookingId], references: [id])
   primaryGuest   Guest   @relation("PrimaryConsent", fields: [primaryGuestId], references: [id])

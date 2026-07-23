@@ -73,6 +73,8 @@ export interface ConsentPdfData {
   electronicAcceptedAt?: Date | null;
   /** Set when staff confirmed a physically-signed copy was received. */
   paperVerifiedAt?: Date | null;
+  /** Name of the staff member who verified the signed copy. */
+  verifiedByName?: string | null;
 }
 
 const dash = (v?: string | null) => (v && String(v).trim() ? String(v).trim() : "—");
@@ -314,8 +316,9 @@ export function generateConsentPdf(d: ConsentPdfData): Uint8Array {
       doc.setFont("helvetica", "italic");
       doc.setFontSize(6.8);
       doc.setTextColor(30, 110, 45);
+      const verifier = d.verifiedByName?.trim() ? d.verifiedByName.trim() : "staff";
       doc.text(
-        `Signed copy received & verified by staff on ${format(d.paperVerifiedAt, "dd MMM yyyy, hh:mm a")}.`,
+        `Signed copy received & verified by ${verifier} on ${format(d.paperVerifiedAt, "dd MMM yyyy, hh:mm a")}.`,
         colR,
         officeY + 3.5,
         { maxWidth: pageW / 2 - M },

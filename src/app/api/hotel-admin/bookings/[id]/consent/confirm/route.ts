@@ -37,13 +37,26 @@ export async function POST(
     const consent = await ensureConsent(booking.id);
     if (!consent.primaryAcceptedAt) {
       // mode PORTAL marks this as a staff-verified physical signature (not an
-      // electronic acceptance), so the PDF shows the signed-copy note.
+      // electronic acceptance), so the PDF shows the signed-copy note. Record
+      // WHICH staff member verified it (name snapshotted for the record).
       await prisma.consent.update({
         where: { bookingId: booking.id },
-        data: { status: "ACCEPTED", mode: "PORTAL", primaryAcceptedAt: new Date() },
+        data: {
+          status: "ACCEPTED",
+          mode: "PORTAL",
+          primaryAcceptedAt: new Date(),
+          verifiedById: session.user.id,
+          verifiedByName: session.user.name ?? "Staff",
+        },
       });
     }
-    return NextResponse.json({ success: true, message: "Consent confirmed" });
+    return NextResponse.json({
+      success: true,
+      message: "Consent confirmed",
+      verifiedByName: consent.primaryAcceptedAt
+        ? consent.verifiedByName ?? null
+        : session.user.name ?? "Staff",
+    });
   } catch (err) {
     console.error("[consent confirm]", err);
     return NextResponse.json({ error: "Failed to confirm consent" }, { status: 500 });
