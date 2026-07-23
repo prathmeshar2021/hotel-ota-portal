@@ -19,6 +19,7 @@ import {
   LayoutGrid,
   FileSpreadsheet,
   MessageCircle,
+  Users,
 } from "lucide-react";
 
 interface SuperAdminNavProps {
@@ -35,6 +36,7 @@ const NAV_LINKS = [
   { href: "/admin/promotions", label: "Promotions", icon: Sparkles },
   { href: "/admin/gst-report", label: "GST Report", icon: FileSpreadsheet },
   { href: "/admin/approvals", label: "Approvals", icon: ShieldCheck, badge: true },
+  { href: "/admin/staff", label: "Staff", icon: Users },
   { href: "/admin/hotel-admin/support", label: "Support Chat", icon: MessageCircle },
 ];
 

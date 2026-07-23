@@ -11,12 +11,15 @@ interface Props {
   /** Pre-existing token (if a consent record already exists) and accepted state. */
   consentToken?: string | null;
   acceptedAt?: string | null;
+  /** Staff member who verified a signed copy (null for electronic acceptance). */
+  verifiedByName?: string | null;
 }
 
-export default function ConsentFormButton({ bookingId, guestPhone, consentToken, acceptedAt }: Props) {
+export default function ConsentFormButton({ bookingId, guestPhone, consentToken, acceptedAt, verifiedByName }: Props) {
   const router = useRouter();
   const [token, setToken] = useState<string | null>(consentToken ?? null);
   const [accepted, setAccepted] = useState<boolean>(!!acceptedAt);
+  const [verifier, setVerifier] = useState<string | null>(verifiedByName ?? null);
   const [preparing, setPreparing] = useState(false);
   const [sending, setSending] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -68,6 +71,7 @@ export default function ConsentFormButton({ bookingId, guestPhone, consentToken,
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to confirm");
       setAccepted(true);
+      if (data.verifiedByName) setVerifier(data.verifiedByName);
       toast.success("Consent confirmed — you can now complete check-in");
       router.refresh();
     } catch (e) {
@@ -129,7 +133,7 @@ export default function ConsentFormButton({ bookingId, guestPhone, consentToken,
 
       <p className="text-[10px] text-white/30 mt-2 leading-relaxed">
         {accepted
-          ? "Consent confirmed. You can now complete the check-in."
+          ? `Consent confirmed${verifier ? ` by ${verifier}` : ""}. You can now complete the check-in.`
           : "Print & take the guest's signature (then mark it received), or send on WhatsApp for the guest to accept. Check-in can't be completed until consent is confirmed."}
       </p>
     </div>

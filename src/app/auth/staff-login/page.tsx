@@ -21,7 +21,7 @@ export default function StaffLoginPage() {
       toast.success("Welcome back!");
       window.location.href = "/hotel-admin/dashboard";
     } else {
-      toast.error("Invalid email or password.");
+      toast.error("Invalid user ID or password.");
     }
   }
 
@@ -94,15 +94,18 @@ export default function StaffLoginPage() {
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
               <label className="block text-xs font-semibold text-white/50 uppercase tracking-wider mb-2">
-                Email Address
+                User ID
               </label>
               <div className="relative">
                 <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/25" />
                 <input
-                  type="email"
-                  placeholder="staff@theurbanscape.com"
+                  type="text"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  placeholder="e.g. rahul"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => setEmail(e.target.value.trim().toLowerCase())}
                   required
                   className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-white placeholder:text-white/25 text-sm focus:outline-none focus:border-blue-400/50 focus:bg-white/8 transition-all"
                 />

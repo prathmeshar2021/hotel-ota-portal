@@ -111,6 +111,7 @@ export async function buildConsentData(bookingId: string): Promise<ConsentPdfDat
       booking.consent?.primaryAcceptedAt && booking.consent.mode !== "WHATSAPP"
         ? booking.consent.primaryAcceptedAt
         : null,
+    verifiedByName: booking.consent?.verifiedByName ?? null,
   };
 }
 

@@ -90,7 +90,7 @@ export default async function BookingDetailPage({
       payment: true,
       charges: { orderBy: { id: "asc" } },
       gstInvoice: { select: { invoiceNumber: true } },
-      consent: { select: { consentToken: true, primaryAcceptedAt: true } },
+      consent: { select: { consentToken: true, primaryAcceptedAt: true, verifiedByName: true } },
     },
   });
 
@@ -620,6 +620,7 @@ export default async function BookingDetailPage({
                   guestPhone={booking.primaryGuest.phone ?? booking.guestPhone}
                   consentToken={booking.consent?.consentToken ?? null}
                   acceptedAt={booking.consent?.primaryAcceptedAt?.toISOString() ?? null}
+                  verifiedByName={booking.consent?.verifiedByName ?? null}
                 />
               </div>
             )}
