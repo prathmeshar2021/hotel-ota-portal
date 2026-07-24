@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { prisma } from "@/lib/db/prisma";
 import { notFound } from "next/navigation";
 import { format } from "date-fns";
+import { fmtIST } from "@/lib/utils/datetime";
 import { FileText, ShieldCheck, CheckCircle2, Calendar, User } from "lucide-react";
 import ConsentAcceptButton from "@/components/customer/ConsentAcceptButton";
 
@@ -119,7 +120,7 @@ export default async function ConsentAcceptPage({
               <div>
                 <p className="text-sm font-semibold text-green-300">Consent recorded</p>
                 <p className="text-xs text-white/50">
-                  Accepted on {format(consent.primaryAcceptedAt!, "dd MMM yyyy, hh:mm a")}. Valid
+                  Accepted on {fmtIST(consent.primaryAcceptedAt!, "dd MMM yyyy, hh:mm a")}. Valid
                   under the IT Act, 2000 & DPDP Act, 2023.
                 </p>
               </div>

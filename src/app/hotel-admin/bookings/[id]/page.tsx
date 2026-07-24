@@ -27,6 +27,7 @@ import {
   BedDouble,
 } from "lucide-react";
 import { format } from "date-fns";
+import { fmtIST } from "@/lib/utils/datetime";
 import BookingStatusButton, { NoShowButton } from "@/components/hotel-admin/BookingStatusButton";
 import CounterCheckinButton from "@/components/hotel-admin/CounterCheckinButton";
 import CompleteCheckinButton from "@/components/hotel-admin/CompleteCheckinButton";
@@ -450,7 +451,7 @@ export default async function BookingDetailPage({
                     <div>
                       <p className="text-[10px] text-white/30 uppercase tracking-wider">Actual Check-in</p>
                       <p className="text-green-400 text-xs font-semibold">
-                        {format(booking.checkedInAt, "dd MMM yyyy, hh:mm a")}
+                        {fmtIST(booking.checkedInAt, "dd MMM yyyy, hh:mm a")}
                       </p>
                     </div>
                   </div>
@@ -463,7 +464,7 @@ export default async function BookingDetailPage({
                     <div>
                       <p className="text-[10px] text-white/30 uppercase tracking-wider">Actual Check-out</p>
                       <p className="text-amber-400 text-xs font-semibold">
-                        {format(booking.checkedOutAt, "dd MMM yyyy, hh:mm a")}
+                        {fmtIST(booking.checkedOutAt, "dd MMM yyyy, hh:mm a")}
                       </p>
                     </div>
                   </div>
@@ -587,7 +588,7 @@ export default async function BookingDetailPage({
                   </div>
                   {booking.cancelledAt && (
                     <p className="text-[10px] text-white/25 mt-1">
-                      Cancelled {format(booking.cancelledAt, "dd MMM yyyy, hh:mm a")}
+                      Cancelled {fmtIST(booking.cancelledAt, "dd MMM yyyy, hh:mm a")}
                     </p>
                   )}
                   <RefundStatus
@@ -662,7 +663,7 @@ export default async function BookingDetailPage({
           <div className="bg-white/2 border border-white/6 rounded-xl px-4 py-3 text-xs text-white/30">
             Booking source: <span className="text-white/50 font-medium">{booking.source}</span>
             <br />
-            Created: {format(booking.createdAt, "dd MMM yyyy, hh:mm a")}
+            Created: {fmtIST(booking.createdAt, "dd MMM yyyy, hh:mm a")}
           </div>
         </div>
 

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db/prisma";
 import Link from "next/link";
 import { format, startOfDay, endOfDay } from "date-fns";
+import { fmtIST } from "@/lib/utils/datetime";
 import { Calendar, User, ArrowRight, Phone, Search, LogIn, LogOut } from "lucide-react";
 import { getCategoryMeta } from "@/lib/utils/room-categories";
 
@@ -290,14 +291,14 @@ export default async function BookingsPage({ searchParams }: Props) {
                   {b.checkedInAt && (
                     <div className="flex items-center gap-1 text-[10px] text-green-400 justify-end">
                       <LogIn className="w-3 h-3" />
-                      In: {format(b.checkedInAt, "dd MMM, hh:mm a")}
+                      In: {fmtIST(b.checkedInAt, "dd MMM, hh:mm a")}
                     </div>
                   )}
                   {/* Actual check-out time */}
                   {b.checkedOutAt && (
                     <div className="flex items-center gap-1 text-[10px] text-amber-400 justify-end">
                       <LogOut className="w-3 h-3" />
-                      Out: {format(b.checkedOutAt, "dd MMM, hh:mm a")}
+                      Out: {fmtIST(b.checkedOutAt, "dd MMM, hh:mm a")}
                     </div>
                   )}
                   {/* Online CI badge (only when not yet checked in) */}

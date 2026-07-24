@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Send, Loader2, ArrowLeft, CheckCheck, X, Check } from "lucide-react";
-import { format, isToday, isYesterday } from "date-fns";
+import { isToday, isYesterday } from "date-fns";
+import { fmtIST } from "@/lib/utils/datetime";
 import Link from "next/link";
 
 interface Message {
@@ -24,9 +25,9 @@ interface Thread {
 
 function formatTime(iso: string) {
   const d = new Date(iso);
-  if (isToday(d)) return format(d, "h:mm a");
-  if (isYesterday(d)) return `Yesterday ${format(d, "h:mm a")}`;
-  return format(d, "dd MMM, h:mm a");
+  if (isToday(d)) return fmtIST(d, "h:mm a");
+  if (isYesterday(d)) return `Yesterday ${fmtIST(d, "h:mm a")}`;
+  return fmtIST(d, "dd MMM, h:mm a");
 }
 
 export default function AdminThreadPage() {

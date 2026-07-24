@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { format } from "date-fns";
+import { fmtIST } from "@/lib/utils/datetime";
 
 /**
  * Guest Registration & Consent Form.
@@ -117,7 +118,7 @@ export function generateConsentPdf(d: ConsentPdfData): Uint8Array {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.5);
   doc.setTextColor(120);
-  doc.text(`Printed: ${format(new Date(), "dd MMM yyyy, hh:mm a")}`, pageW - M, y + 10, {
+  doc.text(`Printed: ${fmtIST(new Date(), "dd MMM yyyy, hh:mm a")}`, pageW - M, y + 10, {
     align: "right",
   });
 
@@ -261,7 +262,7 @@ export function generateConsentPdf(d: ConsentPdfData): Uint8Array {
     doc.setFontSize(8);
     doc.setTextColor(30, 110, 45);
     doc.text(
-      `Accepted electronically by the primary guest on ${format(d.electronicAcceptedAt, "dd MMM yyyy, hh:mm a")}.`,
+      `Accepted electronically by the primary guest on ${fmtIST(d.electronicAcceptedAt, "dd MMM yyyy, hh:mm a")}.`,
       M + 3,
       y + 1.6,
     );
@@ -318,7 +319,7 @@ export function generateConsentPdf(d: ConsentPdfData): Uint8Array {
       doc.setTextColor(30, 110, 45);
       const verifier = d.verifiedByName?.trim() ? d.verifiedByName.trim() : "staff";
       doc.text(
-        `Signed copy received & verified by ${verifier} on ${format(d.paperVerifiedAt, "dd MMM yyyy, hh:mm a")}.`,
+        `Signed copy received & verified by ${verifier} on ${fmtIST(d.paperVerifiedAt, "dd MMM yyyy, hh:mm a")}.`,
         colR,
         officeY + 3.5,
         { maxWidth: pageW / 2 - M },

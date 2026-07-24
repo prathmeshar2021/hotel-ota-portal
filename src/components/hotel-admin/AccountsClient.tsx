@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import { format, subDays, startOfMonth, differenceInDays } from "date-fns";
+import { fmtIST } from "@/lib/utils/datetime";
 
 const MAX_RANGE_DAYS = 180; // 6 months
 
@@ -82,7 +83,7 @@ function downloadCSV(transactions: TransactionItem[], summary: Summary | null) {
   const rows = [
     ["Date", "Type", "Description", "Guest", "Booking Ref", "Mode", "Amount (₹)", "Direction"],
     ...transactions.map(t => [
-      format(new Date(t.date), "dd/MM/yyyy HH:mm"),
+      fmtIST(new Date(t.date), "dd/MM/yyyy HH:mm"),
       txTypeLabel(t.type),
       t.description,
       t.guestName ?? "",
@@ -158,7 +159,7 @@ async function downloadPDF(
   doc.setFont("helvetica", "normal");
   doc.text(`Period: ${rangeLabel}  ·  Filter: ${modeLabel}`, M, 20);
   doc.text(
-    `Generated: ${format(new Date(), "dd MMM yyyy, hh:mm a")}`,
+    `Generated: ${fmtIST(new Date(), "dd MMM yyyy, hh:mm a")}`,
     PW - M, 20,
     { align: "right" }
   );
@@ -797,7 +798,7 @@ export default function AccountsClient() {
                         {format(new Date(tx.date), "dd MMM")}
                       </p>
                       <p className="text-white/25 text-[10px]">
-                        {format(new Date(tx.date), "hh:mm a")}
+                        {fmtIST(new Date(tx.date), "hh:mm a")}
                       </p>
                     </div>
 
