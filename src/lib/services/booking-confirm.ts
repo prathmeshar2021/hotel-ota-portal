@@ -44,26 +44,34 @@ export async function confirmPaidBooking(params: {
     return { bookingRef: booking.bookingRef, alreadyConfirmed: true };
   }
 
-  // The shared payment row's amount is the group total (or the single booking's).
+  // The order amount we charged online (the group total, or the single booking's,
+  // or the partial deposit) — this is the authoritative "paid toward booking".
   const expectedTotal = booking.payment?.amount ?? booking.totalAmount;
   const captured = capturedPaise != null ? Math.round(capturedPaise) / 100 : expectedTotal;
-  if (capturedPaise != null && Math.abs(captured - expectedTotal) > 1) {
+
+  // Credit the ORDER amount, never the gateway-captured amount. When the customer
+  // bears the Razorpay fee, the captured amount INCLUDES it (e.g. ₹511.80 charged
+  // for a ₹500 order) — that fee is a payment-gateway cost, not room revenue, so
+  // it must never be recorded as paid toward the booking. Capping at expectedTotal
+  // also protects against a rare partial capture crediting too much.
+  const paidTotal = Math.min(captured, expectedTotal);
+  if (capturedPaise != null && captured < expectedTotal - 1) {
     console.warn(
-      `[confirm] amount mismatch for ${booking.bookingRef}: captured ₹${captured}, expected ₹${expectedTotal}`
+      `[confirm] underpayment for ${booking.bookingRef}: captured ₹${captured}, expected ₹${expectedTotal}`
     );
   }
 
-  // Settle every booking in the group using the ACTUAL captured amount,
-  // not the booking total — this handles PAY_PARTIAL (₹500/room) correctly.
+  // Settle every booking in the group from the order amount — handles
+  // PAY_PARTIAL (deposit-only) correctly, with the balance due at the hotel.
   const groupBookings = groupId
     ? await prisma.booking.findMany({
         where: { bookingGroupId: groupId },
         select: { id: true, totalAmount: true, roomCategory: true, checkInDate: true, checkOutDate: true, roomId: true },
       })
     : [{ id: booking.id, totalAmount: booking.totalAmount, roomCategory: booking.roomCategory, checkInDate: booking.checkInDate, checkOutDate: booking.checkOutDate, roomId: booking.roomId }];
-  const capturedPerRoom = captured / groupBookings.length;
+  const paidPerRoom = paidTotal / groupBookings.length;
   for (const b of groupBookings) {
-    const onlinePaid = +Math.min(capturedPerRoom, b.totalAmount).toFixed(2);
+    const onlinePaid = +Math.min(paidPerRoom, b.totalAmount).toFixed(2);
     const balanceDue = +Math.max(0, b.totalAmount - onlinePaid).toFixed(2);
     await prisma.booking.update({
       where: { id: b.id },
@@ -101,7 +109,7 @@ export async function confirmPaidBooking(params: {
     groupBookings.length > 1
       ? `${groupBookings.length} rooms`
       : getCategoryMeta(booking.roomCategory).displayName;
-  const isPartial = captured < expectedTotal - 1;
+  const isPartial = paidTotal < expectedTotal - 1;
   const notifData = {
     guestName: booking.primaryGuest.name,
     bookingRef: booking.bookingRef,
@@ -111,8 +119,8 @@ export async function confirmPaidBooking(params: {
     checkOut: format(booking.checkOutDate, "dd MMM yyyy"),
     totalAmount: expectedTotal,
     isPartial,
-    onlinePaid: isPartial ? captured : undefined,
-    balanceDue: isPartial ? expectedTotal - captured : undefined,
+    onlinePaid: isPartial ? paidTotal : undefined,
+    balanceDue: isPartial ? expectedTotal - paidTotal : undefined,
   };
   const notifPhone = booking.primaryGuest.phone ?? booking.guestPhone ?? undefined;
   const ownerAlertData = {
