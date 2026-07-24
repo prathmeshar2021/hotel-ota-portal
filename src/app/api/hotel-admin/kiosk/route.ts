@@ -16,7 +16,8 @@ const PAIR_CODE_TTL_MIN = 10;
 async function requireAdmin() {
   const session = await auth();
   if (!session?.user?.hotelId) return null;
-  if (session.user.role !== "HOTEL_ADMIN" && session.user.role !== "SUPER_ADMIN") {
+  // Kiosk device management is super-admin only.
+  if (session.user.role !== "SUPER_ADMIN") {
     return null;
   }
   return { hotelId: session.user.hotelId };

@@ -41,7 +41,7 @@ const NAV_LINKS = [
   { href: "/hotel-admin/gommt-finance", label: "GoMMT Finance", icon: Plane },
   { href: "/hotel-admin/ledger", label: "Ledger", icon: BookOpenText },
   { href: "/hotel-admin/support", label: "Support Chat", icon: MessageCircle },
-  { href: "/hotel-admin/kiosk", label: "Kiosk Devices", icon: MonitorSmartphone },
+  { href: "/hotel-admin/kiosk", label: "Kiosk Devices", icon: MonitorSmartphone, superAdminOnly: true },
   { href: "/hotel-admin/account", label: "My Account", icon: UserCog },
 ];
 
@@ -92,7 +92,9 @@ export default function AdminNav({ staffName, staffRole, hotelName, pendingOtps 
 
       {/* Nav links */}
       <nav className="flex-1 p-3 space-y-1">
-        {NAV_LINKS.map(({ href, label, icon: Icon }) => {
+        {NAV_LINKS
+          .filter((link) => !("superAdminOnly" in link) || staffRole === "SUPER_ADMIN")
+          .map(({ href, label, icon: Icon }) => {
           const active = isActive(href);
           return (
             <Link

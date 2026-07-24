@@ -15,7 +15,8 @@ export async function DELETE(
   if (!session?.user?.hotelId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (session.user.role !== "HOTEL_ADMIN" && session.user.role !== "SUPER_ADMIN") {
+  // Kiosk device management is super-admin only.
+  if (session.user.role !== "SUPER_ADMIN") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
