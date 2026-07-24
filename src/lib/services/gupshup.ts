@@ -176,7 +176,9 @@ export const gupshup = {
         `📅 *Check-out:* ${data.checkOut}\n` +
         (data.payAtHotel
           ? `💰 *Amount Due at Hotel:* ₹${data.totalAmount}\n`
-          : `💰 *Amount Paid:* ₹${data.totalAmount}\n`) +
+          : data.isPartial
+            ? `💰 *Advance Paid:* ₹${data.onlinePaid}\n💰 *Balance Due at Hotel:* ₹${data.balanceDue}\n`
+            : `💰 *Amount Paid:* ₹${data.totalAmount}\n`) +
         `\nComplete your *online check-in* at:\n` +
         `${process.env.NEXT_PUBLIC_APP_URL}/checkin/${data.bookingRef}\n\n` +
         `This saves you time at the hotel. 🙏`,

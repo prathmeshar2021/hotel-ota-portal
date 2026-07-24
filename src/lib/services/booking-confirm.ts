@@ -109,7 +109,12 @@ export async function confirmPaidBooking(params: {
     groupBookings.length > 1
       ? `${groupBookings.length} rooms`
       : getCategoryMeta(booking.roomCategory).displayName;
-  const isPartial = paidTotal < expectedTotal - 1;
+  // A booking is "partial" when the guest paid only a deposit online and still
+  // owes the room balance at the hotel — i.e. the amount paid is less than the
+  // FULL booking total (summed across the group), not the deposit/order amount.
+  const groupTotal = +groupBookings.reduce((sum, b) => sum + b.totalAmount, 0).toFixed(2);
+  const isPartial = paidTotal < groupTotal - 1;
+  const balanceDue = +(groupTotal - paidTotal).toFixed(2);
   const notifData = {
     guestName: booking.primaryGuest.name,
     bookingRef: booking.bookingRef,
@@ -117,10 +122,10 @@ export async function confirmPaidBooking(params: {
     roomType,
     checkIn: format(booking.checkInDate, "dd MMM yyyy"),
     checkOut: format(booking.checkOutDate, "dd MMM yyyy"),
-    totalAmount: expectedTotal,
+    totalAmount: groupTotal,
     isPartial,
     onlinePaid: isPartial ? paidTotal : undefined,
-    balanceDue: isPartial ? expectedTotal - paidTotal : undefined,
+    balanceDue: isPartial ? balanceDue : undefined,
   };
   const notifPhone = booking.primaryGuest.phone ?? booking.guestPhone ?? undefined;
   const ownerAlertData = {
@@ -131,7 +136,7 @@ export async function confirmPaidBooking(params: {
     checkIn: format(booking.checkInDate, "dd MMM yyyy"),
     checkOut: format(booking.checkOutDate, "dd MMM yyyy"),
     nights: booking.noOfNights,
-    totalAmount: expectedTotal,
+    totalAmount: groupTotal,
     payMode: isPartial ? "PAY_PARTIAL" : "PAY_NOW",
   };
   await Promise.allSettled([
