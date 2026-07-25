@@ -217,9 +217,9 @@ export default function GuestRegisterForm() {
       <div className="flex items-start gap-2.5 bg-amber-500/8 border border-amber-500/15 rounded-2xl px-4 py-3">
         <FileText className="w-4 h-4 text-amber-400/80 shrink-0 mt-0.5" />
         <p className="text-[12.5px] text-amber-200/70 leading-relaxed">
-          Checking in as a group? Add every guest below — each is saved separately.
+          Checking in as a group? Add every guest below.
           If an ID&apos;s front &amp; back are on the <span className="font-semibold text-amber-200/90">same file</span>,
-          upload it to <span className="font-semibold text-amber-200/90">both</span> boxes. Photos and PDFs are accepted.
+          upload it to <span className="font-semibold text-amber-200/90">both</span> boxes.
         </p>
       </div>
 
