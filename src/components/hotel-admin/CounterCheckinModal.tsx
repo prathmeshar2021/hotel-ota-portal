@@ -173,7 +173,7 @@ async function uploadToCloudinary(file: File): Promise<string> {
 // ─── Default blank companion ──────────────────────────────────────────────────
 
 const blankCompanion = (): CompanionData => ({
-  name: "", relation: "", idType: "AADHAR", idNumber: "", idFrontUrl: "", idBackUrl: "",
+  name: "", relation: "Friend", idType: "AADHAR", idNumber: "", idFrontUrl: "", idBackUrl: "",
 });
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -196,7 +196,7 @@ export default function CounterCheckinModal({
   // Travel
   const [comingFrom, setComingFrom] = useState(existingData?.comingFrom ?? "");
   const [goingTo, setGoingTo]       = useState(existingData?.goingTo ?? "");
-  const [purpose, setPurpose]       = useState(existingData?.purpose ?? "");
+  const [purpose, setPurpose]       = useState(existingData?.purpose || "Leisure / Tourism");
   const [vehicleNo, setVehicleNo]   = useState(existingData?.vehicleNo ?? "");
 
   // Refundable deposit — editable, may be skipped.
@@ -208,7 +208,7 @@ export default function CounterCheckinModal({
   const initCompanions = (): CompanionData[] => {
     if (existingData?.companions?.length) {
       return existingData.companions.map(c => ({
-        name: c.name, relation: c.relation ?? "",
+        name: c.name, relation: c.relation || "Friend",
         idType: c.idType ?? "AADHAR", idNumber: c.idNumber ?? "",
         idFrontUrl: c.idFrontUrl ?? "", idBackUrl: c.idBackUrl ?? "",
       }));
@@ -230,7 +230,7 @@ export default function CounterCheckinModal({
     setIdBackUrl(existingData?.idBackUrl ?? "");
     setComingFrom(existingData?.comingFrom ?? "");
     setGoingTo(existingData?.goingTo ?? "");
-    setPurpose(existingData?.purpose ?? "");
+    setPurpose(existingData?.purpose || "Leisure / Tourism");
     setVehicleNo(existingData?.vehicleNo ?? "");
     setCompanions(initCompanions());
     setCompUploading({});
