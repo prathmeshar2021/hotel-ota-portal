@@ -78,6 +78,24 @@ export async function POST(req: NextRequest) {
 
   // Resolve guest — find by phone or use provided guestId
   let guestId = d.guestId;
+  if (guestId) {
+    // Existing guest picked from search. If they were saved without a phone
+    // (e.g. first captured as a companion), backfill the number staff just
+    // entered — but only if no other guest already owns it (phone is @unique).
+    const g = await prisma.guest.findUnique({
+      where: { id: guestId },
+      select: { id: true, phone: true },
+    });
+    if (g && !g.phone && d.guestPhone) {
+      const clash = await prisma.guest.findFirst({
+        where: { phone: d.guestPhone, NOT: { id: g.id } },
+        select: { id: true },
+      });
+      if (!clash) {
+        await prisma.guest.update({ where: { id: g.id }, data: { phone: d.guestPhone } });
+      }
+    }
+  }
   if (!guestId) {
     const existing = await prisma.guest.findUnique({ where: { phone: d.guestPhone } });
     if (existing) {

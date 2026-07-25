@@ -21,7 +21,7 @@ interface AvailableRoom {
 }
 
 interface GuestResult {
-  id: string; name: string; phone: string; email?: string | null;
+  id: string; name: string; phone: string | null; email?: string | null;
   idType?: string | null; idNumber?: string | null;
   _count: { bookings: number };
 }
@@ -158,6 +158,9 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
     setSearchResults([]);
     setSearchQuery("");
     setShowRegisterForm(false);
+    // Blank the phone input so a guest with no phone on file starts empty
+    // (staff must fill it) — reused by handleSubmit's `?? newGuestPhone` fallback.
+    setNewGuestPhone("");
   }
 
   // Called while typing — only clears previous search results, NOT the phone input
@@ -410,7 +413,9 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
                           : "New guest"}
                       </span>
                     </div>
-                    <p className="text-white/50 text-sm">+91 {selectedGuest.phone}</p>
+                    {selectedGuest.phone
+                      ? <p className="text-white/50 text-sm">+91 {selectedGuest.phone}</p>
+                      : <p className="text-amber-400/80 text-xs font-semibold">No phone on file</p>}
                     {selectedGuest.email && <p className="text-white/35 text-xs">{selectedGuest.email}</p>}
                     {selectedGuest.idNumber && (
                       <p className="text-white/30 text-xs">{selectedGuest.idType} · {selectedGuest.idNumber}</p>
@@ -422,6 +427,24 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
                   <X className="w-3.5 h-3.5" /> Change
                 </button>
               </div>
+
+              {/* This guest was saved without a phone (e.g. first added as a
+                  companion). Require one now — it's saved back to their profile. */}
+              {!selectedGuest.phone && (
+                <div className="mt-4 pt-4 border-t border-green-500/15">
+                  <label className={labelCls}>Phone Number * <span className="text-amber-400/70 normal-case tracking-normal font-medium">— required to continue</span></label>
+                  <div className="relative max-w-xs">
+                    <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/25" />
+                    <input
+                      type="tel" inputMode="numeric" autoFocus
+                      value={newGuestPhone}
+                      onChange={e => setNewGuestPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                      placeholder="10-digit mobile"
+                      className={`${inputCls} pl-10`}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -617,7 +640,11 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
             </button>
             <button
               onClick={() => setStep(3)}
-              disabled={!selectedGuest && (!showRegisterForm || !newGuestName || newGuestPhone.replace(/\D/g, "").length !== 10)}
+              disabled={
+                selectedGuest
+                  ? (!selectedGuest.phone && newGuestPhone.replace(/\D/g, "").length !== 10)
+                  : (!showRegisterForm || !newGuestName || newGuestPhone.replace(/\D/g, "").length !== 10)
+              }
               className="flex items-center gap-2 bg-blue-500 hover:bg-blue-400 disabled:opacity-40 text-white font-bold px-6 py-3 rounded-xl transition-all">
               Next: Payment <ChevronRight className="w-4 h-4" />
             </button>
