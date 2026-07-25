@@ -51,6 +51,7 @@ export async function GET(req: NextRequest) {
       id: true,
       name: true,
       phone: true,
+      email: true,
       idType: true,
       idNumber: true,
       idFrontUrl: true,

@@ -7,6 +7,7 @@ export interface GuestResult {
   id: string;
   name: string;
   phone: string | null;
+  email: string | null;
   idType: string | null;
   idNumber: string | null;
   idFrontUrl: string | null;

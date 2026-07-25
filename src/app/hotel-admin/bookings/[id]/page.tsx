@@ -87,7 +87,7 @@ export default async function BookingDetailPage({
       primaryGuest: true,
       room: true,
       onlineCheckin: true,
-      companions: true,
+      companions: { include: { guest: { select: { phone: true, email: true } } } },
       payment: true,
       charges: { orderBy: { id: "asc" } },
       gstInvoice: { select: { invoiceNumber: true } },
@@ -178,6 +178,8 @@ export default async function BookingDetailPage({
                   companions: booking.companions.map(c => ({
                     name: c.name,
                     relation: c.relation,
+                    phone: c.guest?.phone ?? null,
+                    email: c.guest?.email ?? null,
                     idType: c.idType as string | null,
                     idNumber: c.idNumber,
                     idFrontUrl: c.idFrontUrl,

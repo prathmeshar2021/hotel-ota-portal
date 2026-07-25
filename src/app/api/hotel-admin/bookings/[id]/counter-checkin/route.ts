@@ -8,6 +8,8 @@ import { ensureConsent } from "@/lib/services/consent";
 const CompanionSchema = z.object({
   name:       z.string().min(1, "Companion name is required"),
   relation:   z.string().optional(),
+  phone:      z.string().optional(),
+  email:      z.string().optional(),
   idType:     z.string().optional(),
   idNumber:   z.string().min(1, "Companion ID number is required"),
   idFrontUrl: z.string().url("Companion ID front photo is required"),
@@ -124,45 +126,50 @@ export async function POST(
   // 3. Remove old companions
   await prisma.bookingCompanion.deleteMany({ where: { bookingId: booking.id } });
 
-  // 4. For each companion: upsert Guest record, then create BookingCompanion linked to it
+  // 4. For each companion: upsert a full Guest record (so they're searchable and
+  //    auto-fill on a future visit), then create the BookingCompanion linked to it.
   const validCompanions = (data.companions ?? []).filter(c => c.name.trim());
   for (const c of validCompanions) {
-    // Try to find existing Guest by idNumber (most reliable unique key)
-    let guestId: string | undefined;
+    const phone = c.phone ? c.phone.replace(/\D/g, "") : "";        // store digits
+    const email = c.email ? c.email.trim().toLowerCase() : "";
 
-    if (c.idNumber) {
-      const existing = await prisma.guest.findFirst({
-        where: { idNumber: c.idNumber },
-        select: { id: true },
-      });
-
-      if (existing) {
-        // Update existing record with latest info
-        await prisma.guest.update({
-          where: { id: existing.id },
-          data: {
-            name:       c.name,
-            idType:     c.idType as IdTypeEnum | undefined,
-            idNumber:   c.idNumber,
-            idFrontUrl: c.idFrontUrl || undefined,
-            idBackUrl:  c.idBackUrl  || undefined,
-          },
-        });
-        guestId = existing.id;
-      } else {
-        // Create new Guest record for this companion
-        const newGuest = await prisma.guest.create({
-          data: {
-            name:       c.name,
-            idType:     c.idType as IdTypeEnum | undefined,
-            idNumber:   c.idNumber,
-            idFrontUrl: c.idFrontUrl || undefined,
-            idBackUrl:  c.idBackUrl  || undefined,
-          },
-        });
-        guestId = newGuest.id;
-      }
+    // Match an existing guest by ID number first (most reliable), then by phone.
+    let existing = await prisma.guest.findFirst({
+      where: { idNumber: c.idNumber },
+      select: { id: true },
+    });
+    if (!existing && phone) {
+      existing = await prisma.guest.findFirst({ where: { phone }, select: { id: true } });
     }
+
+    // phone/email are @unique — only write them if free (or already this guest's),
+    // so a shared/duplicate contact never aborts the whole check-in.
+    const phoneFree = phone
+      ? !(await prisma.guest.findFirst({
+          where: { phone, ...(existing ? { NOT: { id: existing.id } } : {}) },
+          select: { id: true },
+        }))
+      : false;
+    const emailFree = email
+      ? !(await prisma.guest.findFirst({
+          where: { email, ...(existing ? { NOT: { id: existing.id } } : {}) },
+          select: { id: true },
+        }))
+      : false;
+
+    const guestData = {
+      name:       c.name,
+      idType:     c.idType as IdTypeEnum | undefined,
+      idNumber:   c.idNumber,
+      idFrontUrl: c.idFrontUrl || undefined,
+      idBackUrl:  c.idBackUrl  || undefined,
+      ...(phoneFree ? { phone } : {}),
+      ...(emailFree ? { email } : {}),
+    };
+
+    const guestId = existing
+      ? (await prisma.guest.update({ where: { id: existing.id }, data: guestData })).id
+      : (await prisma.guest.create({ data: guestData })).id;
 
     // Create the BookingCompanion entry linked to the Guest record
     await prisma.bookingCompanion.create({

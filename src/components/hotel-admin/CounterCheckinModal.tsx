@@ -17,6 +17,8 @@ type IdType = "AADHAR" | "DRIVING_LICENSE" | "PASSPORT" | "VOTER_ID" | "OTHER";
 interface CompanionData {
   name: string;
   relation: string;
+  phone: string;
+  email: string;
   idType: string;
   idNumber: string;
   idFrontUrl: string;
@@ -35,6 +37,8 @@ interface ExistingCheckinData {
   companions?: {
     name: string;
     relation?: string | null;
+    phone?: string | null;
+    email?: string | null;
     idType?: string | null;
     idNumber?: string | null;
     idFrontUrl?: string | null;
@@ -216,7 +220,8 @@ async function uploadToCloudinary(file: File): Promise<string> {
 // ─── Default blank companion ──────────────────────────────────────────────────
 
 const blankCompanion = (): CompanionData => ({
-  name: "", relation: "Friend", idType: "AADHAR", idNumber: "", idFrontUrl: "", idBackUrl: "",
+  name: "", relation: "Friend", phone: "", email: "",
+  idType: "AADHAR", idNumber: "", idFrontUrl: "", idBackUrl: "",
 });
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -252,6 +257,7 @@ export default function CounterCheckinModal({
     if (existingData?.companions?.length) {
       return existingData.companions.map(c => ({
         name: c.name, relation: c.relation || "Friend",
+        phone: c.phone ?? "", email: c.email ?? "",
         idType: c.idType ?? "AADHAR", idNumber: c.idNumber ?? "",
         idFrontUrl: c.idFrontUrl ?? "", idBackUrl: c.idBackUrl ?? "",
       }));
@@ -360,6 +366,8 @@ export default function CounterCheckinModal({
           ? {
               ...c,
               name: g.name,
+              phone: g.phone ?? c.phone,
+              email: g.email ?? c.email,
               idType: g.idType ?? "AADHAR",
               idNumber: g.idNumber ?? "",
               idFrontUrl: g.idFrontUrl ?? "",
@@ -680,6 +688,21 @@ export default function CounterCheckinModal({
                           <label className={labelCls}>Relation</label>
                           <input value={c.relation} onChange={e => updateCompanion(i, "relation", e.target.value)}
                             placeholder="Spouse, Friend…" className={inputCls} />
+                        </div>
+                      </div>
+
+                      {/* Phone + email — optional, but saved to the guest's profile
+                          so this companion is searchable & auto-fills next visit. */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className={labelCls}>Phone <span className="text-white/30 normal-case font-normal">(optional)</span></label>
+                          <input value={c.phone} onChange={e => updateCompanion(i, "phone", e.target.value)}
+                            inputMode="tel" placeholder="10-digit mobile" className={inputCls} />
+                        </div>
+                        <div>
+                          <label className={labelCls}>Email <span className="text-white/30 normal-case font-normal">(optional)</span></label>
+                          <input value={c.email} onChange={e => updateCompanion(i, "email", e.target.value)}
+                            inputMode="email" placeholder="name@example.com" className={inputCls} />
                         </div>
                       </div>
 
