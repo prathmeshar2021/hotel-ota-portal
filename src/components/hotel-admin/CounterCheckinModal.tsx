@@ -66,6 +66,9 @@ const PURPOSES = [
   "Leisure / Tourism", "Business", "Family Visit", "Medical", "Education", "Other",
 ];
 
+// Nearby towns — most guests are local, so quick-select saves typing.
+const NEARBY_PLACES = ["Durg", "Bhilai", "Raipur", "Rajnandgaon", "Bilaspur"];
+
 // ─── Style helpers ────────────────────────────────────────────────────────────
 
 const inputCls    = "w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder:text-white/25 text-sm focus:outline-none focus:border-amber-400/40 transition-all";
@@ -75,6 +78,46 @@ const labelCls    = "block text-[11px] font-semibold text-white/40 uppercase tra
 const reqLabelCls = "block text-[11px] font-semibold text-white/65 uppercase tracking-wider mb-1.5";
 
 function Req() { return <span className="text-amber-400 ml-0.5">*</span>; }
+
+/**
+ * Origin / destination field with quick-select chips for nearby towns.
+ * Most guests are local, so a tap on "Bhilai" beats typing it out. Picking
+ * "Other" reveals a free-text box for anywhere not in the list.
+ * A value that is a non-empty string outside NEARBY_PLACES = "Other" mode.
+ */
+function PlaceField({
+  label, value, onChange,
+}: { label: string; value: string; onChange: (v: string) => void }) {
+  const isOther = value !== "" && !NEARBY_PLACES.includes(value);
+  const chipCls = (active: boolean) =>
+    `px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+      active
+        ? "bg-amber-500 text-black border-amber-400"
+        : "bg-white/5 border-white/10 text-white/60 hover:text-white/90 hover:border-white/20"
+    }`;
+  return (
+    <div>
+      <label className={reqLabelCls}>{label} <Req /></label>
+      <div className="flex flex-wrap gap-1.5">
+        {NEARBY_PLACES.map(place => (
+          <button type="button" key={place} onClick={() => onChange(place)}
+            className={chipCls(value === place)}>
+            {place}
+          </button>
+        ))}
+        {/* Sentinel " " marks Other-mode active while the box is still empty. */}
+        <button type="button" onClick={() => onChange(isOther ? value : " ")}
+          className={chipCls(isOther)}>
+          Other
+        </button>
+      </div>
+      {isOther && (
+        <input value={value.trim()} onChange={e => onChange(e.target.value)} autoFocus
+          placeholder="City / Town / Address" className={`${reqInputCls} mt-2`} />
+      )}
+    </div>
+  );
+}
 
 function SectionHead({ icon, title, sub }: { icon: React.ReactNode; title: string; sub?: string }) {
   return (
@@ -513,16 +556,8 @@ export default function CounterCheckinModal({
               sub="Required for hotel register"
             />
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className={reqLabelCls}>Coming From <Req /></label>
-                <input value={comingFrom} onChange={e => setComingFrom(e.target.value)}
-                  placeholder="City / Town / Address" className={reqInputCls} />
-              </div>
-              <div>
-                <label className={reqLabelCls}>Going To (after stay) <Req /></label>
-                <input value={goingTo} onChange={e => setGoingTo(e.target.value)}
-                  placeholder="City / Town / Address" className={reqInputCls} />
-              </div>
+              <PlaceField label="Coming From" value={comingFrom} onChange={setComingFrom} />
+              <PlaceField label="Going To (after stay)" value={goingTo} onChange={setGoingTo} />
               <div>
                 <label className={reqLabelCls}>Purpose of Visit <Req /></label>
                 <select value={purpose} onChange={e => setPurpose(e.target.value)} className={selectCls}>
