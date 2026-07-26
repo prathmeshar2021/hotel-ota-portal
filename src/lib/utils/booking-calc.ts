@@ -46,50 +46,52 @@ const GST_SLABS = [
 ];
 
 /**
- * Split a **GST-inclusive** gross amount back into taxable base + tax.
+ * Split a **GST-inclusive** gross amount back into taxable base + tax, landing
+ * on a **whole-rupee** total so counter bills never carry paise.
  *
- * The slab depends on the per-night *taxable* tariff (not the gross), so we
- * solve per night: for each slab divide out its rate and clamp the result into
- * that slab's range. Two gross bands are unreachable under the slab rules
- * (₹1,000–₹1,050 and ₹7,875–₹8,850 per night), so we take the highest legal
- * price that does **not exceed** the target — rounding a discount in the
- * guest's favour rather than ever charging more than was quoted — and set
- * `adjusted` when that lands below the asked-for price.
+ * The slab is set by the per-night *taxable* tariff, not the gross, so rather
+ * than dividing and hoping, we ask each slab for the highest whole-rupee total
+ * it can legally produce at or below the target and take the best of those.
+ * That handles the two gross bands the slab rules make unreachable
+ * (₹1,000–₹1,050 and ₹7,875–₹8,850 per night) — we settle just below them
+ * rather than ever charging more than was quoted, flagged via `adjusted`.
+ *
+ * Tax is then taken as the *remainder* (gross − taxable) rather than computed
+ * independently, which is what guarantees taxable + CGST + SGST is exactly the
+ * whole-rupee total with no rounding drift.
  */
 function splitInclusive(grossTotal: number, noOfNights: number) {
   const nights = Math.max(1, noOfNights);
-  const target = Math.max(0, grossTotal);
-  const perNightGross = target / nights;
+  const target = Math.floor(Math.max(0, grossTotal) + 1e-6);
 
-  let bestTaxable = 0;
-  let bestRate = 0;
-  let bestGross = 0;
+  let finalTotal = 0;
+  let rate = 0;
 
   for (const slab of GST_SLABS) {
-    const raw = perNightGross / (1 + slab.rate / 100);
-    const taxable = Math.min(Math.max(raw, slab.min), slab.max);
-    const achieved = taxable * (1 + slab.rate / 100);
-    // Never overshoot the quoted price; among the legal options take the best.
-    if (achieved <= perNightGross + 1e-6 && achieved >= bestGross) {
-      bestGross = achieved;
-      bestTaxable = taxable;
-      bestRate = slab.rate;
+    const factor = 1 + slab.rate / 100;
+    // Highest whole-rupee total this slab can reach without exceeding target…
+    const candidate = Math.floor(Math.min(target, slab.max * factor * nights) + 1e-6);
+    // …and it only counts if the implied per-night taxable really sits in the slab.
+    const perNightTaxable = candidate / factor / nights;
+    if (candidate >= finalTotal && perNightTaxable >= slab.min - 1e-9 && perNightTaxable <= slab.max + 1e-9) {
+      finalTotal = candidate;
+      rate = slab.rate;
     }
   }
 
-  const taxableAmount = +(bestTaxable * nights).toFixed(2);
-  const halfRate = bestRate / 2;
-  const cgst = +(taxableAmount * (halfRate / 100)).toFixed(2);
-  const sgst = +(taxableAmount * (halfRate / 100)).toFixed(2);
-  const totalAmount = +(taxableAmount + cgst + sgst).toFixed(2);
+  const taxableAmount = +(finalTotal / (1 + rate / 100)).toFixed(2);
+  const tax = +(finalTotal - taxableAmount).toFixed(2);
+  const cgst = +(tax / 2).toFixed(2);
+  const sgst = +(tax - cgst).toFixed(2);   // remainder — absorbs any odd paisa
+  const halfRate = rate / 2;
 
   return {
     taxableAmount, cgst, sgst,
     cgstRate: halfRate, sgstRate: halfRate,
-    totalAmount,
-    perNightTaxable: +bestTaxable.toFixed(2),
-    // Only a real slab-gap shortfall counts — not sub-rupee rounding drift.
-    adjusted: +target.toFixed(2) - totalAmount > 0.05,
+    totalAmount: +(taxableAmount + cgst + sgst).toFixed(2),
+    perNightTaxable: +(taxableAmount / nights).toFixed(2),
+    // Only a real slab-gap shortfall counts — not sub-rupee rounding.
+    adjusted: target - finalTotal > 0.5,
   };
 }
 
@@ -118,8 +120,10 @@ export function computeTotalsWithStaffDiscount(params: {
   const standard = computeTotals({ roomRentPerNight, noOfNights, couponDiscount });
 
   // 2. Staff discount off the gross, never below zero or above the total.
+  //    Counter bills are settled in cash, so everything here is whole rupees.
   const requested = Number.isFinite(params.staffDiscount) ? Math.max(0, params.staffDiscount!) : 0;
-  const appliedDiscount = +Math.min(requested, standard.totalAmount).toFixed(2);
+  const grossBefore = Math.round(standard.totalAmount);
+  const appliedDiscount = Math.min(Math.round(requested), grossBefore);
 
   if (appliedDiscount <= 0) {
     return {
@@ -134,15 +138,16 @@ export function computeTotalsWithStaffDiscount(params: {
     };
   }
 
-  // 3. Re-derive the tax split from the discounted gross.
-  const net = splitInclusive(+(standard.totalAmount - appliedDiscount).toFixed(2), noOfNights);
+  // 3. Re-derive the tax split from the discounted gross (whole rupees).
+  const net = splitInclusive(grossBefore - appliedDiscount, noOfNights);
 
   return {
     roomRent: standard.roomRent,      // list rent stays the headline figure
     couponDiscount,
     staffDiscount: appliedDiscount,
     appliedDiscount,
-    originalTotal: standard.totalAmount,
+    // Rounded too, so "original − discount = charged" holds exactly on the bill.
+    originalTotal: grossBefore,
     taxableAmount: net.taxableAmount,
     cgst: net.cgst,
     sgst: net.sgst,
