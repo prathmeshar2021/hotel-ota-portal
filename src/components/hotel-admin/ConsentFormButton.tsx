@@ -72,7 +72,9 @@ export default function ConsentFormButton({ bookingId, guestPhone, consentToken,
       if (!res.ok) throw new Error(data.error || "Failed to confirm");
       setAccepted(true);
       if (data.verifiedByName) setVerifier(data.verifiedByName);
-      toast.success("Consent confirmed — you can now complete check-in");
+      // The server finishes the check-in in the same call when nothing else is
+      // outstanding, so say what actually happened rather than assuming.
+      toast.success(data.message ?? "Consent confirmed");
       router.refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to confirm consent");
@@ -133,8 +135,8 @@ export default function ConsentFormButton({ bookingId, guestPhone, consentToken,
 
       <p className="text-[10px] text-white/30 mt-2 leading-relaxed">
         {accepted
-          ? `Consent confirmed${verifier ? ` by ${verifier}` : ""}. You can now complete the check-in.`
-          : "Print & take the guest's signature (then mark it received), or send on WhatsApp for the guest to accept. Check-in can't be completed until consent is confirmed."}
+          ? `Consent confirmed${verifier ? ` by ${verifier}` : ""}.`
+          : "Print & take the guest's signature (then mark it received), or send on WhatsApp for the guest to accept. Marking the signed copy received completes the check-in."}
       </p>
     </div>
   );

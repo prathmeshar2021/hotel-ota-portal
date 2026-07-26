@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
 import { ensureConsent } from "@/lib/services/consent";
+import { completeCheckIn, CHECKIN_GATE_MESSAGES } from "@/lib/services/checkin-gate";
 
 /**
  * POST → staff attests that the guest has signed the printed consent form.
@@ -27,7 +28,10 @@ export async function POST(
   const { id } = await params;
   const booking = await prisma.booking.findFirst({
     where: { id, hotelId: session.user.hotelId },
-    select: { id: true },
+    select: {
+      id: true, hotelId: true, status: true, roomId: true,
+      roomCategory: true, checkInDate: true, checkOutDate: true,
+    },
   });
   if (!booking) {
     return NextResponse.json({ error: "Booking not found" }, { status: 404 });
@@ -50,9 +54,18 @@ export async function POST(
         },
       });
     }
+    // The signature was the last thing the check-in gate was waiting on, so
+    // finish the check-in here rather than making staff press a second button.
+    const checkedIn = await completeCheckIn(booking);
+
     return NextResponse.json({
       success: true,
-      message: "Consent confirmed",
+      checkedIn: checkedIn.ok,
+      message: checkedIn.ok
+        ? "Consent confirmed — guest checked in"
+        : checkedIn.reason === "noRoom"
+          ? `Consent confirmed. ${CHECKIN_GATE_MESSAGES.noRoom}`
+          : "Consent confirmed",
       verifiedByName: consent.primaryAcceptedAt
         ? consent.verifiedByName ?? null
         : session.user.name ?? "Staff",

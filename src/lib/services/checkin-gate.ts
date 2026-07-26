@@ -45,6 +45,42 @@ export async function isConsentConfirmed(bookingId: string): Promise<boolean> {
   return !!c?.primaryAcceptedAt;
 }
 
+/**
+ * Run the CONFIRMED → CHECKED_IN transition, but only if the gate above is
+ * satisfied. Used when staff confirm a signed consent form so they don't have
+ * to press "Complete Check-In" straight afterwards — the signature is the last
+ * thing the gate waits on, so there's nothing left for staff to decide.
+ *
+ * Reports why it stopped rather than throwing, so the caller can still record
+ * the consent even when the stay can't start yet.
+ */
+export async function completeCheckIn(booking: {
+  id: string;
+  hotelId: string;
+  status: string;
+  roomId: string | null;
+  roomCategory: string;
+  checkInDate: Date;
+  checkOutDate: Date;
+}): Promise<{ ok: true } | { ok: false; reason: "status" | "noRoom" | "consent" }> {
+  // Only a confirmed reservation can start a stay; anything else (already
+  // checked in, cancelled, no-show) is left untouched.
+  if (booking.status !== "CONFIRMED") return { ok: false, reason: "status" };
+
+  const roomId = await ensureRoomAssigned(booking);
+  if (!roomId) return { ok: false, reason: "noRoom" };
+  if (!(await isConsentConfirmed(booking.id))) return { ok: false, reason: "consent" };
+
+  await prisma.$transaction([
+    prisma.booking.update({
+      where: { id: booking.id },
+      data: { status: "CHECKED_IN", checkedInAt: new Date() },
+    }),
+    prisma.room.update({ where: { id: roomId }, data: { status: "OCCUPIED" } }),
+  ]);
+  return { ok: true };
+}
+
 export const CHECKIN_GATE_MESSAGES = {
   noRoom:
     "No room is available in this category to assign. Assign a room manually before checking in.",
