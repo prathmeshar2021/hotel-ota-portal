@@ -21,6 +21,13 @@ export const PARTIAL_PAYMENT_AMOUNT = 500; // advance paid upfront for PAY_PARTI
  * `totalAmount` — it is collected separately at check-in and tracked on the
  * booking (refundableDeposit = expected, depositCollected = actual), then netted
  * against the balance at checkout. So `totalAmount = roomRent − coupon + GST`.
+ *
+ * Guests always pay a **whole rupee**: room tariffs are set as the pre-tax value
+ * behind a round sticker price (₹1,333.33 × 1.05 = ₹1,400), so we round the
+ * gross and take the tax as the remainder (gross − taxable) rather than
+ * computing CGST/SGST independently. That guarantees taxable + CGST + SGST is
+ * exactly the total instead of drifting a paisa (the old ₹1,399.99), with SGST
+ * absorbing any odd paisa when the tax doesn't halve evenly.
  */
 export function computeTotals(params: {
   roomRentPerNight: number;
@@ -30,10 +37,23 @@ export function computeTotals(params: {
   const { roomRentPerNight, noOfNights, couponDiscount = 0 } = params;
   const roomRent = roomRentPerNight * noOfNights;
   const { cgstRate, sgstRate } = calculateGST(roomRentPerNight);
-  const taxableAmount = roomRent - couponDiscount;
-  const cgst = +(taxableAmount * (cgstRate / 100)).toFixed(2);
-  const sgst = +(taxableAmount * (sgstRate / 100)).toFixed(2);
-  const totalAmount = +(taxableAmount + cgst + sgst).toFixed(2);
+  const rate = cgstRate + sgstRate;
+  const taxableRaw = Math.max(0, roomRent - couponDiscount);
+
+  // Tax-exempt slab: nothing to split, so the taxable value *is* the bill.
+  if (rate === 0) {
+    const whole = Math.round(taxableRaw);
+    return {
+      roomRent, taxableAmount: whole, cgst: 0, sgst: 0,
+      totalAmount: whole, cgstRate, sgstRate,
+    };
+  }
+
+  const taxableAmount = +taxableRaw.toFixed(2);
+  const totalAmount = Math.round(taxableAmount * (1 + rate / 100));
+  const tax = +(totalAmount - taxableAmount).toFixed(2);
+  const cgst = +(tax / 2).toFixed(2);
+  const sgst = +(tax - cgst).toFixed(2);   // remainder — absorbs any odd paisa
 
   return { roomRent, taxableAmount, cgst, sgst, totalAmount, cgstRate, sgstRate };
 }
