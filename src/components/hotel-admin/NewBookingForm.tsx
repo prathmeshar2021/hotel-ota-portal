@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { usePanelT } from "@/components/i18n/PanelLang";
 import Image from "next/image";
 import {
   Search, User, Phone, Mail, CreditCard, ChevronRight, ChevronLeft,
@@ -55,6 +56,7 @@ function StepBadge({ n, active, done }: { n: number; active: boolean; done: bool
 
 export default function NewBookingForm({ hotelId }: { hotelId: string }) {
   const router = useRouter();
+  const t = usePanelT();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [submitting, setSubmitting] = useState(false);
 
@@ -425,7 +427,7 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
                     </div>
                     {selectedGuest.phone
                       ? <p className="text-white/50 text-sm">+91 {selectedGuest.phone}</p>
-                      : <p className="text-amber-400/80 text-xs font-semibold">No phone on file</p>}
+                      : <p className="text-amber-400/80 text-xs font-semibold">{t("nb.noPhoneOnFile")}</p>}
                     {selectedGuest.email && <p className="text-white/35 text-xs">{selectedGuest.email}</p>}
                     {selectedGuest.idNumber && (
                       <p className="text-white/30 text-xs">{selectedGuest.idType} · {selectedGuest.idNumber}</p>
@@ -442,7 +444,7 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
                   companion). Require one now — it's saved back to their profile. */}
               {!selectedGuest.phone && (
                 <div className="mt-4 pt-4 border-t border-green-500/15">
-                  <label className={labelCls}>Phone Number * <span className="text-amber-400/70 normal-case tracking-normal font-medium">— required to continue</span></label>
+                  <label className={labelCls}>Phone Number * <span className="text-amber-400/70 normal-case tracking-normal font-medium">— {t("nb.phoneRequired")}</span></label>
                   <div className="relative max-w-xs">
                     <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/25" />
                     <input
@@ -465,8 +467,8 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
               <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
                 <h2 className="font-semibold text-white flex items-center gap-2">
                   {showRegisterForm
-                    ? <><UserPlus className="w-4 h-4 text-amber-400" /> Register New Guest</>
-                    : <><Search className="w-4 h-4 text-blue-400" /> Find Guest</>}
+                    ? <><UserPlus className="w-4 h-4 text-amber-400" /> {t("nb.registerNewGuest")}</>
+                    : <><Search className="w-4 h-4 text-blue-400" /> {t("nb.findGuest")}</>}
                 </h2>
                 {!showRegisterForm ? (
                   <button
@@ -691,11 +693,11 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
             {/* Payment */}
             <div className="bg-white/3 border border-white/8 rounded-2xl p-5 space-y-4">
               <h2 className="font-semibold text-white flex items-center gap-2">
-                <Banknote className="w-4 h-4 text-blue-400" /> Payment Details
+                <Banknote className="w-4 h-4 text-blue-400" /> {t("nb.paymentDetails")}
               </h2>
 
               <div>
-                <label className={labelCls}>Booking Source</label>
+                <label className={labelCls}>{t("nb.bookingSource")}</label>
                 <div className="flex gap-2">
                   {(["WALK_IN", "PHONE", "OTHER"] as const).map(s => (
                     <button key={s} onClick={() => setSource(s)}
@@ -709,7 +711,7 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
               </div>
 
               <div>
-                <label className={labelCls}>Payment Mode</label>
+                <label className={labelCls}>{t("nb.paymentMode")}</label>
                 <div className="flex gap-2">
                   {(["CASH", "ONLINE", "MIXED"] as const).map(m => (
                     <button key={m} onClick={() => setPaymentMode(m)}
@@ -724,14 +726,14 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
 
               {(paymentMode === "CASH" || paymentMode === "MIXED") && (
                 <div>
-                  <label className={labelCls}>Cash Amount Paid (₹)</label>
+                  <label className={labelCls}>{t("nb.cashAmount")} (₹)</label>
                   <input type="number" value={cashPaid} onChange={e => setCashPaid(e.target.value)}
                     placeholder="0" className={inputCls} />
                 </div>
               )}
               {(paymentMode === "ONLINE" || paymentMode === "MIXED") && (
                 <div>
-                  <label className={labelCls}>Online Amount Paid (₹)</label>
+                  <label className={labelCls}>{t("nb.onlineAmount")} (₹)</label>
                   <input type="number" value={onlinePaid} onChange={e => setOnlinePaid(e.target.value)}
                     placeholder="0" className={inputCls} />
                 </div>
@@ -811,7 +813,7 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
             {/* Bill */}
             <div className="bg-white/3 border border-white/8 rounded-2xl p-5">
               <h2 className="font-semibold text-white mb-4 flex items-center gap-2">
-                <Banknote className="w-4 h-4 text-amber-400" /> Bill Summary
+                <Banknote className="w-4 h-4 text-amber-400" /> {t("nb.billSummary")}
               </h2>
               <div className="space-y-2.5 text-sm">
                 <div className="flex justify-between text-white/50">
@@ -840,7 +842,7 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
                 </div>
                 {totals.appliedDiscount > 0 && (
                   <div className="flex justify-between text-purple-300 text-xs">
-                    <span className="flex items-center gap-1"><Percent className="w-3 h-3" /> Staff discount</span>
+                    <span className="flex items-center gap-1"><Percent className="w-3 h-3" /> {t("nb.staffDiscount")}</span>
                     <span>−₹{totals.appliedDiscount.toLocaleString("en-IN")}</span>
                   </div>
                 )}
@@ -859,7 +861,7 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
                 {/* ── Staff counter-discount ── */}
                 <div className="border-t border-white/8 pt-3 mt-3 space-y-2">
                   <label className={labelCls}>
-                    Staff Discount (₹) <span className="normal-case font-normal text-white/20">— off the final price, GST included</span>
+                    {t("nb.staffDiscount")} (₹) <span className="normal-case font-normal text-white/20">— {t("nb.discountNote")}</span>
                   </label>
                   <input type="number" min={0} value={staffDiscount}
                     onChange={e => setStaffDiscount(e.target.value)}
@@ -891,25 +893,25 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
                   {Number(staffDiscount) > 0 && (
                     <input type="text" value={discountReason}
                       onChange={e => setDiscountReason(e.target.value)}
-                      placeholder="Reason (optional) — e.g. regular guest, group rate"
+                      placeholder={t("nb.reasonPlaceholder")}
                       className={inputCls} />
                   )}
                 </div>
                 {totalPaid > 0 && (
                   <div className="flex justify-between text-green-400 text-sm">
-                    <span>Amount Paid</span>
+                    <span>{t("nb.amountPaid")}</span>
                     <span>-₹{totalPaid.toLocaleString("en-IN")}</span>
                   </div>
                 )}
                 {balanceDue > 0 && (
                   <div className="flex justify-between font-bold text-red-400 text-sm border-t border-white/8 pt-2">
-                    <span>Balance Due</span>
+                    <span>{t("bookings.balanceDue")}</span>
                     <span>₹{balanceDue.toLocaleString("en-IN")}</span>
                   </div>
                 )}
                 {balanceDue === 0 && totalPaid > 0 && (
                   <div className="flex items-center gap-2 text-green-400 text-xs bg-green-500/8 border border-green-500/20 rounded-xl px-3 py-2">
-                    <Check className="w-3.5 h-3.5" /> Fully paid
+                    <Check className="w-3.5 h-3.5" /> {t("nb.fullyPaid")}
                   </div>
                 )}
               </div>
@@ -923,7 +925,7 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
             <button onClick={handleSubmit} disabled={submitting}
               className="flex items-center gap-2 bg-green-500 hover:bg-green-400 disabled:opacity-50 text-white font-bold px-8 py-3 rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-green-500/20">
               {submitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />}
-              {submitting ? "Creating Booking…" : "Confirm Booking"}
+              {submitting ? t("nb.creating") : t("nb.confirmBooking")}
             </button>
           </div>
         </div>

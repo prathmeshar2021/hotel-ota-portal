@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { auth } from "@/lib/auth/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db/prisma";
+import { getPanelT } from "@/lib/i18n/server";
 import { OTA_PREPAID_SOURCES } from "@/lib/ota/sources";
 import Link from "next/link";
 import {
@@ -134,6 +135,7 @@ export default async function DashboardPage() {
 
   const occupancyPct = totalRooms > 0 ? Math.round((inHouse / totalRooms) * 100) : 0;
   const revenue = monthRevenue._sum.totalAmount ?? 0;
+  const t = await getPanelT();
 
   return (
     <div className="p-6 max-w-6xl">
@@ -143,7 +145,7 @@ export default async function DashboardPage() {
           {format(today, "EEEE, dd MMMM yyyy")}
         </p>
         <h1 className="text-2xl font-bold text-white">
-          Good {today.getHours() < 12 ? "Morning" : today.getHours() < 17 ? "Afternoon" : "Evening"},{" "}
+          {today.getHours() < 12 ? t("dash.goodMorning") : today.getHours() < 17 ? t("dash.goodAfternoon") : t("dash.goodEvening")},{" "}
           <span className="text-blue-400">{session.user.name?.split(" ")[0]}</span>
         </h1>
       </div>
@@ -151,28 +153,28 @@ export default async function DashboardPage() {
       {/* Stats grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-7">
         <StatCard
-          label="Arrivals Today"
+          label={t("dash.arrivalsToday")}
           value={arrivalsToday}
           icon={<LogIn className="w-4 h-4" />}
           color="#60A5FA"
-          sub="CONFIRMED bookings"
+          sub={t("dash.confirmedBookings")}
         />
         <StatCard
-          label="Departures Today"
+          label={t("dash.departuresToday")}
           value={departuresToday}
           icon={<LogOut className="w-4 h-4" />}
           color="#F59E0B"
-          sub="Due to check out"
+          sub={t("dash.dueToCheckOut")}
         />
         <StatCard
-          label="In House"
+          label={t("dash.inHouse")}
           value={inHouse}
           icon={<BedDouble className="w-4 h-4" />}
           color="#4ADE80"
-          sub={`${occupancyPct}% occupancy`}
+          sub={`${occupancyPct}% ${t("dash.occupancySuffix")}`}
         />
         <StatCard
-          label="Month Revenue"
+          label={t("dash.monthRevenue")}
           value={`₹${Math.round(revenue / 1000)}K`}
           icon={<TrendingUp className="w-4 h-4" />}
           color="#C084FC"
@@ -188,7 +190,7 @@ export default async function DashboardPage() {
           <div className="flex items-center justify-between px-5 py-4 border-b border-white/8">
             <div className="flex items-center gap-2.5">
               <LogIn className="w-4 h-4 text-blue-400" />
-              <h2 className="font-semibold text-white text-sm">Today&apos;s Arrivals</h2>
+              <h2 className="font-semibold text-white text-sm">{t("dash.todaysArrivals")}</h2>
               {arrivalsToday > 0 && (
                 <span className="bg-blue-500/20 text-blue-400 text-xs font-bold px-2 py-0.5 rounded-full border border-blue-500/25">
                   {arrivalsToday}
@@ -255,7 +257,7 @@ export default async function DashboardPage() {
           <div className="flex items-center justify-between px-5 py-4 border-b border-white/8">
             <div className="flex items-center gap-2.5">
               <LogOut className="w-4 h-4 text-amber-400" />
-              <h2 className="font-semibold text-white text-sm">Today&apos;s Departures</h2>
+              <h2 className="font-semibold text-white text-sm">{t("dash.todaysDepartures")}</h2>
               {departuresToday > 0 && (
                 <span className="bg-amber-500/20 text-amber-400 text-xs font-bold px-2 py-0.5 rounded-full border border-amber-500/25">
                   {departuresToday}

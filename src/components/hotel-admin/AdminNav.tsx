@@ -4,6 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
+import { usePanelT, LangToggle } from "@/components/i18n/PanelLang";
+import type { PanelKey } from "@/lib/i18n/panel";
 import {
   LayoutDashboard,
   BookOpen,
@@ -32,22 +34,23 @@ interface AdminNavProps {
   pendingOtps?: number;
 }
 
-const NAV_LINKS = [
-  { href: "/hotel-admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/hotel-admin/bookings", label: "Bookings", icon: BookOpen },
-  { href: "/hotel-admin/rooms", label: "Rooms", icon: BedDouble },
-  { href: "/hotel-admin/guests", label: "Guests", icon: Users },
-  { href: "/hotel-admin/accounts", label: "Accounts", icon: Wallet },
-  { href: "/hotel-admin/gommt-finance", label: "GoMMT Finance", icon: Plane },
-  { href: "/hotel-admin/ledger", label: "Ledger", icon: BookOpenText },
-  { href: "/hotel-admin/support", label: "Support Chat", icon: MessageCircle },
-  { href: "/hotel-admin/kiosk", label: "Kiosk Devices", icon: MonitorSmartphone, superAdminOnly: true },
-  { href: "/hotel-admin/account", label: "My Account", icon: UserCog },
+const NAV_LINKS: { href: string; tKey: PanelKey; icon: typeof LayoutDashboard; superAdminOnly?: boolean }[] = [
+  { href: "/hotel-admin/dashboard", tKey: "nav.dashboard", icon: LayoutDashboard },
+  { href: "/hotel-admin/bookings", tKey: "nav.bookings", icon: BookOpen },
+  { href: "/hotel-admin/rooms", tKey: "nav.rooms", icon: BedDouble },
+  { href: "/hotel-admin/guests", tKey: "nav.guests", icon: Users },
+  { href: "/hotel-admin/accounts", tKey: "nav.accounts", icon: Wallet },
+  { href: "/hotel-admin/gommt-finance", tKey: "nav.gommtFinance", icon: Plane },
+  { href: "/hotel-admin/ledger", tKey: "nav.ledger", icon: BookOpenText },
+  { href: "/hotel-admin/support", tKey: "nav.supportChat", icon: MessageCircle },
+  { href: "/hotel-admin/kiosk", tKey: "nav.kioskDevices", icon: MonitorSmartphone, superAdminOnly: true },
+  { href: "/hotel-admin/account", tKey: "nav.myAccount", icon: UserCog },
 ];
 
 export default function AdminNav({ staffName, staffRole, hotelName, pendingOtps = 0 }: AdminNavProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const t = usePanelT();
 
   function isActive(href: string) {
     return pathname === href || pathname.startsWith(href + "/");
@@ -62,7 +65,7 @@ export default function AdminNav({ staffName, staffRole, hotelName, pendingOtps 
             <ShieldCheck className="w-4 h-4 text-blue-400" />
           </div>
           <div>
-            <p className="text-white font-bold text-sm leading-tight">Front Desk</p>
+            <p className="text-white font-bold text-sm leading-tight">{t("nav.frontDesk")}</p>
             <p className="text-white/35 text-[10px] truncate max-w-[130px]">{hotelName}</p>
           </div>
         </div>
@@ -75,7 +78,7 @@ export default function AdminNav({ staffName, staffRole, hotelName, pendingOtps 
           onClick={() => setMobileOpen(false)}
           className="flex items-center justify-center gap-2 w-full bg-blue-500 hover:bg-blue-400 text-white font-semibold text-sm px-4 py-2.5 rounded-xl transition-all shadow-lg shadow-blue-500/20"
         >
-          <PlusCircle className="w-4 h-4" /> New Booking
+          <PlusCircle className="w-4 h-4" /> {t("nav.newBooking")}
         </Link>
 
         {/* Back to Owner Console — only shown when super admin is viewing front desk */}
@@ -85,7 +88,7 @@ export default function AdminNav({ staffName, staffRole, hotelName, pendingOtps 
             onClick={() => setMobileOpen(false)}
             className="flex items-center justify-center gap-2 w-full bg-amber-500/10 hover:bg-amber-500/20 text-amber-400/80 hover:text-amber-300 font-semibold text-sm px-4 py-2.5 rounded-xl transition-all border border-amber-500/20 hover:border-amber-500/35"
           >
-            <Crown className="w-4 h-4" /> Owner Console
+            <Crown className="w-4 h-4" /> {t("nav.ownerConsole")}
           </Link>
         )}
       </div>
@@ -94,7 +97,7 @@ export default function AdminNav({ staffName, staffRole, hotelName, pendingOtps 
       <nav className="flex-1 p-3 space-y-1">
         {NAV_LINKS
           .filter((link) => !("superAdminOnly" in link) || staffRole === "SUPER_ADMIN")
-          .map(({ href, label, icon: Icon }) => {
+          .map(({ href, tKey, icon: Icon }) => {
           const active = isActive(href);
           return (
             <Link
@@ -108,7 +111,7 @@ export default function AdminNav({ staffName, staffRole, hotelName, pendingOtps 
               }`}
             >
               <Icon className={`w-4 h-4 shrink-0 ${active ? "text-blue-400" : "text-white/30 group-hover:text-white/60"}`} />
-              {label}
+              {t(tKey)}
               {active && <ChevronRight className="w-3.5 h-3.5 ml-auto text-blue-400/60" />}
             </Link>
           );
@@ -130,7 +133,7 @@ export default function AdminNav({ staffName, staffRole, hotelName, pendingOtps 
               }`}
             >
               <Bell className={`w-4 h-4 shrink-0 ${active ? "text-amber-400" : pendingOtps > 0 ? "text-amber-400" : "text-white/30 group-hover:text-white/60"}`} />
-              Pending Approvals
+              {t("nav.pendingApprovals")}
               {pendingOtps > 0 && (
                 <span className="ml-auto flex items-center justify-center w-5 h-5 rounded-full bg-amber-500 text-black text-[10px] font-black shrink-0">
                   {pendingOtps > 9 ? "9+" : pendingOtps}
@@ -144,8 +147,11 @@ export default function AdminNav({ staffName, staffRole, hotelName, pendingOtps 
         })()}
       </nav>
 
-      {/* Staff info + sign out */}
+      {/* Staff info + language + sign out */}
       <div className="p-3 border-t border-white/8">
+        <div className="px-3 pb-2">
+          <LangToggle />
+        </div>
         <div className="flex items-center gap-3 px-3 py-2.5 mb-1">
           <div className="w-8 h-8 rounded-full bg-white/8 border border-white/10 flex items-center justify-center text-xs font-bold text-white/60 shrink-0">
             {staffName.charAt(0).toUpperCase()}
@@ -160,7 +166,7 @@ export default function AdminNav({ staffName, staffRole, hotelName, pendingOtps 
           className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-white/35 hover:text-red-400 hover:bg-red-500/8 transition-all w-full"
         >
           <LogOut className="w-4 h-4 shrink-0" />
-          Sign Out
+          {t("nav.signOut")}
         </button>
       </div>
     </div>

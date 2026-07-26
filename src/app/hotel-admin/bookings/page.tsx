@@ -4,6 +4,8 @@ import { auth } from "@/lib/auth/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db/prisma";
 import { guestSearchOr } from "@/lib/utils/guest-search";
+import { getPanelT } from "@/lib/i18n/server";
+import type { PanelKey } from "@/lib/i18n/panel";
 import Link from "next/link";
 import { format, startOfDay, endOfDay } from "date-fns";
 import { fmtIST } from "@/lib/utils/datetime";
@@ -18,13 +20,13 @@ interface Props {
   searchParams: Promise<{ filter?: string; q?: string; sort?: string; source?: string }>;
 }
 
-const STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
-  PENDING_PAYMENT: { label: "Pending Payment", cls: "bg-yellow-500/15 text-yellow-400 border-yellow-500/25" },
-  CONFIRMED: { label: "Confirmed", cls: "bg-blue-500/15 text-blue-400 border-blue-500/25" },
-  CHECKED_IN: { label: "Checked In", cls: "bg-green-500/15 text-green-400 border-green-500/25" },
-  CHECKED_OUT: { label: "Checked Out", cls: "bg-white/8 text-white/40 border-white/10" },
-  CANCELLED: { label: "Cancelled", cls: "bg-red-500/15 text-red-400 border-red-500/25" },
-  NO_SHOW: { label: "No Show", cls: "bg-orange-500/15 text-orange-400 border-orange-500/25" },
+const STATUS_CONFIG: Record<string, { tKey: PanelKey; cls: string }> = {
+  PENDING_PAYMENT: { tKey: "status.PENDING_PAYMENT" as PanelKey, cls: "bg-yellow-500/15 text-yellow-400 border-yellow-500/25" },
+  CONFIRMED: { tKey: "status.CONFIRMED" as PanelKey, cls: "bg-blue-500/15 text-blue-400 border-blue-500/25" },
+  CHECKED_IN: { tKey: "status.CHECKED_IN" as PanelKey, cls: "bg-green-500/15 text-green-400 border-green-500/25" },
+  CHECKED_OUT: { tKey: "status.CHECKED_OUT" as PanelKey, cls: "bg-white/8 text-white/40 border-white/10" },
+  CANCELLED: { tKey: "status.CANCELLED" as PanelKey, cls: "bg-red-500/15 text-red-400 border-red-500/25" },
+  NO_SHOW: { tKey: "status.NO_SHOW" as PanelKey, cls: "bg-orange-500/15 text-orange-400 border-orange-500/25" },
 };
 
 
@@ -35,13 +37,13 @@ const SOURCE_CONFIG: Record<string, { label: string; cls: string }> = {
   BOOKING_COM: { label: "Booking.com", cls: "bg-indigo-500/15 text-indigo-300 border-indigo-500/30" },
 };
 
-const FILTERS: { key: Filter; label: string }[] = [
-  { key: "all", label: "All Bookings" },
-  { key: "arrivals-today", label: "Arrivals Today" },
-  { key: "departures-today", label: "Departing Today" },
-  { key: "in-house", label: "In House" },
-  { key: "upcoming", label: "Upcoming" },
-  { key: "checked-out", label: "Checked Out" },
+const FILTERS: { key: Filter; tKey: PanelKey }[] = [
+  { key: "all", tKey: "bookings.all" as PanelKey },
+  { key: "arrivals-today", tKey: "bookings.arrivalsToday" as PanelKey },
+  { key: "departures-today", tKey: "bookings.departingToday" as PanelKey },
+  { key: "in-house", tKey: "bookings.inHouse" as PanelKey },
+  { key: "upcoming", tKey: "bookings.upcoming" as PanelKey },
+  { key: "checked-out", tKey: "bookings.checkedOut" as PanelKey },
 ];
 
 const SOURCE_FILTERS: { key: SourceKey; label: string }[] = [
@@ -83,6 +85,7 @@ export default async function BookingsPage({ searchParams }: Props) {
   if (!session?.user?.hotelId) redirect("/auth/staff-login");
   const hotelId = session.user.hotelId;
   const sp = await searchParams;
+  const t = await getPanelT();
 
   const filter = (sp.filter ?? "all") as Filter;
   const query = sp.q?.trim() ?? "";
@@ -147,13 +150,13 @@ export default async function BookingsPage({ searchParams }: Props) {
     <div className="p-6 max-w-5xl">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white mb-1">Bookings</h1>
+        <h1 className="text-2xl font-bold text-white mb-1">{t("bookings.title")}</h1>
         <p className="text-white/35 text-sm">{bookings.length} booking{bookings.length !== 1 ? "s" : ""} found</p>
       </div>
 
       {/* Status filter tabs */}
       <div className="flex flex-wrap gap-2 mb-3">
-        {FILTERS.map(({ key, label }) => (
+        {FILTERS.map(({ key, tKey }) => (
           <Link
             key={key}
             href={bookingsHref({ filter: key, q: query, sort, source })}
@@ -163,7 +166,7 @@ export default async function BookingsPage({ searchParams }: Props) {
                 : "bg-white/3 text-white/40 border-white/8 hover:bg-white/6 hover:text-white/60"
             }`}
           >
-            {label}
+            {t(tKey)}
           </Link>
         ))}
       </div>
@@ -214,7 +217,7 @@ export default async function BookingsPage({ searchParams }: Props) {
           <input
             name="q"
             defaultValue={query}
-            placeholder="Search by name, phone, or ref…"
+            placeholder={t("bookings.searchPlaceholder")}
             className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-white placeholder:text-white/25 text-sm focus:outline-none focus:border-blue-400/40 transition-all"
           />
         </div>
@@ -223,13 +226,15 @@ export default async function BookingsPage({ searchParams }: Props) {
       {/* Booking list */}
       {bookings.length === 0 ? (
         <div className="text-center py-20 bg-white/2 border border-white/6 rounded-2xl">
-          <p className="text-white/25 font-medium">No bookings found</p>
+          <p className="text-white/25 font-medium">{t("bookings.none")}</p>
           <p className="text-white/15 text-sm mt-1">Try a different filter or search term</p>
         </div>
       ) : (
         <div className="space-y-2">
           {bookings.map((b) => {
-            const status = STATUS_CONFIG[b.status] ?? { label: b.status, cls: "bg-white/8 text-white/40 border-white/10" };
+            const status = STATUS_CONFIG[b.status];
+            const statusLabel = status ? t(status.tKey) : b.status;
+            const statusCls = status?.cls ?? "bg-white/8 text-white/40 border-white/10";
             const catMeta = getCategoryMeta(b.roomCategory);
             const accent = catMeta.accentColor;
             return (
@@ -255,8 +260,8 @@ export default async function BookingsPage({ searchParams }: Props) {
                         {SOURCE_CONFIG[b.source].label}
                       </span>
                     )}
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full border shrink-0 ${status.cls}`}>
-                      {status.label}
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full border shrink-0 ${statusCls}`}>
+                      {statusLabel}
                     </span>
                     {b.viaKiosk && (
                       <span className="text-xs font-semibold px-2 py-0.5 rounded-full border shrink-0 bg-amber-500/15 text-amber-300 border-amber-500/30">

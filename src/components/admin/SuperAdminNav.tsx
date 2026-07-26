@@ -4,6 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
+import { usePanelT, LangToggle } from "@/components/i18n/PanelLang";
+import type { PanelKey } from "@/lib/i18n/panel";
 import {
   LayoutDashboard,
   TicketPercent,
@@ -29,22 +31,23 @@ interface SuperAdminNavProps {
   pendingOtps?: number;
 }
 
-const NAV_LINKS = [
-  { href: "/admin/dashboard", label: "Overview", icon: LayoutDashboard },
-  { href: "/admin/pricing", label: "Pricing", icon: Tag },
-  { href: "/admin/inventory", label: "Inventory", icon: CalendarRange },
-  { href: "/admin/coupons", label: "Coupons", icon: TicketPercent },
-  { href: "/admin/promotions", label: "Promotions", icon: Sparkles },
-  { href: "/admin/gst-report", label: "GST Report", icon: FileSpreadsheet },
-  { href: "/admin/discounts", label: "Staff Discounts", icon: Percent },
-  { href: "/admin/approvals", label: "Approvals", icon: ShieldCheck, badge: true },
-  { href: "/admin/staff", label: "Staff", icon: Users },
-  { href: "/admin/hotel-admin/support", label: "Support Chat", icon: MessageCircle },
+const NAV_LINKS: { href: string; tKey: PanelKey; icon: typeof LayoutDashboard; badge?: boolean }[] = [
+  { href: "/admin/dashboard", tKey: "nav.overview", icon: LayoutDashboard },
+  { href: "/admin/pricing", tKey: "nav.pricing", icon: Tag },
+  { href: "/admin/inventory", tKey: "nav.inventory", icon: CalendarRange },
+  { href: "/admin/coupons", tKey: "nav.coupons", icon: TicketPercent },
+  { href: "/admin/promotions", tKey: "nav.promotions", icon: Sparkles },
+  { href: "/admin/gst-report", tKey: "nav.gstReport", icon: FileSpreadsheet },
+  { href: "/admin/discounts", tKey: "nav.staffDiscounts", icon: Percent },
+  { href: "/admin/approvals", tKey: "nav.approvals", icon: ShieldCheck, badge: true },
+  { href: "/admin/staff", tKey: "nav.staff", icon: Users },
+  { href: "/admin/hotel-admin/support", tKey: "nav.supportChat", icon: MessageCircle },
 ];
 
 export default function SuperAdminNav({ adminName, hotelName, pendingOtps = 0 }: SuperAdminNavProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const t = usePanelT();
 
   function isActive(href: string) {
     return pathname === href || pathname.startsWith(href + "/");
@@ -59,7 +62,7 @@ export default function SuperAdminNav({ adminName, hotelName, pendingOtps = 0 }:
             <Crown className="w-4 h-4 text-amber-400" />
           </div>
           <div>
-            <p className="text-white font-bold text-sm leading-tight">Owner Console</p>
+            <p className="text-white font-bold text-sm leading-tight">{t("nav.ownerConsole")}</p>
             <p className="text-white/35 text-[10px] truncate max-w-[130px]">{hotelName}</p>
           </div>
         </div>
@@ -72,13 +75,13 @@ export default function SuperAdminNav({ adminName, hotelName, pendingOtps = 0 }:
           onClick={() => setMobileOpen(false)}
           className="flex items-center justify-center gap-2 w-full bg-white/5 hover:bg-white/10 text-white/70 hover:text-white font-semibold text-sm px-4 py-2.5 rounded-xl transition-all border border-white/10"
         >
-          <LayoutGrid className="w-4 h-4" /> Front Desk
+          <LayoutGrid className="w-4 h-4" /> {t("nav.frontDesk")}
         </Link>
       </div>
 
       {/* Nav links */}
       <nav className="flex-1 p-3 space-y-1">
-        {NAV_LINKS.map(({ href, label, icon: Icon, badge }) => {
+        {NAV_LINKS.map(({ href, tKey, icon: Icon, badge }) => {
           const active = isActive(href);
           return (
             <Link
@@ -92,7 +95,7 @@ export default function SuperAdminNav({ adminName, hotelName, pendingOtps = 0 }:
               }`}
             >
               <Icon className={`w-4 h-4 shrink-0 ${active ? "text-amber-400" : "text-white/30 group-hover:text-white/60"}`} />
-              {label}
+              {t(tKey)}
               {badge && pendingOtps > 0 && (
                 <span className="ml-auto bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
                   {pendingOtps}
@@ -108,6 +111,9 @@ export default function SuperAdminNav({ adminName, hotelName, pendingOtps = 0 }:
 
       {/* Admin info + sign out */}
       <div className="p-3 border-t border-white/8">
+        <div className="px-3 pb-2">
+          <LangToggle />
+        </div>
         <div className="flex items-center gap-3 px-3 py-2.5 mb-1">
           <div className="w-8 h-8 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-xs font-bold text-amber-300/80 shrink-0">
             {adminName.charAt(0).toUpperCase()}
@@ -122,7 +128,7 @@ export default function SuperAdminNav({ adminName, hotelName, pendingOtps = 0 }:
           className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-white/35 hover:text-red-400 hover:bg-red-500/8 transition-all w-full"
         >
           <LogOut className="w-4 h-4 shrink-0" />
-          Sign Out
+          {t("nav.signOut")}
         </button>
       </div>
     </div>
@@ -139,7 +145,7 @@ export default function SuperAdminNav({ adminName, hotelName, pendingOtps = 0 }:
       <div className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-black/80 border-b border-white/8 backdrop-blur-sm">
         <div className="flex items-center justify-between px-4 py-3">
           <div>
-            <p className="text-white font-bold text-sm">Owner Console</p>
+            <p className="text-white font-bold text-sm">{t("nav.ownerConsole")}</p>
             <p className="text-white/35 text-[10px]">{hotelName}</p>
           </div>
           <button

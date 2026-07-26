@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { usePanelT } from "@/components/i18n/PanelLang";
 import {
   X, LogIn, Loader2, CreditCard, MapPin, Car, Users, Plus, Trash2,
   ShieldCheck, Upload,
@@ -230,6 +231,7 @@ export default function CounterCheckinModal({
   open, onClose, bookingId, bookingRef, guestName, noOfPersons, existingData,
 }: Props) {
   const router = useRouter();
+  const t = usePanelT();
   const [loading, setLoading] = useState(false);
 
   // Primary guest
@@ -528,13 +530,13 @@ export default function CounterCheckinModal({
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className={reqLabelCls}>ID Type <Req /></label>
+                <label className={reqLabelCls}>{t("ci.idType")} <Req /></label>
                 <select value={idType} onChange={e => setIdType(e.target.value as IdType)} className={selectCls}>
                   {ID_TYPES.map(t => <option key={t.value} value={t.value} className="bg-[#0D1B0E]">{t.label}</option>)}
                 </select>
               </div>
               <div>
-                <label className={reqLabelCls}>ID Number <Req /></label>
+                <label className={reqLabelCls}>{t("ci.idNumber")} <Req /></label>
                 <input value={idNumber} onChange={e => setIdNumber(e.target.value)}
                   placeholder="Enter ID number" className={reqInputCls} />
               </div>
@@ -685,7 +687,7 @@ export default function CounterCheckinModal({
                             className={i === 0 && noOfPersons > 1 ? reqInputCls : inputCls} />
                         </div>
                         <div>
-                          <label className={labelCls}>Relation</label>
+                          <label className={labelCls}>{t("ci.relation")}</label>
                           <input value={c.relation} onChange={e => updateCompanion(i, "relation", e.target.value)}
                             placeholder="Spouse, Friend…" className={inputCls} />
                         </div>
@@ -709,13 +711,13 @@ export default function CounterCheckinModal({
                       {/* ID type + number */}
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className={reqLabelCls}>ID Type <Req /></label>
+                          <label className={reqLabelCls}>{t("ci.idType")} <Req /></label>
                           <select value={c.idType} onChange={e => updateCompanion(i, "idType", e.target.value)} className={selectCls}>
                             {ID_TYPES.map(t => <option key={t.value} value={t.value} className="bg-[#0D1B0E]">{t.label}</option>)}
                           </select>
                         </div>
                         <div>
-                          <label className={reqLabelCls}>ID Number <Req /></label>
+                          <label className={reqLabelCls}>{t("ci.idNumber")} <Req /></label>
                           <input value={c.idNumber} onChange={e => updateCompanion(i, "idNumber", e.target.value)}
                             placeholder="ID number" className={reqInputCls} />
                         </div>

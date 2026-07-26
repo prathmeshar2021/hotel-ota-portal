@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db/prisma";
 import { guestSearchOr } from "@/lib/utils/guest-search";
+import { getPanelT } from "@/lib/i18n/server";
 import Link from "next/link";
 import { Users, UserPlus, Phone, Mail, CreditCard, Search, ChevronRight } from "lucide-react";
 
@@ -24,6 +25,7 @@ export default async function GuestsPage({ searchParams }: { searchParams: Promi
   if (!session?.user?.hotelId) redirect("/auth/staff-login");
   if (session.user.role !== "HOTEL_ADMIN" && session.user.role !== "HOTEL_STAFF" && session.user.role !== "SUPER_ADMIN") redirect("/");
 
+  const t = await getPanelT();
   const { q } = await searchParams;
   const query = q?.trim() ?? "";
 
@@ -49,15 +51,15 @@ export default async function GuestsPage({ searchParams }: { searchParams: Promi
         <div>
           <div className="flex items-center gap-2">
             <Users className="w-5 h-5 text-blue-400" />
-            <h1 className="text-xl font-bold text-white">Guest Registry</h1>
+            <h1 className="text-xl font-bold text-white">{t("guests.registry")}</h1>
           </div>
-          <p className="text-white/35 text-sm mt-0.5">Walk-in registrations &amp; returning guest lookup</p>
+          <p className="text-white/35 text-sm mt-0.5">{t("guests.registrySub")}</p>
         </div>
         <Link
           href="/hotel-admin/guests/new"
           className="flex items-center gap-2 bg-blue-500 hover:bg-blue-400 text-white font-semibold px-5 py-2.5 rounded-xl text-sm transition-all"
         >
-          <UserPlus className="w-4 h-4" /> Register Guest
+          <UserPlus className="w-4 h-4" /> {t("guests.registerGuest")}
         </Link>
       </div>
 
@@ -68,7 +70,7 @@ export default async function GuestsPage({ searchParams }: { searchParams: Promi
           <input
             name="q"
             defaultValue={query}
-            placeholder="Search by name, phone, ID number…"
+            placeholder={t("guests.searchPlaceholder")}
             className="w-full bg-white/5 border border-white/10 rounded-xl pl-11 pr-4 py-3 text-white placeholder:text-white/25 text-sm focus:outline-none focus:border-blue-400/40 focus:bg-white/8 transition-all"
           />
         </div>
@@ -84,7 +86,7 @@ export default async function GuestsPage({ searchParams }: { searchParams: Promi
       {/* Guest list */}
       {guests.length === 0 ? (
         <div className="text-center py-16 text-white/20 text-sm">
-          {query ? "No guests found — try a different search" : "No guests registered yet"}
+          {query ? t("guests.noneSearch") : t("guests.noneYet")}
         </div>
       ) : (
         <div className="space-y-2">

@@ -2,6 +2,8 @@ import { auth } from "@/lib/auth/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db/prisma";
 import AdminNav from "@/components/hotel-admin/AdminNav";
+import { PanelLangProvider } from "@/components/i18n/PanelLang";
+import { getPanelLang } from "@/lib/i18n/server";
 
 export default async function HotelAdminLayout({
   children,
@@ -27,18 +29,22 @@ export default async function HotelAdminLayout({
       })
     : 0;
 
+  const lang = await getPanelLang();
+
   return (
-    <div className="min-h-screen bg-[#071209]">
-      <AdminNav
-        staffName={session.user.name ?? "Staff"}
-        staffRole={session.user.role ?? "HOTEL_STAFF"}
-        hotelName={session.user.hotelName ?? "The Urban Escape"}
-        pendingOtps={pendingOtps}
-      />
-      {/* Content: right of sidebar on desktop, below top bar on mobile */}
-      <main className="lg:pl-56 pt-16 lg:pt-0 min-h-screen">
-        {children}
-      </main>
-    </div>
+    <PanelLangProvider lang={lang}>
+      <div className="min-h-screen bg-[#071209]">
+        <AdminNav
+          staffName={session.user.name ?? "Staff"}
+          staffRole={session.user.role ?? "HOTEL_STAFF"}
+          hotelName={session.user.hotelName ?? "The Urban Escape"}
+          pendingOtps={pendingOtps}
+        />
+        {/* Content: right of sidebar on desktop, below top bar on mobile */}
+        <main className="lg:pl-56 pt-16 lg:pt-0 min-h-screen">
+          {children}
+        </main>
+      </div>
+    </PanelLangProvider>
   );
 }
