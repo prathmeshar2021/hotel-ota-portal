@@ -62,17 +62,28 @@ export async function createPaymentLink(params: {
 
 /**
  * Issue a refund against a captured payment. Amount is in paise; omit for a
- * full refund. `speed: "normal"` settles via the standard refund cycle.
- * Returns the Razorpay refund object (its `id` should be stored).
+ * full refund.
+ *
+ * Speed:
+ *  • "optimum" — instant where the guest's bank/instrument supports it, and
+ *    Razorpay silently falls back to the normal cycle where it doesn't. This is
+ *    what we want at the desk: the guest sees the deposit back immediately
+ *    instead of waiting days. Instant refunds carry a Razorpay fee and need
+ *    Instant Refunds enabled on the account.
+ *  • "normal" — standard 5–7 working day cycle, no fee.
+ *
+ * The response's `speed_processed` tells you which actually happened, so the
+ * caller can record what the guest should expect rather than assuming.
  */
 export async function createRefund(
   paymentId: string,
   amountInPaise?: number,
-  notes?: Record<string, string>
+  notes?: Record<string, string>,
+  speed: "optimum" | "normal" = "optimum"
 ) {
   return razorpay.payments.refund(paymentId, {
     ...(amountInPaise != null ? { amount: amountInPaise } : {}),
-    speed: "normal",
+    speed,
     ...(notes ? { notes } : {}),
   });
 }

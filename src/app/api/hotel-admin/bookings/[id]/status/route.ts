@@ -34,7 +34,7 @@ export async function PATCH(
       depositCollected: true, additionalCharges: true, balanceDue: true,
       cashPaid: true, onlinePaid: true,
       // Needed to push a deposit refund back to the card/UPI it came from.
-      payment: { select: { razorpayPaymentId: true } },
+      payment: { select: { razorpayPaymentId: true, amount: true, refundAmount: true } },
     },
   });
 
@@ -129,17 +129,40 @@ export async function PATCH(
     // as PENDING for someone to retry rather than thrown.
     const wantsGatewayRefund = settlement?.refundMode === "RAZORPAY";
     const sourcePaymentId = booking.payment?.razorpayPaymentId ?? null;
-    if (refund > 0 && wantsGatewayRefund && sourcePaymentId) {
+    // This moves real money, so never ask the gateway for more than is actually
+    // left on that payment — a partial refund may already have been issued.
+    const refundableAtSource = +(
+      (booking.payment?.amount ?? 0) - (booking.payment?.refundAmount ?? 0)
+    ).toFixed(2);
+    const withinSource = refund <= refundableAtSource + 0.01;
+    let refundSpeed: string | null = null;
+
+    if (refund > 0 && wantsGatewayRefund && sourcePaymentId && withinSource) {
       try {
         const { createRefund } = await import("@/lib/services/razorpay");
-        const r = await createRefund(sourcePaymentId, Math.round(refund * 100), {
-          bookingId: booking.id,
-          reason: "Refundable deposit returned at checkout",
-        });
+        // "optimum" = instant where the guest's bank supports it, automatically
+        // falling back to the normal cycle where it doesn't.
+        const r = await createRefund(
+          sourcePaymentId,
+          Math.round(refund * 100),
+          { bookingId: booking.id, reason: "Refundable deposit returned at checkout" },
+          "optimum"
+        );
+        const res = r as { id?: string; speed_processed?: string };
+        refundSpeed = res?.speed_processed ?? null;
         updateData.refundStatus = "PROCESSED";
-        updateData.refundId = (r as { id?: string })?.id;
+        updateData.refundId = res?.id;
         updateData.refundAmount = refund;
         updateData.refundedAt = now;
+        // Keep the payment's own refunded total in step, so a later refund
+        // can't exceed what's left on it.
+        await prisma.payment.update({
+          where: { bookingId: booking.id },
+          data: {
+            refundAmount: +((booking.payment?.refundAmount ?? 0) + refund).toFixed(2),
+            refundedAt: now,
+          },
+        }).catch(() => {});
       } catch (e) {
         console.error("[checkout] deposit refund failed:", e);
         updateData.refundStatus = "PENDING";
@@ -149,7 +172,11 @@ export async function PATCH(
 
     const how = refund > 0
       ? wantsGatewayRefund && sourcePaymentId
-        ? (updateData.refundStatus === "PROCESSED" ? " to source (Razorpay)" : " — gateway refund failed, settle manually")
+        ? !withinSource
+          ? " — exceeds what's left on the original payment, hand it back at the desk"
+          : updateData.refundStatus === "PROCESSED"
+            ? ` to source (Razorpay${refundSpeed === "instant" ? ", instant" : ""})`
+            : " — gateway refund failed, settle manually"
         : ` in ${settlement?.refundMode === "ONLINE" ? "UPI" : "cash"} at the desk`
       : "";
     const summary = refund > 0

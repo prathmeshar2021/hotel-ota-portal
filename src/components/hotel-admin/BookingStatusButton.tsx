@@ -329,7 +329,7 @@ function CheckoutDepositModal({
             </div>
             <p className="text-[11px] text-white/30 mt-2">
               {refundMode === "RAZORPAY"
-                ? "Sent back automatically to the card / UPI the guest paid with. Usually credited in 5–7 working days."
+                ? "Instant refund to the card / UPI the guest paid with — credited right away where their bank supports it, otherwise in the normal 5–7 day cycle."
                 : canRefundToSource
                   ? `Hand ₹${refund.toLocaleString("en-IN")} back at the desk — nothing is sent through the gateway.`
                   : `Guest paid at the counter, so hand ₹${refund.toLocaleString("en-IN")} back at the desk.`}
