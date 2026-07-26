@@ -579,6 +579,15 @@ export default async function BookingDetailPage({
                   {booking.depositNotes && (
                     <p className="text-[10px] text-white/30 italic mt-1">{booking.depositNotes}</p>
                   )}
+                  {/* A deposit refund pushed to the gateway shows its result
+                      here — and, if it failed, the retry / mark-paid actions.
+                      Self-hides when there was no gateway refund. */}
+                  <RefundStatus
+                    bookingId={booking.id}
+                    refundStatus={booking.refundStatus}
+                    refundAmount={booking.refundAmount}
+                    refundId={booking.refundId}
+                  />
                 </div>
               )}
 
