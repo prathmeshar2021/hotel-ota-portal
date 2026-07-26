@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
+import { guestSearchOr } from "@/lib/utils/guest-search";
 import { z } from "zod";
 import type { Session } from "next-auth";
 
@@ -22,14 +23,7 @@ export async function GET(req: NextRequest) {
   if (q.length < 2) return NextResponse.json([]);
 
   const guests = await prisma.guest.findMany({
-    where: {
-      OR: [
-        { phone: { contains: q } },
-        { name: { contains: q, mode: "insensitive" } },
-        { idNumber: { contains: q, mode: "insensitive" } },
-        { email: { contains: q, mode: "insensitive" } },
-      ],
-    },
+    where: { OR: await guestSearchOr(q) },
     select: {
       id: true,
       name: true,

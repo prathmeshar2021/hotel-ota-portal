@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db/prisma";
+import { guestSearchOr } from "@/lib/utils/guest-search";
 import Link from "next/link";
 import { Users, UserPlus, Phone, Mail, CreditCard, Search, ChevronRight } from "lucide-react";
 
@@ -28,14 +29,7 @@ export default async function GuestsPage({ searchParams }: { searchParams: Promi
 
   const guests = query.length >= 2
     ? await prisma.guest.findMany({
-        where: {
-          OR: [
-            { phone: { contains: query } },
-            { name: { contains: query, mode: "insensitive" } },
-            { idNumber: { contains: query, mode: "insensitive" } },
-            { email: { contains: query, mode: "insensitive" } },
-          ],
-        },
+        where: { OR: await guestSearchOr(query) },
         include: {
           _count: { select: { bookings: true } },
         },

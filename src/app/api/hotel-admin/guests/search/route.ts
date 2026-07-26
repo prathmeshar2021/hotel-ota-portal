@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
-import type { Prisma } from "@prisma/client";
+import { guestSearchOr } from "@/lib/utils/guest-search";
 
 /**
  * GET /api/hotel-admin/guests/search?q=<name | phone | id number>
@@ -21,14 +21,11 @@ export async function GET(req: NextRequest) {
   const q = (req.nextUrl.searchParams.get("q") ?? "").trim();
   if (q.length < 2) return NextResponse.json({ guests: [] });
 
-  const digits = q.replace(/\D/g, "");
   const hotelId = session.user.hotelId;
 
-  const matchOr: Prisma.GuestWhereInput[] = [
-    { name: { contains: q, mode: "insensitive" } },
-    { idNumber: { contains: q, mode: "insensitive" } },
-  ];
-  if (digits.length >= 3) matchOr.push({ phone: { contains: digits } });
+  // Shared matching rules — case-insensitive, and tolerant of how phone numbers
+  // and ID numbers are spaced/punctuated. See lib/utils/guest-search.
+  const matchOr = await guestSearchOr(q);
 
   const guests = await prisma.guest.findMany({
     where: {

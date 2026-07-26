@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { auth } from "@/lib/auth/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db/prisma";
+import { guestSearchOr } from "@/lib/utils/guest-search";
 import Link from "next/link";
 import { format, startOfDay, endOfDay } from "date-fns";
 import { fmtIST } from "@/lib/utils/datetime";
@@ -98,10 +99,11 @@ export default async function BookingsPage({ searchParams }: Props) {
   const where: Record<string, unknown> = { hotelId };
 
   if (query) {
+    // Match the booking ref, or any guest the shared search rules turn up
+    // (name / phone / email / ID — case- and separator-insensitive).
     where.OR = [
       { bookingRef: { contains: query, mode: "insensitive" } },
-      { primaryGuest: { name: { contains: query, mode: "insensitive" } } },
-      { primaryGuest: { phone: { contains: query } } },
+      { primaryGuest: { OR: await guestSearchOr(query) } },
     ];
   }
 
