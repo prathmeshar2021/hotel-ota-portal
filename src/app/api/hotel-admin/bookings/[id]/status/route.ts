@@ -33,6 +33,8 @@ export async function PATCH(
       hotelId: true, roomCategory: true,
       depositCollected: true, additionalCharges: true, balanceDue: true,
       cashPaid: true, onlinePaid: true,
+      // Needed to push a deposit refund back to the card/UPI it came from.
+      payment: { select: { razorpayPaymentId: true } },
     },
   });
 
@@ -98,12 +100,20 @@ export async function PATCH(
     //   net ≥ 0 → refund net to guest;  net < 0 → collect −net from guest.
     const owed = +(booking.balanceDue + booking.additionalCharges).toFixed(2);
     const net = +(booking.depositCollected - owed).toFixed(2);
-    const refund = Math.max(0, net);
     const collect = Math.max(0, -net);
     const depositUsed = Math.min(booking.depositCollected, owed); // deposit applied to what was owed
 
+    // Whatever the deposit didn't have to cover is refundable — but staff can
+    // withhold part of it at the desk for dirt/damage found on inspection.
+    // Clamped here rather than trusted, so the guest can never be short-changed
+    // beyond the deposit actually held.
+    const refundable = Math.max(0, net);
+    const rawDeduction = Number(settlement?.deduction) || 0;
+    const deduction = Math.min(Math.max(0, +rawDeduction.toFixed(2)), refundable);
+    const refund = +(refundable - deduction).toFixed(2);
+
     updateData.balanceDue = 0; // everything is settled at checkout
-    updateData.depositDeducted = depositUsed;
+    updateData.depositDeducted = +(depositUsed + deduction).toFixed(2);
     updateData.depositRefunded = refund > 0;
 
     // Record any amount collected now (excess beyond the deposit) as a payment.
@@ -113,8 +123,40 @@ export async function PATCH(
       else updateData.cashPaid = booking.cashPaid + collect;
     }
 
-    const summary = refund > 0 ? `Refunded ₹${refund} deposit` : collect > 0 ? `Collected ₹${collect} at checkout` : "Settled — no refund/collection";
-    updateData.depositNotes = settlement?.notes ? `${summary} — ${settlement.notes}` : summary;
+    // Push the refund back to the card/UPI it came from when staff ask for it
+    // and we still have the original Razorpay payment to refund against.
+    // A gateway failure must never block the checkout itself, so it's recorded
+    // as PENDING for someone to retry rather than thrown.
+    const wantsGatewayRefund = settlement?.refundMode === "RAZORPAY";
+    const sourcePaymentId = booking.payment?.razorpayPaymentId ?? null;
+    if (refund > 0 && wantsGatewayRefund && sourcePaymentId) {
+      try {
+        const { createRefund } = await import("@/lib/services/razorpay");
+        const r = await createRefund(sourcePaymentId, Math.round(refund * 100), {
+          bookingId: booking.id,
+          reason: "Refundable deposit returned at checkout",
+        });
+        updateData.refundStatus = "PROCESSED";
+        updateData.refundId = (r as { id?: string })?.id;
+        updateData.refundAmount = refund;
+        updateData.refundedAt = now;
+      } catch (e) {
+        console.error("[checkout] deposit refund failed:", e);
+        updateData.refundStatus = "PENDING";
+        updateData.refundAmount = refund;
+      }
+    }
+
+    const how = refund > 0
+      ? wantsGatewayRefund && sourcePaymentId
+        ? (updateData.refundStatus === "PROCESSED" ? " to source (Razorpay)" : " — gateway refund failed, settle manually")
+        : ` in ${settlement?.refundMode === "ONLINE" ? "UPI" : "cash"} at the desk`
+      : "";
+    const summary = refund > 0
+      ? `Refunded ₹${refund} deposit${how}`
+      : collect > 0 ? `Collected ₹${collect} at checkout` : "Settled — no refund/collection";
+    const withDeduction = deduction > 0 ? `${summary}; ₹${deduction} withheld` : summary;
+    updateData.depositNotes = settlement?.notes ? `${withDeduction} — ${settlement.notes}` : withDeduction;
 
     // Free up the room if one was assigned
     if (booking.roomId) {
