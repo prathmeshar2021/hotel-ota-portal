@@ -7,6 +7,7 @@ import { signOut } from "next-auth/react";
 import {
   LayoutDashboard,
   TicketPercent,
+  Percent,
   Sparkles,
   Tag,
   CalendarRange,
@@ -35,6 +36,7 @@ const NAV_LINKS = [
   { href: "/admin/coupons", label: "Coupons", icon: TicketPercent },
   { href: "/admin/promotions", label: "Promotions", icon: Sparkles },
   { href: "/admin/gst-report", label: "GST Report", icon: FileSpreadsheet },
+  { href: "/admin/discounts", label: "Staff Discounts", icon: Percent },
   { href: "/admin/approvals", label: "Approvals", icon: ShieldCheck, badge: true },
   { href: "/admin/staff", label: "Staff", icon: Users },
   { href: "/admin/hotel-admin/support", label: "Support Chat", icon: MessageCircle },

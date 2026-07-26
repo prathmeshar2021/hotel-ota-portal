@@ -7,9 +7,9 @@ import Image from "next/image";
 import {
   Search, User, Phone, Mail, CreditCard, ChevronRight, ChevronLeft,
   Check, Loader2, BedDouble, Calendar, Users, Banknote, Car,
-  MapPin, X, ArrowRight, UserPlus, UserCheck, Tag, ShieldCheck, XCircle,
+  MapPin, X, ArrowRight, UserPlus, UserCheck, Tag, ShieldCheck, XCircle, Percent,
 } from "lucide-react";
-import { computeTotals, REFUNDABLE_DEPOSIT } from "@/lib/utils/booking-calc";
+import { computeTotalsWithStaffDiscount, REFUNDABLE_DEPOSIT } from "@/lib/utils/booking-calc";
 import IdPhotoUpload from "@/components/hotel-admin/IdPhotoUpload";
 import { getCategoryMeta } from "@/lib/utils/room-categories";
 
@@ -94,6 +94,10 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
   const [depositAmt, setDepositAmt] = useState(String(REFUNDABLE_DEPOSIT));
   const [depositMode, setDepositMode] = useState<"CASH" | "ONLINE">("CASH");
   const [specialRequests, setSpecialRequests] = useState("");
+  // Counter discount staff give themselves (rupees off the final, GST-inclusive
+  // price) — separate from a coupon code, and attributed to them for the owner.
+  const [staffDiscount, setStaffDiscount] = useState("");
+  const [discountReason, setDiscountReason] = useState("");
   // Coupon
   const [couponCode, setCouponCode] = useState("");
   const [couponLoading, setCouponLoading] = useState(false);
@@ -107,11 +111,14 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
     ? Math.max(0, Math.ceil((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / 86400000))
     : 0;
 
+  // Mirrors the server: coupon first, then the staff counter-discount off the
+  // GST-inclusive total (which can move the booking into a lower GST slab).
   const totals = selectedRoom && nights > 0
-    ? computeTotals({
+    ? computeTotalsWithStaffDiscount({
         roomRentPerNight: selectedRoom.basePrice,
         noOfNights: nights,
         couponDiscount: appliedCoupon?.discount ?? 0,
+        staffDiscount: Math.max(0, Number(staffDiscount) || 0),
       })
     : null;
 
@@ -253,6 +260,9 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
           depositMode,
           couponCode: appliedCoupon ? couponCode.trim().toUpperCase() : undefined,
           specialRequests: specialRequests || undefined,
+          // Rupees off the final GST-inclusive price; server re-derives the tax.
+          staffDiscount: Math.max(0, Number(staffDiscount) || 0),
+          discountReason: discountReason.trim() || undefined,
         }),
       });
       const data = await res.json();
@@ -828,9 +838,62 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
                   <span className="flex items-center gap-1"><ShieldCheck className="w-3 h-3" /> Refundable Deposit</span>
                   <span>₹{REFUNDABLE_DEPOSIT}</span>
                 </div>
+                {totals.appliedDiscount > 0 && (
+                  <div className="flex justify-between text-purple-300 text-xs">
+                    <span className="flex items-center gap-1"><Percent className="w-3 h-3" /> Staff discount</span>
+                    <span>−₹{totals.appliedDiscount.toLocaleString("en-IN")}</span>
+                  </div>
+                )}
                 <div className="flex justify-between font-bold text-white text-base border-t border-white/8 pt-2 mt-2">
                   <span>Total</span>
-                  <span className="text-amber-400">₹{totals.totalAmount.toLocaleString("en-IN")}</span>
+                  <span className="text-amber-400">
+                    {totals.appliedDiscount > 0 && (
+                      <span className="text-white/25 font-normal text-xs line-through mr-2">
+                        ₹{totals.originalTotal.toLocaleString("en-IN")}
+                      </span>
+                    )}
+                    ₹{totals.totalAmount.toLocaleString("en-IN")}
+                  </span>
+                </div>
+
+                {/* ── Staff counter-discount ── */}
+                <div className="border-t border-white/8 pt-3 mt-3 space-y-2">
+                  <label className={labelCls}>
+                    Staff Discount (₹) <span className="normal-case font-normal text-white/20">— off the final price, GST included</span>
+                  </label>
+                  <input type="number" min={0} value={staffDiscount}
+                    onChange={e => setStaffDiscount(e.target.value)}
+                    placeholder="0" className={inputCls} />
+
+                  {totals.appliedDiscount > 0 && (
+                    <div className="bg-purple-500/8 border border-purple-500/20 rounded-xl px-3.5 py-2.5 space-y-1">
+                      {totals.adjusted && (
+                        <p className="text-[11px] text-amber-300/90 leading-relaxed">
+                          GST slabs make ₹{(totals.originalTotal - totals.appliedDiscount).toLocaleString("en-IN")} an
+                          invalid price — nearest legal total below it is{" "}
+                          <span className="font-bold">₹{totals.totalAmount.toLocaleString("en-IN")}</span>.
+                        </p>
+                      )}
+                      <div className="flex justify-between text-[11px] text-white/45">
+                        <span>Taxable value</span>
+                        <span>₹{totals.taxableAmount.toLocaleString("en-IN")}</span>
+                      </div>
+                      <div className="flex justify-between text-[11px] text-white/45">
+                        <span>CGST ({totals.cgstRate}%) + SGST ({totals.sgstRate}%)</span>
+                        <span>₹{(totals.cgst + totals.sgst).toLocaleString("en-IN")}</span>
+                      </div>
+                      <p className="text-[10px] text-white/25 pt-0.5">
+                        Recorded against your account for the owner&apos;s review.
+                      </p>
+                    </div>
+                  )}
+
+                  {Number(staffDiscount) > 0 && (
+                    <input type="text" value={discountReason}
+                      onChange={e => setDiscountReason(e.target.value)}
+                      placeholder="Reason (optional) — e.g. regular guest, group rate"
+                      className={inputCls} />
+                  )}
                 </div>
                 {totalPaid > 0 && (
                   <div className="flex justify-between text-green-400 text-sm">

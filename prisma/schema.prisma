@@ -364,6 +364,17 @@ model Booking {
   balanceDue        Float @default(0)
   depositRefunded   Boolean @default(false)
 
+  // Counter discount given by staff at their own discretion (separate from any
+  // coupon). Applied to the FINAL GST-inclusive price, so the taxable base and
+  // tax above are re-derived from the discounted gross. Attributed to the staff
+  // member so the super-admin can review who discounted how much.
+  staffDiscount    Float   @default(0)  // rupees off the final total (0 = none)
+  originalTotal    Float?                // total before the staff discount
+  discountedById   String?               // staff User.id
+  discountedByName String?               // staff name at the time (snapshot)
+  discountReason   String?
+  discountedAt     DateTime?
+
   couponId        String?
   specialRequests String?
   guestGstin      String?

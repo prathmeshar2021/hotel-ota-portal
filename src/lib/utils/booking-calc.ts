@@ -38,6 +38,123 @@ export function computeTotals(params: {
   return { roomRent, taxableAmount, cgst, sgst, totalAmount, cgstRate, sgstRate };
 }
 
+/** GST slabs keyed by the per-night *taxable* tariff — the inverse of calculateGST(). */
+const GST_SLABS = [
+  { rate: 0,  min: 0,       max: 1000 },
+  { rate: 5,  min: 1000.01, max: 7500 },
+  { rate: 18, min: 7500.01, max: Infinity },
+];
+
+/**
+ * Split a **GST-inclusive** gross amount back into taxable base + tax.
+ *
+ * The slab depends on the per-night *taxable* tariff (not the gross), so we
+ * solve per night: for each slab divide out its rate and clamp the result into
+ * that slab's range. Two gross bands are unreachable under the slab rules
+ * (₹1,000–₹1,050 and ₹7,875–₹8,850 per night), so we take the highest legal
+ * price that does **not exceed** the target — rounding a discount in the
+ * guest's favour rather than ever charging more than was quoted — and set
+ * `adjusted` when that lands below the asked-for price.
+ */
+function splitInclusive(grossTotal: number, noOfNights: number) {
+  const nights = Math.max(1, noOfNights);
+  const target = Math.max(0, grossTotal);
+  const perNightGross = target / nights;
+
+  let bestTaxable = 0;
+  let bestRate = 0;
+  let bestGross = 0;
+
+  for (const slab of GST_SLABS) {
+    const raw = perNightGross / (1 + slab.rate / 100);
+    const taxable = Math.min(Math.max(raw, slab.min), slab.max);
+    const achieved = taxable * (1 + slab.rate / 100);
+    // Never overshoot the quoted price; among the legal options take the best.
+    if (achieved <= perNightGross + 1e-6 && achieved >= bestGross) {
+      bestGross = achieved;
+      bestTaxable = taxable;
+      bestRate = slab.rate;
+    }
+  }
+
+  const taxableAmount = +(bestTaxable * nights).toFixed(2);
+  const halfRate = bestRate / 2;
+  const cgst = +(taxableAmount * (halfRate / 100)).toFixed(2);
+  const sgst = +(taxableAmount * (halfRate / 100)).toFixed(2);
+  const totalAmount = +(taxableAmount + cgst + sgst).toFixed(2);
+
+  return {
+    taxableAmount, cgst, sgst,
+    cgstRate: halfRate, sgstRate: halfRate,
+    totalAmount,
+    perNightTaxable: +bestTaxable.toFixed(2),
+    // Only a real slab-gap shortfall counts — not sub-rupee rounding drift.
+    adjusted: +target.toFixed(2) - totalAmount > 0.05,
+  };
+}
+
+/**
+ * Totals for a counter booking where staff give a discount out of their own
+ * discretion — separate from, and applied *after*, any coupon.
+ *
+ * The discount comes off the **final GST-inclusive price** (what the guest is
+ * quoted), so the taxable value and tax are re-derived from the discounted
+ * gross. That also means the GST slab can legitimately change: knocking a
+ * ₹1,100 room down to ₹1,000 moves it into the 0% band, which is the correct
+ * treatment since GST follows the actual transaction value.
+ *
+ * `staffDiscount` is clamped to [0, standard total] so a booking can never go
+ * negative, and the clamped value is returned as `appliedDiscount`.
+ */
+export function computeTotalsWithStaffDiscount(params: {
+  roomRentPerNight: number;
+  noOfNights: number;
+  couponDiscount?: number;
+  staffDiscount?: number;
+}) {
+  const { roomRentPerNight, noOfNights, couponDiscount = 0 } = params;
+
+  // 1. Standard price: room rent − coupon, + GST on that.
+  const standard = computeTotals({ roomRentPerNight, noOfNights, couponDiscount });
+
+  // 2. Staff discount off the gross, never below zero or above the total.
+  const requested = Number.isFinite(params.staffDiscount) ? Math.max(0, params.staffDiscount!) : 0;
+  const appliedDiscount = +Math.min(requested, standard.totalAmount).toFixed(2);
+
+  if (appliedDiscount <= 0) {
+    return {
+      ...standard,
+      roomRent: standard.roomRent,
+      couponDiscount,
+      staffDiscount: 0,
+      appliedDiscount: 0,
+      originalTotal: standard.totalAmount,
+      adjusted: false,
+      perNightTaxable: +(standard.taxableAmount / Math.max(1, noOfNights)).toFixed(2),
+    };
+  }
+
+  // 3. Re-derive the tax split from the discounted gross.
+  const net = splitInclusive(+(standard.totalAmount - appliedDiscount).toFixed(2), noOfNights);
+
+  return {
+    roomRent: standard.roomRent,      // list rent stays the headline figure
+    couponDiscount,
+    staffDiscount: appliedDiscount,
+    appliedDiscount,
+    originalTotal: standard.totalAmount,
+    taxableAmount: net.taxableAmount,
+    cgst: net.cgst,
+    sgst: net.sgst,
+    cgstRate: net.cgstRate,
+    sgstRate: net.sgstRate,
+    totalAmount: net.totalAmount,
+    perNightTaxable: net.perNightTaxable,
+    /** true when the discounted price wasn't legal under the slabs and we snapped it */
+    adjusted: net.adjusted,
+  };
+}
+
 export function applyCoupon(
   coupon: { discountType: string; discountValue: number; maxDiscount?: number | null; minAmount: number },
   roomRent: number

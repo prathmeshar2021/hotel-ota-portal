@@ -491,6 +491,17 @@ export default async function BookingDetailPage({
                   <span>-₹{booking.couponDiscount.toLocaleString("en-IN")}</span>
                 </div>
               )}
+              {booking.staffDiscount > 0 && (
+                <div className="flex justify-between text-purple-300/90">
+                  <span>
+                    Staff Discount
+                    {booking.discountedByName && (
+                      <span className="text-white/25 text-xs ml-1.5">by {booking.discountedByName}</span>
+                    )}
+                  </span>
+                  <span>-₹{booking.staffDiscount.toLocaleString("en-IN")}</span>
+                </div>
+              )}
               {booking.cgst > 0 && (
                 <>
                   <div className="flex justify-between text-white/30 text-xs">

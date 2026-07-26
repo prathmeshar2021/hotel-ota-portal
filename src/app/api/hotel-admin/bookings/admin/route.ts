@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
 import { z } from "zod";
-import { generateBookingRef, computeTotals, applyCoupon } from "@/lib/utils/booking";
-import { REFUNDABLE_DEPOSIT } from "@/lib/utils/booking-calc";
+import { generateBookingRef, applyCoupon } from "@/lib/utils/booking";
+import { REFUNDABLE_DEPOSIT, computeTotalsWithStaffDiscount } from "@/lib/utils/booking-calc";
 import { gupshup } from "@/lib/services/gupshup";
 import { format } from "date-fns";
 import { getCategoryMeta } from "@/lib/utils/room-categories";
@@ -36,6 +36,11 @@ const AdminBookingSchema = z.object({
   depositMode: z.enum(["CASH", "ONLINE"]).optional(),
   couponCode: z.string().optional(),
   specialRequests: z.string().optional(),
+  // Counter discount the staff member gives at their own discretion — rupees
+  // off the FINAL GST-inclusive price, on top of any coupon. Re-applied
+  // server-side so the client can never dictate the tax split.
+  staffDiscount: z.number().min(0).max(1_000_000).default(0),
+  discountReason: z.string().max(300).optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -152,12 +157,16 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Compute totals — server always enforces REFUNDABLE_DEPOSIT
-  const totals = computeTotals({
+  // Totals — coupon first, then any staff counter-discount off the gross. The
+  // tax split is re-derived from the discounted price inside the helper, so the
+  // GST slab follows the amount the guest actually pays.
+  const totals = computeTotalsWithStaffDiscount({
     roomRentPerNight: room.basePrice,
     noOfNights,
     couponDiscount,
+    staffDiscount: d.staffDiscount,
   });
+  const discountGiven = totals.appliedDiscount;
 
   const totalPaid = d.cashPaid + d.onlinePaid;
   const balanceDue = Math.max(0, totals.totalAmount - totalPaid);
@@ -185,6 +194,17 @@ export async function POST(req: NextRequest) {
       cgst: totals.cgst,
       sgst: totals.sgst,
       totalAmount: totals.totalAmount,
+      // Counter discount + who gave it, for the owner's review
+      staffDiscount: discountGiven,
+      ...(discountGiven > 0
+        ? {
+            originalTotal:    totals.originalTotal,
+            discountedById:   session.user.id,
+            discountedByName: session.user.name || session.user.email || "Staff",
+            discountReason:   d.discountReason?.trim() || undefined,
+            discountedAt:     new Date(),
+          }
+        : {}),
       cashPaid: d.cashPaid,
       onlinePaid: d.onlinePaid,
       balanceDue,
