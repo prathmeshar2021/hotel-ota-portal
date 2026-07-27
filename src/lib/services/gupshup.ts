@@ -196,6 +196,9 @@ export const gupshup = {
   // GUPSHUP_TEMPLATE_DEPOSIT_LINK: {{1}} guest, {{2}} hotel, {{3}} booking ref,
   // {{4}} amount, {{5}} payment URL.
   //
+  // Wording deliberately avoids promising a full refund — staff can withhold
+  // part of the deposit at checkout for damage or extra charges.
+  //
   // With no template configured this falls back to a session message, which
   // only reaches guests who have messaged the hotel in the last 24h — so the
   // caller reports delivery failures rather than assuming it landed.
@@ -223,7 +226,8 @@ export const gupshup = {
         `Hi ${data.guestName}, please pay the refundable security deposit of ` +
         `*${amount}* for booking *${data.bookingRef}*:\n\n` +
         `${data.paymentUrl}\n\n` +
-        `This is fully refunded to the same account when you check out.`,
+        `The deposit is returned to the same account at check-out, after any\n` +
+        `deduction for extra charges or damage.`,
     });
   },
 
