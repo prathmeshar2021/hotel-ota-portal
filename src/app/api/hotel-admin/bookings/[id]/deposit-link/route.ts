@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
 import { z } from "zod";
-import { format } from "date-fns";
 import { createPaymentLink, fetchPaymentLink } from "@/lib/services/razorpay";
 import { gupshup } from "@/lib/services/gupshup";
 import { REFUNDABLE_DEPOSIT, DEPOSIT_REF_PREFIX } from "@/lib/utils/booking-calc";
@@ -42,7 +41,7 @@ export async function POST(
   const booking = await prisma.booking.findFirst({
     where: { id, hotelId: session.user.hotelId },
     select: {
-      id: true, bookingRef: true, checkInDate: true, checkOutDate: true,
+      id: true, bookingRef: true,
       depositCollected: true, depositLinkUrl: true, guestPhone: true,
       hotel: { select: { name: true } },
       primaryGuest: { select: { name: true, phone: true } },
@@ -89,13 +88,11 @@ export async function POST(
     // link off the screen if WhatsApp is down.
     let delivered = true;
     try {
-      await gupshup.sendPaymentLink(phone, {
+      await gupshup.sendDepositLink(phone, {
         guestName: booking.primaryGuest.name,
         hotelName: booking.hotel.name,
         bookingRef: booking.bookingRef,
         amount,
-        checkIn: format(booking.checkInDate, "dd MMM yyyy"),
-        checkOut: format(booking.checkOutDate, "dd MMM yyyy"),
         paymentUrl: link.short_url,
       });
     } catch (e) {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import { verifyWebhookSignature } from "@/lib/services/razorpay";
 import { confirmPaidBooking } from "@/lib/services/booking-confirm";
+import { DEPOSIT_REF_PREFIX } from "@/lib/utils/booking-calc";
 
 /**
  * Razorpay webhook — the server-side safety net for payment confirmation.
@@ -26,12 +27,39 @@ export async function POST(req: NextRequest) {
 
   let event: {
     event?: string;
-    payload?: { payment?: { entity?: { id?: string; order_id?: string; amount?: number } } };
+    payload?: {
+      payment?: { entity?: { id?: string; order_id?: string; amount?: number } };
+      payment_link?: { entity?: { id?: string; reference_id?: string } };
+    };
   };
   try {
     event = JSON.parse(raw);
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
+  // A refundable security deposit paid through a WhatsApp link. Its reference_id
+  // carries the "DEP-" prefix so it can never be confused with the room payment
+  // and wrongly mark a stay as paid. Record it against the booking, keeping the
+  // captured payment id so checkout can refund it to the same account.
+  if (event.event === "payment_link.paid") {
+    const reference = event.payload?.payment_link?.entity?.reference_id;
+    const payEntity = event.payload?.payment?.entity;
+    if (reference?.startsWith(DEPOSIT_REF_PREFIX)) {
+      const ref = reference.slice(DEPOSIT_REF_PREFIX.length);
+      const paid = (payEntity?.amount ?? 0) / 100;
+      if (ref && paid > 0) {
+        await prisma.booking.updateMany({
+          where: { bookingRef: ref, depositCollected: 0 },
+          data: {
+            depositCollected: paid,
+            depositMode: "ONLINE",
+            depositPaymentId: payEntity?.id,
+          },
+        });
+      }
+      return NextResponse.json({ received: true });
+    }
   }
 
   if (event.event === "payment.captured") {

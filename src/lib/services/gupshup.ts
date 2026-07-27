@@ -185,6 +185,37 @@ export const gupshup = {
     });
   },
 
+  // Refundable security deposit link. Reuses the payment-link template when one
+  // is configured ({{1}} guest, {{2}} hotel, {{3}} ref, {{4}} amount, {{5}} dates,
+  // {{6}} URL); otherwise falls back to a session message.
+  sendDepositLink: (phone: string, data: {
+    guestName: string;
+    hotelName: string;
+    bookingRef: string;
+    amount: number;
+    paymentUrl: string;
+  }) => {
+    if (process.env.GUPSHUP_TEMPLATE_PAYMENT_LINK) {
+      return sendTemplate(phone, process.env.GUPSHUP_TEMPLATE_PAYMENT_LINK, [
+        data.guestName,
+        data.hotelName,
+        data.bookingRef,
+        `\u20b9${data.amount.toLocaleString("en-IN")}`,
+        "Refundable security deposit",
+        data.paymentUrl,
+      ]);
+    }
+    return send({
+      to: phone,
+      message:
+        `\ud83c\udfe8 *${data.hotelName}*\n\n` +
+        `Hi ${data.guestName}, please pay the refundable security deposit of ` +
+        `*\u20b9${data.amount.toLocaleString("en-IN")}* for booking *${data.bookingRef}*:\n\n` +
+        `${data.paymentUrl}\n\n` +
+        `This is fully refunded to the same account when you check out.`,
+    });
+  },
+
   sendPasswordResetOtp: (phone: string, data: { otp: string; name?: string }) => {
     if (process.env.GUPSHUP_TEMPLATE_OTP) {
       return sendTemplate(phone, process.env.GUPSHUP_TEMPLATE_OTP, [data.otp]);
