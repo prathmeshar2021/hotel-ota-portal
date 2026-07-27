@@ -5,6 +5,7 @@ import { z } from "zod";
 import { generateBookingRef, applyCoupon } from "@/lib/utils/booking";
 import { REFUNDABLE_DEPOSIT, computeTotalsWithStaffDiscount } from "@/lib/utils/booking-calc";
 import { gupshup } from "@/lib/services/gupshup";
+import { email } from "@/lib/services/email";
 import { format } from "date-fns";
 import { getCategoryMeta } from "@/lib/utils/room-categories";
 
@@ -262,13 +263,16 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Send WhatsApp confirmation to guest (fire-and-forget)
-  if (d.guestPhone) {
+  // Notifications. A walk-in guest is standing at the desk being handed a key,
+  // so a "booking confirmed" WhatsApp is noise — skip it for them, but keep it
+  // for phone/other bookings where the guest isn't present. The owner is alerted
+  // either way; counter bookings were the only channel never reaching them.
+  {
     const hotel = await prisma.hotel.findUnique({
       where: { id: hotelId },
       select: { name: true },
     });
-    gupshup.sendBookingConfirmation(d.guestPhone, {
+    const notif = {
       guestName: d.guestName,
       bookingRef,
       hotelName: hotel?.name ?? "The Hotel",
@@ -277,7 +281,30 @@ export async function POST(req: NextRequest) {
       checkOut: format(checkOut, "dd MMM yyyy"),
       totalAmount: totals.totalAmount,
       payAtHotel: true,
-    }).catch((e) => console.error("[WhatsApp] Admin booking confirmation failed:", e));
+    };
+
+    const tasks: Promise<unknown>[] = [];
+    if (d.source !== "WALK_IN" && d.guestPhone) {
+      tasks.push(gupshup.sendBookingConfirmation(d.guestPhone, notif));
+    }
+
+    const ownerAlertData = {
+      guestName: d.guestName,
+      guestPhone: d.guestPhone || undefined,
+      bookingRef,
+      roomType: getCategoryMeta(room.roomType).displayName,
+      checkIn: format(checkIn, "dd MMM yyyy"),
+      checkOut: format(checkOut, "dd MMM yyyy"),
+      nights: noOfNights,
+      totalAmount: totals.totalAmount,
+      payMode: balanceDue === 0 ? "PAID" : "PAY_AT_HOTEL",
+      source: d.source,
+    };
+    tasks.push(gupshup.sendOwnerBookingAlert(ownerAlertData));
+    tasks.push(email.sendOwnerBookingAlert(ownerAlertData));
+
+    // Never let a messaging failure fail the booking that was just taken.
+    await Promise.allSettled(tasks);
   }
 
   return NextResponse.json({ bookingId: booking.id, bookingRef }, { status: 201 });
