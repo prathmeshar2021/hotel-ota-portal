@@ -92,9 +92,6 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
   const [paymentMode, setPaymentMode] = useState<"CASH" | "ONLINE" | "MIXED">("CASH");
   const [cashPaid, setCashPaid] = useState("");
   const [onlinePaid, setOnlinePaid] = useState("");
-  const [collectDeposit, setCollectDeposit] = useState(true);
-  const [depositAmt, setDepositAmt] = useState(String(REFUNDABLE_DEPOSIT));
-  const [depositMode, setDepositMode] = useState<"CASH" | "ONLINE">("CASH");
   const [specialRequests, setSpecialRequests] = useState("");
   // Counter discount staff give themselves (rupees off the final, GST-inclusive
   // price) — separate from a coupon code, and attributed to them for the owner.
@@ -258,8 +255,6 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
           paymentMode,
           cashPaid: Number(cashPaid) || 0,
           onlinePaid: Number(onlinePaid) || 0,
-          depositCollected: collectDeposit ? Number(depositAmt) || 0 : 0,
-          depositMode,
           couponCode: appliedCoupon ? couponCode.trim().toUpperCase() : undefined,
           specialRequests: specialRequests || undefined,
           // Rupees off the final GST-inclusive price; server re-derives the tax.
@@ -738,30 +733,6 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
                     placeholder="0" className={inputCls} />
                 </div>
               )}
-              {/* Refundable deposit — collect now (editable) or skip / take at check-in */}
-              <div className="bg-green-500/5 border border-green-500/15 rounded-xl px-4 py-3 space-y-3">
-                <label className="flex items-center justify-between cursor-pointer">
-                  <span className="flex items-center gap-2 text-green-400/80 text-sm font-semibold">
-                    <ShieldCheck className="w-4 h-4 shrink-0" /> Collect refundable deposit now
-                  </span>
-                  <input type="checkbox" checked={collectDeposit} onChange={e => setCollectDeposit(e.target.checked)} className="accent-green-500 w-4 h-4" />
-                </label>
-                {collectDeposit ? (
-                  <div className="flex gap-2">
-                    <input type="number" min={0} value={depositAmt} onChange={e => setDepositAmt(e.target.value)}
-                      placeholder="Amount" className={`${inputCls} flex-1`} />
-                    {(["CASH", "ONLINE"] as const).map(m => (
-                      <button type="button" key={m} onClick={() => setDepositMode(m)}
-                        className={`px-3 rounded-xl text-xs font-semibold border transition-all ${depositMode === m ? "bg-white/10 border-white/25 text-white" : "border-white/10 text-white/40"}`}>
-                        {m === "CASH" ? "Cash" : "UPI"}
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-white/35">Deposit can be collected at check-in instead.</p>
-                )}
-              </div>
-
               {/* Coupon code */}
               <div>
                 <label className={labelCls}>Coupon Code <span className="normal-case font-normal text-white/20">(optional)</span></label>
@@ -836,10 +807,10 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
                     <span>₹{totals.sgst.toLocaleString("en-IN")}</span>
                   </div>
                 </>}
-                <div className="flex justify-between text-green-400/70 text-xs">
-                  <span className="flex items-center gap-1"><ShieldCheck className="w-3 h-3" /> Refundable Deposit</span>
-                  <span>₹{REFUNDABLE_DEPOSIT}</span>
-                </div>
+                <p className="flex items-center gap-1.5 text-green-400/50 text-[11px]">
+                  <ShieldCheck className="w-3 h-3 shrink-0" />
+                  + ₹{REFUNDABLE_DEPOSIT} refundable deposit — taken at check-in, not now
+                </p>
                 {totals.appliedDiscount > 0 && (
                   <div className="flex justify-between text-purple-300 text-xs">
                     <span className="flex items-center gap-1"><Percent className="w-3 h-3" /> {t("nb.staffDiscount")}</span>
