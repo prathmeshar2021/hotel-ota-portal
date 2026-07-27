@@ -34,6 +34,7 @@ export async function PATCH(
       depositCollected: true, additionalCharges: true, balanceDue: true,
       cashPaid: true, onlinePaid: true,
       // Needed to push a deposit refund back to the card/UPI it came from.
+      depositPaymentId: true,
       payment: { select: { razorpayPaymentId: true, amount: true, refundAmount: true } },
     },
   });
@@ -128,12 +129,16 @@ export async function PATCH(
     // A gateway failure must never block the checkout itself, so it's recorded
     // as PENDING for someone to retry rather than thrown.
     const wantsGatewayRefund = settlement?.refundMode === "RAZORPAY";
-    const sourcePaymentId = booking.payment?.razorpayPaymentId ?? null;
+    // Prefer the deposit's own payment (taken via the WhatsApp link) so the
+    // money goes back to the exact account that paid it. Only fall back to the
+    // room payment when the deposit wasn't collected online.
+    const paidByLink = !!booking.depositPaymentId;
+    const sourcePaymentId = booking.depositPaymentId ?? booking.payment?.razorpayPaymentId ?? null;
     // This moves real money, so never ask the gateway for more than is actually
     // left on that payment — a partial refund may already have been issued.
-    const refundableAtSource = +(
-      (booking.payment?.amount ?? 0) - (booking.payment?.refundAmount ?? 0)
-    ).toFixed(2);
+    const refundableAtSource = paidByLink
+      ? booking.depositCollected
+      : +((booking.payment?.amount ?? 0) - (booking.payment?.refundAmount ?? 0)).toFixed(2);
     const withinSource = refund <= refundableAtSource + 0.01;
     let refundSpeed: string | null = null;
 
@@ -154,15 +159,18 @@ export async function PATCH(
         updateData.refundId = res?.id;
         updateData.refundAmount = refund;
         updateData.refundedAt = now;
-        // Keep the payment's own refunded total in step, so a later refund
-        // can't exceed what's left on it.
-        await prisma.payment.update({
-          where: { bookingId: booking.id },
-          data: {
-            refundAmount: +((booking.payment?.refundAmount ?? 0) + refund).toFixed(2),
-            refundedAt: now,
-          },
-        }).catch(() => {});
+        // Keep the room payment's refunded total in step so a later refund
+        // can't exceed what's left on it. Skipped when the deposit had its own
+        // payment link — that money never came through this Payment row.
+        if (!paidByLink) {
+          await prisma.payment.update({
+            where: { bookingId: booking.id },
+            data: {
+              refundAmount: +((booking.payment?.refundAmount ?? 0) + refund).toFixed(2),
+              refundedAt: now,
+            },
+          }).catch(() => {});
+        }
       } catch (e) {
         console.error("[checkout] deposit refund failed:", e);
         updateData.refundStatus = "PENDING";

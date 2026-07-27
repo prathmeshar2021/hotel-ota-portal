@@ -14,6 +14,9 @@ export function calculateGST(roomRentPerNight: number) {
 }
 
 export const REFUNDABLE_DEPOSIT = 200; // Rs 200 default refundable deposit — collected at check-in (NOT in the booking total), editable by staff
+/** Prefix on a Razorpay payment-link reference_id marking it as the refundable
+ *  deposit rather than the room payment, so the webhook routes it correctly. */
+export const DEPOSIT_REF_PREFIX = "DEP-";
 export const PARTIAL_PAYMENT_AMOUNT = 500; // advance paid upfront for PAY_PARTIAL; subject to cancellation policy
 
 /**

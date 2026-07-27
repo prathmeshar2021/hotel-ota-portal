@@ -61,6 +61,32 @@ export async function createPaymentLink(params: {
 }
 
 /**
+ * Read a payment link's current state. Used to confirm a deposit payment
+ * on demand, so collecting a deposit never depends on the webhook arriving —
+ * staff can press "Check payment" and settle it there and then.
+ *
+ * Returns the link status ("created" | "paid" | "expired" | …) and the id of
+ * the captured payment, which is what a later refund is issued against.
+ */
+export async function fetchPaymentLink(linkId: string): Promise<{
+  status: string;
+  amountPaidPaise: number;
+  paymentId: string | null;
+}> {
+  const link = (await razorpay.paymentLink.fetch(linkId)) as unknown as {
+    status?: string;
+    amount_paid?: number;
+    payments?: { payment_id?: string; status?: string }[];
+  };
+  const captured = (link.payments ?? []).find(p => p.status === "captured") ?? link.payments?.[0];
+  return {
+    status: link.status ?? "unknown",
+    amountPaidPaise: link.amount_paid ?? 0,
+    paymentId: captured?.payment_id ?? null,
+  };
+}
+
+/**
  * Issue a refund against a captured payment. Amount is in paise; omit for a
  * full refund.
  *

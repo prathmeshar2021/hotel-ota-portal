@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { usePanelT } from "@/components/i18n/PanelLang";
 import {
   X, LogIn, Loader2, CreditCard, MapPin, Car, Users, Plus, Trash2,
-  ShieldCheck, Upload,
+  ShieldCheck, Upload, Send,
 } from "lucide-react";
 import GuestSearch, { type GuestResult } from "./GuestSearch";
 import { REFUNDABLE_DEPOSIT } from "@/lib/utils/booking-calc";
@@ -253,6 +253,13 @@ export default function CounterCheckinModal({
   const [collectDeposit, setCollectDeposit] = useState(true);
   const [depositAmount, setDepositAmount]   = useState(String(REFUNDABLE_DEPOSIT));
   const [depositMode, setDepositMode]       = useState<"CASH" | "ONLINE">("CASH");
+  // Sending a Razorpay link is a separate action from saving the form: the
+  // guest pays on their phone and the webhook records it, which is what lets
+  // checkout refund the deposit instantly to the same account.
+  const [sendingLink, setSendingLink] = useState(false);
+  const [linkUrl, setLinkUrl] = useState<string | null>(null);
+  const [checkingPaid, setCheckingPaid] = useState(false);
+  const [depositPaid, setDepositPaid] = useState(false);
 
   // Companions
   const initCompanions = (): CompanionData[] => {
@@ -379,6 +386,48 @@ export default function CounterCheckinModal({
       )
     );
     toast.success(`Loaded ${g.name}`);
+  }
+
+  async function sendDepositLink() {
+    setSendingLink(true);
+    try {
+      const res = await fetch(`/api/hotel-admin/bookings/${bookingId}/deposit-link`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount: Number(depositAmount) || REFUNDABLE_DEPOSIT }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error ?? "Could not send the deposit link"); return; }
+      setLinkUrl(data.url ?? null);
+      if (data.delivered) toast.success(data.message);
+      else toast.warning(data.message);
+    } catch {
+      toast.error("Network error — please try again");
+    } finally {
+      setSendingLink(false);
+    }
+  }
+
+  /** Confirm payment on demand, so the desk never waits on the webhook. */
+  async function checkDepositPaid() {
+    setCheckingPaid(true);
+    try {
+      const res = await fetch(`/api/hotel-admin/bookings/${bookingId}/deposit-link`);
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error ?? "Could not check payment"); return; }
+      if (data.paid) {
+        setDepositPaid(true);
+        setDepositAmount(String(data.amount));
+        setDepositMode("ONLINE");
+        toast.success(data.message);
+      } else {
+        toast.info("Not paid yet — ask the guest to complete the link.");
+      }
+    } catch {
+      toast.error("Network error — please try again");
+    } finally {
+      setCheckingPaid(false);
+    }
   }
 
   // ── Submit ─────────────────────────────────────────────────────────────────
@@ -616,6 +665,41 @@ export default function CounterCheckinModal({
               </div>
             ) : (
               <p className="text-xs text-white/35">No deposit will be collected — it can still be taken later.</p>
+            )}
+
+            {collectDeposit && (
+              <div className="border-t border-white/8 pt-3 mt-1">
+                <button type="button" onClick={sendDepositLink} disabled={sendingLink}
+                  className="w-full flex items-center justify-center gap-2 h-11 rounded-xl text-sm font-semibold border border-green-500/25 bg-green-500/10 text-green-300 hover:bg-green-500/20 transition-all disabled:opacity-50">
+                  {sendingLink ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                  {sendingLink ? "Sending…" : linkUrl ? "Resend payment link" : "Send payment link on WhatsApp"}
+                </button>
+
+                {linkUrl && !depositPaid && (
+                  <button type="button" onClick={checkDepositPaid} disabled={checkingPaid}
+                    className="w-full flex items-center justify-center gap-2 h-10 mt-2 rounded-xl text-xs font-semibold border border-white/12 text-white/60 hover:text-white hover:border-white/25 transition-all disabled:opacity-50">
+                    {checkingPaid ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
+                    {checkingPaid ? "Checking…" : "Check payment"}
+                  </button>
+                )}
+
+                {depositPaid && (
+                  <p className="flex items-center gap-1.5 text-xs text-green-300 mt-2 font-semibold">
+                    <ShieldCheck className="w-3.5 h-3.5" /> Deposit received online — refundable instantly at checkout.
+                  </p>
+                )}
+                <p className="text-[11px] text-white/30 mt-2 leading-relaxed">
+                  Guest pays the deposit online, so at checkout it can be refunded
+                  instantly to the same account instead of handing cash back.
+                  {linkUrl && (
+                    <>
+                      {" "}Link:{" "}
+                      <a href={linkUrl} target="_blank" rel="noopener noreferrer"
+                        className="text-green-300 underline break-all">{linkUrl}</a>
+                    </>
+                  )}
+                </p>
+              </div>
             )}
           </div>
 

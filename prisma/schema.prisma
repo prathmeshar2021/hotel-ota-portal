@@ -354,6 +354,13 @@ model Booking {
   refundableDeposit Float @default(0)   // EXPECTED deposit (₹200) — shown as "collected at check-in"; NOT in totalAmount for new bookings
   depositCollected  Float @default(0)   // ACTUAL deposit held (0 if skipped); set at check-in / counter booking
   depositMode       PaymentMode?        // how the deposit was taken (cash / online)
+
+  // Deposit taken online via a Razorpay payment link sent on WhatsApp. Kept
+  // apart from the room payment so checkout can refund the deposit straight
+  // back to the account that paid it.
+  depositLinkId     String?             // Razorpay payment-link id
+  depositLinkUrl    String?             // short_url, so staff can resend it
+  depositPaymentId  String?             // captured payment id — what we refund against
   additionalCharges Float @default(0)
   taxableAmount     Float @default(0)
   cgst              Float @default(0)

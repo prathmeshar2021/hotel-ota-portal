@@ -203,8 +203,9 @@ export default async function BookingDetailPage({
               additionalCharges={booking.additionalCharges}
               balanceDue={booking.balanceDue}
               // Only offer "back to source" when there's a real captured
-              // Razorpay payment to refund against.
-              canRefundToSource={!!booking.payment?.razorpayPaymentId}
+              // Razorpay payment to refund against — the deposit's own link
+              // payment if there was one, else the room payment.
+              canRefundToSource={!!(booking.depositPaymentId || booking.payment?.razorpayPaymentId)}
             />
           )}
         </div>
