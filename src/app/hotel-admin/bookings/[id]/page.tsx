@@ -175,6 +175,8 @@ export default async function BookingDetailPage({
                   goingTo: booking.onlineCheckin?.goingTo,
                   purpose: booking.onlineCheckin?.purpose,
                   vehicleNo: booking.onlineCheckin?.vehicleNo,
+                  depositLinkUrl: booking.depositLinkUrl,
+                  depositCollected: booking.depositCollected,
                   companions: booking.companions.map(c => ({
                     name: c.name,
                     relation: c.relation,
@@ -202,10 +204,10 @@ export default async function BookingDetailPage({
               depositCollected={booking.depositCollected}
               additionalCharges={booking.additionalCharges}
               balanceDue={booking.balanceDue}
-              // Only offer "back to source" when there's a real captured
-              // Razorpay payment to refund against — the deposit's own link
-              // payment if there was one, else the room payment.
-              canRefundToSource={!!(booking.depositPaymentId || booking.payment?.razorpayPaymentId)}
+              // Only when the DEPOSIT itself was paid online. Refunding a cash
+              // deposit against the room payment would push money to a card it
+              // never came from and eat into that payment's refundable balance.
+              canRefundToSource={!!booking.depositPaymentId}
             />
           )}
         </div>

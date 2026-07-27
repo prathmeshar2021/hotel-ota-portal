@@ -61,6 +61,8 @@ export async function POST(
     select: {
       id: true, roomId: true, primaryGuestId: true, noOfPersons: true,
       roomCategory: true, checkInDate: true, checkOutDate: true,
+      // Set once the guest paid the deposit through the WhatsApp link.
+      depositPaymentId: true,
     },
   });
 
@@ -190,7 +192,12 @@ export async function POST(
   //    refundable deposit if collected at the counter. This does NOT complete the
   //    check-in — a stay is only CHECKED_IN once a room is assigned AND the
   //    consent form is signed/accepted, via the gated "Complete Check-In" action.
-  const depositTaken = typeof data.depositCollected === "number" && data.depositCollected > 0;
+  // A deposit already paid online owns its own record — the form's defaults
+  // (₹200 / CASH) must not overwrite it and lose the fact it can be refunded
+  // straight back to the guest's account.
+  const paidOnline = !!booking.depositPaymentId;
+  const depositTaken =
+    !paidOnline && typeof data.depositCollected === "number" && data.depositCollected > 0;
   await prisma.booking.update({
     where: { id: booking.id },
     data: {

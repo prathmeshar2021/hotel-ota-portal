@@ -42,7 +42,7 @@ export async function POST(
     where: { id, hotelId: session.user.hotelId },
     select: {
       id: true, bookingRef: true,
-      depositCollected: true, depositLinkUrl: true, guestPhone: true,
+      depositCollected: true, depositLinkId: true, depositLinkUrl: true, guestPhone: true,
       hotel: { select: { name: true } },
       primaryGuest: { select: { name: true, phone: true } },
     },
@@ -66,8 +66,23 @@ export async function POST(
   }
 
   try {
+    // If a link is already out there and still payable, resend THAT one. Minting
+    // a second link would leave two payable links for one deposit — the guest
+    // could pay both, and only the first payment is ever recorded.
+    let link: { id: string; short_url: string } | null = null;
+    if (booking.depositLinkId && booking.depositLinkUrl) {
+      try {
+        const existing = await fetchPaymentLink(booking.depositLinkId);
+        if (existing.status === "created" || existing.status === "partially_paid") {
+          link = { id: booking.depositLinkId, short_url: booking.depositLinkUrl };
+        }
+      } catch {
+        // Couldn't check — fall through and create a fresh link.
+      }
+    }
+
     // Razorpay requires expiry at least 15 minutes out; give the guest the day.
-    const link = await createPaymentLink({
+    link = link ?? await createPaymentLink({
       amountInPaise: amount * 100,
       bookingRef: `${DEPOSIT_REF_PREFIX}${booking.bookingRef}`,
       expireBy: new Date(Date.now() + 24 * 60 * 60 * 1000),

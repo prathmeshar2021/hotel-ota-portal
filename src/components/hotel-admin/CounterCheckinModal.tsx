@@ -35,6 +35,10 @@ interface ExistingCheckinData {
   goingTo?: string | null;
   purpose?: string | null;
   vehicleNo?: string | null;
+  /** a deposit link already sent for this booking, so reopening the form
+   *  resumes it instead of minting a second payable link */
+  depositLinkUrl?: string | null;
+  depositCollected?: number | null;
   companions?: {
     name: string;
     relation?: string | null;
@@ -257,9 +261,9 @@ export default function CounterCheckinModal({
   // guest pays on their phone and the webhook records it, which is what lets
   // checkout refund the deposit instantly to the same account.
   const [sendingLink, setSendingLink] = useState(false);
-  const [linkUrl, setLinkUrl] = useState<string | null>(null);
+  const [linkUrl, setLinkUrl] = useState<string | null>(existingData?.depositLinkUrl ?? null);
   const [checkingPaid, setCheckingPaid] = useState(false);
-  const [depositPaid, setDepositPaid] = useState(false);
+  const [depositPaid, setDepositPaid] = useState((existingData?.depositCollected ?? 0) > 0);
 
   // Companions
   const initCompanions = (): CompanionData[] => {
@@ -282,6 +286,8 @@ export default function CounterCheckinModal({
   useEffect(() => {
     if (!open) return;
     setPrimaryName(guestName);
+    setLinkUrl(existingData?.depositLinkUrl ?? null);
+    setDepositPaid((existingData?.depositCollected ?? 0) > 0);
     setIdType((existingData?.idType as IdType) ?? "AADHAR");
     setIdNumber(existingData?.idNumber ?? "");
     setIdFrontUrl(existingData?.idFrontUrl ?? "");

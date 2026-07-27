@@ -13,6 +13,8 @@ interface ExistingCheckinData {
   goingTo?: string | null;
   purpose?: string | null;
   vehicleNo?: string | null;
+  depositLinkUrl?: string | null;
+  depositCollected?: number | null;
   companions?: {
     name: string;
     relation?: string | null;
