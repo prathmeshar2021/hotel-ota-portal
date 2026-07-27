@@ -188,6 +188,17 @@ export const gupshup = {
   // Refundable security deposit link. Reuses the payment-link template when one
   // is configured ({{1}} guest, {{2}} hotel, {{3}} ref, {{4}} amount, {{5}} dates,
   // {{6}} URL); otherwise falls back to a session message.
+  // Refundable security deposit link.
+  //
+  // Needs its OWN approved template: the phone-booking payment-link template has
+  // a stay-dates parameter that a deposit has nothing sensible to put in, so
+  // reusing it would send a garbled message. Params for
+  // GUPSHUP_TEMPLATE_DEPOSIT_LINK: {{1}} guest, {{2}} hotel, {{3}} booking ref,
+  // {{4}} amount, {{5}} payment URL.
+  //
+  // With no template configured this falls back to a session message, which
+  // only reaches guests who have messaged the hotel in the last 24h — so the
+  // caller reports delivery failures rather than assuming it landed.
   sendDepositLink: (phone: string, data: {
     guestName: string;
     hotelName: string;
@@ -195,13 +206,13 @@ export const gupshup = {
     amount: number;
     paymentUrl: string;
   }) => {
-    if (process.env.GUPSHUP_TEMPLATE_PAYMENT_LINK) {
-      return sendTemplate(phone, process.env.GUPSHUP_TEMPLATE_PAYMENT_LINK, [
+    const amount = `\u20b9${data.amount.toLocaleString("en-IN")}`;
+    if (process.env.GUPSHUP_TEMPLATE_DEPOSIT_LINK) {
+      return sendTemplate(phone, process.env.GUPSHUP_TEMPLATE_DEPOSIT_LINK, [
         data.guestName,
         data.hotelName,
         data.bookingRef,
-        `\u20b9${data.amount.toLocaleString("en-IN")}`,
-        "Refundable security deposit",
+        amount,
         data.paymentUrl,
       ]);
     }
@@ -210,7 +221,7 @@ export const gupshup = {
       message:
         `\ud83c\udfe8 *${data.hotelName}*\n\n` +
         `Hi ${data.guestName}, please pay the refundable security deposit of ` +
-        `*\u20b9${data.amount.toLocaleString("en-IN")}* for booking *${data.bookingRef}*:\n\n` +
+        `*${amount}* for booking *${data.bookingRef}*:\n\n` +
         `${data.paymentUrl}\n\n` +
         `This is fully refunded to the same account when you check out.`,
     });
