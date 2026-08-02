@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Users, Banknote, Loader2, ShieldOff, ShieldCheck } from "lucide-react";
+import { Users, Banknote, Loader2, ShieldOff, ShieldCheck, Zap } from "lucide-react";
+import InstantBookModal from "./InstantBookModal";
 
 interface Room {
   id: string;
@@ -65,6 +66,7 @@ export default function RoomStatusCard({ room, occupiedBy, bookedBy, accentColor
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [localStatus, setLocalStatus] = useState(room.status);
+  const [instantOpen, setInstantOpen] = useState(false);
 
   // Precedence: a checked-in guest = occupied; else a confirmed arrival today = booked.
   const displayStatus = occupiedBy ? "OCCUPIED" : bookedBy ? "BOOKED" : localStatus;
@@ -144,6 +146,28 @@ export default function RoomStatusCard({ room, occupiedBy, bookedBy, accentColor
           <p className="text-violet-300 text-xs font-semibold">{bookedBy.name}</p>
           <p className="text-violet-300/60 text-[10px]">{bookedBy.phone} · awaiting check-in</p>
         </div>
+      )}
+
+      {/* Instant book — a phone booking blocked in one step. Only offered when
+          the room is actually free to take. */}
+      {!occupiedBy && !bookedBy && localStatus !== "MAINTENANCE" && (
+        <button
+          onClick={() => setInstantOpen(true)}
+          disabled={loading}
+          className="w-full flex items-center justify-center gap-1.5 text-[10px] font-bold py-2 mb-1.5 rounded-lg bg-blue-500/15 border border-blue-500/30 text-blue-300 hover:bg-blue-500/25 transition-all disabled:opacity-50"
+        >
+          <Zap className="w-3 h-3" />
+          Instant Book
+        </button>
+      )}
+
+      {instantOpen && (
+        <InstantBookModal
+          roomId={room.id}
+          roomNumber={room.roomNumber}
+          basePrice={room.basePrice}
+          onClose={() => setInstantOpen(false)}
+        />
       )}
 
       {/* Status controls — only when the room is neither occupied nor booked today */}

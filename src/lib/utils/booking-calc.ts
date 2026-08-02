@@ -183,6 +183,19 @@ export function computeTotalsWithStaffDiscount(params: {
   };
 }
 
+/**
+ * Totals for a price the hotel simply states — an owner quoting a figure on the
+ * phone, rather than a tariff with a discount applied to it. The amount is what
+ * the guest pays, GST included, so the taxable base and tax are derived from it
+ * the same way a discounted price is.
+ */
+export function computeTotalsForPrice(params: {
+  inclusiveTotal: number;
+  noOfNights: number;
+}) {
+  return splitInclusive(Math.max(0, params.inclusiveTotal), params.noOfNights);
+}
+
 export function applyCoupon(
   coupon: { discountType: string; discountValue: number; maxDiscount?: number | null; minAmount: number },
   roomRent: number

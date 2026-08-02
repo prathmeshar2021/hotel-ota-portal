@@ -387,6 +387,10 @@ model Booking {
   guestGstin      String?
   guestPhone      String?   // phone entered at booking time (fallback when primaryGuest has no phone)
 
+  // Taken by the owner over the phone in a few seconds — most details are
+  // filled in later at check-in. Tagged so these are obvious in the list.
+  instantBooking    Boolean   @default(false)
+
   onlineCheckinDone Boolean   @default(false)
   viaKiosk          Boolean   @default(false) // created or checked in at the reception kiosk
   checkedInAt       DateTime?

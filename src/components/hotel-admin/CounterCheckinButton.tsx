@@ -29,13 +29,14 @@ interface Props {
   bookingId: string;
   bookingRef: string;
   guestName: string;
+  guestPhone?: string | null;
   noOfPersons: number;
   /** Passed when the guest already completed online check-in — pre-fills the modal */
   existingData?: ExistingCheckinData;
 }
 
 export default function CounterCheckinButton({
-  bookingId, bookingRef, guestName, noOfPersons, existingData,
+  bookingId, bookingRef, guestName, guestPhone, noOfPersons, existingData,
 }: Props) {
   const [open, setOpen] = useState(false);
   const hasWebCheckin = !!(existingData?.comingFrom);
@@ -68,6 +69,7 @@ export default function CounterCheckinButton({
         bookingId={bookingId}
         bookingRef={bookingRef}
         guestName={guestName}
+        guestPhone={guestPhone}
         noOfPersons={noOfPersons}
         existingData={existingData}
       />

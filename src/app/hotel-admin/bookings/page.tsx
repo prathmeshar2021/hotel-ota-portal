@@ -260,6 +260,11 @@ export default async function BookingsPage({ searchParams }: Props) {
                         {SOURCE_CONFIG[b.source].label}
                       </span>
                     )}
+                    {b.instantBooking && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 bg-blue-500/15 text-blue-300 border-blue-500/30">
+                        Instantly Booked
+                      </span>
+                    )}
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-full border shrink-0 ${statusCls}`}>
                       {statusLabel}
                     </span>

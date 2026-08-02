@@ -134,6 +134,11 @@ export default async function BookingDetailPage({
                 {SOURCE_CONFIG[booking.source].label}
               </span>
             )}
+            {booking.instantBooking && (
+              <span className="text-xs font-bold px-3 py-1 rounded-full border bg-blue-500/15 text-blue-300 border-blue-500/30">
+                Instantly Booked
+              </span>
+            )}
             <span className={`text-xs font-bold px-3 py-1 rounded-full border ${status.cls}`}>
               {status.label}
             </span>
@@ -165,6 +170,7 @@ export default async function BookingDetailPage({
                 bookingId={booking.id}
                 bookingRef={booking.bookingRef}
                 guestName={booking.primaryGuest.name}
+                guestPhone={booking.primaryGuest.phone ?? booking.guestPhone}
                 noOfPersons={booking.noOfPersons}
                 existingData={{
                   idType: booking.primaryGuest.idType,

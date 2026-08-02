@@ -57,6 +57,7 @@ interface Props {
   bookingId: string;
   bookingRef: string;
   guestName: string;
+  guestPhone?: string | null;
   noOfPersons: number;
   existingData?: ExistingCheckinData;
 }
@@ -232,7 +233,7 @@ const blankCompanion = (): CompanionData => ({
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function CounterCheckinModal({
-  open, onClose, bookingId, bookingRef, guestName, noOfPersons, existingData,
+  open, onClose, bookingId, bookingRef, guestName, guestPhone, noOfPersons, existingData,
 }: Props) {
   const router = useRouter();
   const t = usePanelT();
@@ -240,6 +241,9 @@ export default function CounterCheckinModal({
 
   // Primary guest
   const [primaryName, setPrimaryName] = useState(guestName);
+  // An instant phone booking may have been taken with no name or number, or a
+  // rough one — both are corrected here.
+  const [primaryPhone, setPrimaryPhone] = useState(guestPhone ?? "");
   const [idType, setIdType]         = useState<IdType>((existingData?.idType as IdType) ?? "AADHAR");
   const [idNumber, setIdNumber]     = useState(existingData?.idNumber ?? "");
   const [idFrontUrl, setIdFrontUrl] = useState(existingData?.idFrontUrl ?? "");
@@ -286,6 +290,7 @@ export default function CounterCheckinModal({
   useEffect(() => {
     if (!open) return;
     setPrimaryName(guestName);
+    setPrimaryPhone(guestPhone ?? "");
     setLinkUrl(existingData?.depositLinkUrl ?? null);
     setDepositPaid((existingData?.depositCollected ?? 0) > 0);
     setIdType((existingData?.idType as IdType) ?? "AADHAR");
@@ -473,6 +478,7 @@ export default function CounterCheckinModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: primaryName.trim(),
+          phone: primaryPhone.trim() || undefined,
           idType, idNumber: idNumber.trim(), idFrontUrl, idBackUrl,
           comingFrom: comingFrom.trim(), goingTo: goingTo.trim(),
           purpose, vehicleNo: vehicleNo.trim() || undefined,
@@ -582,6 +588,12 @@ export default function CounterCheckinModal({
               <label className={reqLabelCls}>Full Name <Req /></label>
               <input value={primaryName} onChange={e => setPrimaryName(e.target.value)}
                 placeholder="Guest's full name" className={reqInputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>Mobile Number</label>
+              <input value={primaryPhone} type="tel" inputMode="numeric"
+                onChange={e => setPrimaryPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                placeholder="10-digit mobile" className={inputCls} />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
