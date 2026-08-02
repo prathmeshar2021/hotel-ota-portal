@@ -3,7 +3,9 @@ import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
 import { z } from "zod";
 import { generateBookingRef, applyCoupon } from "@/lib/utils/booking";
-import { REFUNDABLE_DEPOSIT, computeTotalsWithStaffDiscount } from "@/lib/utils/booking-calc";
+import {
+  REFUNDABLE_DEPOSIT, computeTotals, computeTotalsForPrice, computeTotalsWithStaffDiscount,
+} from "@/lib/utils/booking-calc";
 import { gupshup } from "@/lib/services/gupshup";
 import { email } from "@/lib/services/email";
 import { format } from "date-fns";
@@ -41,6 +43,9 @@ const AdminBookingSchema = z.object({
   // off the FINAL GST-inclusive price, on top of any coupon. Re-applied
   // server-side so the client can never dictate the tax split.
   staffDiscount: z.number().min(0).max(1_000_000).default(0),
+  // The final GST-inclusive price staff typed. Takes precedence over
+  // staffDiscount and, unlike it, can be ABOVE the standard tariff.
+  customTotal: z.number().min(0).max(1_000_000).optional(),
   discountReason: z.string().max(300).optional(),
 });
 
@@ -158,16 +163,38 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Totals — coupon first, then any staff counter-discount off the gross. The
-  // tax split is re-derived from the discounted price inside the helper, so the
-  // GST slab follows the amount the guest actually pays.
-  const totals = computeTotalsWithStaffDiscount({
+  // Standard tariff for these dates — the baseline any edited price is judged
+  // against, and what gets stored as originalTotal when staff change it.
+  const standardTotals = computeTotals({
     roomRentPerNight: room.basePrice,
     noOfNights,
     couponDiscount,
-    staffDiscount: d.staffDiscount,
   });
-  const discountGiven = totals.appliedDiscount;
+
+  // Staff can type the final price outright. It's GST-inclusive, so the taxable
+  // value and tax are derived from it against the slabs — and it may be higher
+  // than the tariff, which a discount could never express. Falls back to the
+  // older discount field so existing callers keep working.
+  const typedPrice = typeof d.customTotal === "number" ? Math.round(d.customTotal) : null;
+  const priceEdited =
+    typedPrice !== null && Math.abs(typedPrice - standardTotals.totalAmount) > 0.5;
+
+  const totals = priceEdited
+    ? computeTotalsForPrice({ inclusiveTotal: typedPrice!, noOfNights })
+    : d.staffDiscount > 0
+      ? computeTotalsWithStaffDiscount({
+          roomRentPerNight: room.basePrice, noOfNights, couponDiscount,
+          staffDiscount: d.staffDiscount,
+        })
+      : standardTotals;
+
+  // Only a reduction counts as a discount for the owner's report; charging
+  // above the tariff is recorded via originalTotal instead of a negative one.
+  const discountGiven = Math.max(
+    0,
+    +(standardTotals.totalAmount - totals.totalAmount).toFixed(2)
+  );
+  const priceChanged = Math.abs(standardTotals.totalAmount - totals.totalAmount) > 0.5;
 
   const totalPaid = d.cashPaid + d.onlinePaid;
   const balanceDue = Math.max(0, totals.totalAmount - totalPaid);
@@ -188,7 +215,7 @@ export async function POST(req: NextRequest) {
       checkOutDate: checkOut,
       noOfNights,
       noOfPersons: d.noOfPersons,
-      roomRent: totals.roomRent,
+      roomRent: standardTotals.roomRent,
       couponDiscount,
       couponId: couponId ?? undefined,
       taxableAmount: totals.taxableAmount,
@@ -197,9 +224,9 @@ export async function POST(req: NextRequest) {
       totalAmount: totals.totalAmount,
       // Counter discount + who gave it, for the owner's review
       staffDiscount: discountGiven,
-      ...(discountGiven > 0
+      ...(priceChanged
         ? {
-            originalTotal:    totals.originalTotal,
+            originalTotal:    standardTotals.totalAmount,
             discountedById:   session.user.id,
             discountedByName: session.user.name || session.user.email || "Staff",
             discountReason:   d.discountReason?.trim() || undefined,
