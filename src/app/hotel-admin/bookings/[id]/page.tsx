@@ -435,6 +435,8 @@ export default async function BookingDetailPage({
                   currentRoomNumber={booking.room?.roomNumber ?? null}
                   checkInDate={booking.checkInDate.toISOString()}
                   checkOutDate={booking.checkOutDate.toISOString()}
+                  noOfNights={booking.noOfNights}
+                  currentTotal={booking.totalAmount}
                 />
               )}
             </div>

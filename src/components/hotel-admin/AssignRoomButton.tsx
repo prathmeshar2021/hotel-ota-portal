@@ -10,6 +10,7 @@ interface AvailableRoom {
   roomNumber: string;
   roomType: string;
   status: string;
+  basePrice: number;
 }
 
 interface AssignRoomButtonProps {
@@ -22,6 +23,8 @@ interface AssignRoomButtonProps {
   currentRoomNumber: string | null;
   checkInDate: string;            // ISO string
   checkOutDate: string;           // ISO string
+  noOfNights: number;
+  currentTotal: number;           // what the guest is charged today
 }
 
 export default function AssignRoomButton({
@@ -32,6 +35,8 @@ export default function AssignRoomButton({
   currentRoomNumber,
   checkInDate,
   checkOutDate,
+  noOfNights,
+  currentTotal,
 }: AssignRoomButtonProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -41,6 +46,9 @@ export default function AssignRoomButton({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  // Optional re-price for the move. Blank leaves the guest on what they were
+  // already quoted — changing rooms shouldn't silently change the bill.
+  const [newPrice, setNewPrice] = useState("");
 
   const meta = getCategoryMeta(roomCategory);
   const accentColor = meta.accentColor;
@@ -51,15 +59,17 @@ export default function AssignRoomButton({
     setError(null);
     setSuccess(null);
     setSelectedRoomId(currentRoomId ?? null);
+    setNewPrice("");
 
     try {
       // checkIn/checkOut may be full ISO — extract date part
       const checkIn  = checkInDate.split("T")[0];
       const checkOut = checkOutDate.split("T")[0];
+      // No category filter — the desk can move a guest to any free room,
+      // including a different room type.
       const params = new URLSearchParams({
         checkIn,
         checkOut,
-        category: roomCategory,
         excludeBookingId: bookingId,
       });
       const res = await fetch(`/api/hotel-admin/rooms/available?${params}`);
@@ -91,7 +101,10 @@ export default function AssignRoomButton({
       const res = await fetch(`/api/hotel-admin/bookings/${bookingId}/assign-room`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ roomId: selectedRoomId }),
+        body: JSON.stringify({
+          roomId: selectedRoomId,
+          customTotal: newPrice.trim() === "" ? undefined : Math.max(0, Number(newPrice) || 0),
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to assign room");
@@ -173,7 +186,7 @@ export default function AssignRoomButton({
                       <BedDouble className="w-8 h-8 text-white/15 mx-auto mb-3" />
                       <p className="text-white/40 text-sm font-medium">No rooms available</p>
                       <p className="text-white/25 text-xs mt-1">
-                        All {categoryLabel.toLowerCase()} rooms are booked for these dates.
+                        Every room is booked for these dates.
                       </p>
                     </div>
                   ) : (
@@ -217,10 +230,19 @@ export default function AssignRoomButton({
                               <div>
                                 <p className="text-sm font-semibold text-white">
                                   Room {room.roomNumber}
+                                  {room.roomType !== roomCategory && (
+                                    <span className="ml-2 text-[9px] font-bold uppercase tracking-wider text-amber-400/80">
+                                      other category
+                                    </span>
+                                  )}
+                                </p>
+                                <p className="text-[10px] text-white/35 mt-0.5">
+                                  {getCategoryMeta(room.roomType as never)?.displayName ?? room.roomType}
+                                  {room.basePrice ? ` · ₹${room.basePrice.toLocaleString("en-IN")}/night` : ""}
                                 </p>
                                 {isCurrent && (
                                   <p className="text-[10px] mt-0.5 flex items-center gap-1" style={{ color: accentColor }}>
-                                    <Sparkles className="w-3 h-3" /> Auto-assigned
+                                    <Sparkles className="w-3 h-3" /> Current room
                                   </p>
                                 )}
                               </div>
@@ -254,6 +276,36 @@ export default function AssignRoomButton({
                       <Check className="w-4 h-4 shrink-0" style={{ color: accentColor }} />
                       <p className="text-xs font-medium" style={{ color: accentColor }}>
                         {success}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Optional re-price — only worth showing once a different
+                      room is picked, since that's when the rate might change. */}
+                  {rooms.length > 0 && hasChanged && (
+                    <div className="mb-4">
+                      <label className="block text-[11px] font-semibold text-white/45 uppercase tracking-wider mb-1.5">
+                        New Price (₹) <span className="normal-case font-normal text-white/25">— optional, GST included</span>
+                      </label>
+                      <input
+                        type="number" min={0} value={newPrice}
+                        onChange={(e) => setNewPrice(e.target.value)}
+                        placeholder={`Leave blank to keep ₹${currentTotal.toLocaleString("en-IN")}`}
+                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder:text-white/25 text-sm focus:outline-none transition-all"
+                        style={{ borderColor: newPrice ? `${accentColor}40` : undefined }}
+                      />
+                      {newPrice.trim() !== "" && Number(newPrice) >= 0 && (
+                        <p className="text-[11px] text-white/40 mt-1.5">
+                          {Number(newPrice) > currentTotal
+                            ? `₹${(Number(newPrice) - currentTotal).toLocaleString("en-IN")} more than the current total`
+                            : Number(newPrice) < currentTotal
+                              ? `₹${(currentTotal - Number(newPrice)).toLocaleString("en-IN")} less than the current total`
+                              : "Same as the current total"}
+                          {" · GST is recalculated from this figure"}
+                        </p>
+                      )}
+                      <p className="text-[10px] text-white/25 mt-1">
+                        For {noOfNights} night{noOfNights !== 1 ? "s" : ""}. Blank keeps the guest on what they were quoted.
                       </p>
                     </div>
                   )}
