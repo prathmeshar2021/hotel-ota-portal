@@ -7,6 +7,7 @@ import RoomStatusCard from "@/components/hotel-admin/RoomStatusCard";
 import SeedRoomsButton from "@/components/hotel-admin/SeedRoomsButton";
 import { getCategoryMeta, ALL_MAIN_CATEGORIES } from "@/lib/utils/room-categories";
 import { startOfDay, endOfDay } from "date-fns";
+import { sweepIfStale } from "@/lib/services/auto-checkout";
 
 const STATUS_LABELS: Record<string, string> = {
   AVAILABLE: "Available",
@@ -27,6 +28,10 @@ function deriveRoomState(room: { status: string; assignedBookings: { status: str
 export default async function RoomsPage() {
   const session = await auth();
   if (!session?.user?.hotelId) redirect("/auth/staff-login");
+
+  // Close any stay nobody checked out before reading the board, so it can never
+  // show a guest from a finished stay even if the scheduled sweep hasn't run.
+  await sweepIfStale();
 
   const today = new Date();
   const todayStart = startOfDay(today);

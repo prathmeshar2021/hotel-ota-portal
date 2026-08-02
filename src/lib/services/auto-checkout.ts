@@ -56,6 +56,31 @@ export function overdueDeadline(checkOutDate: Date, checkOutTime: string | null)
   return new Date(utcMidnight + afterGrace * 60_000);
 }
 
+/**
+ * Opportunistic sweep for pages that display room occupancy.
+ *
+ * The scheduled job is the primary trigger, but on a Hobby plan cron runs once
+ * a day at best, and a stale board is exactly what staff would notice first.
+ * Running here means the board corrects itself whenever anyone opens it, with
+ * no scheduling to depend on.
+ *
+ * Throttled per server instance so a burst of page views doesn't re-scan, and
+ * it never throws: a failed sweep must not take the rooms page down with it.
+ */
+let lastSweepAt = 0;
+const SWEEP_THROTTLE_MS = 5 * 60 * 1000;
+
+export async function sweepIfStale(): Promise<void> {
+  const now = Date.now();
+  if (now - lastSweepAt < SWEEP_THROTTLE_MS) return;
+  lastSweepAt = now;
+  try {
+    await autoCheckoutOverdue();
+  } catch (e) {
+    console.error("[auto-checkout] opportunistic sweep failed:", e);
+  }
+}
+
 export interface AutoCheckoutResult {
   closed: { bookingRef: string; guest: string; room: string | null; owed: number }[];
   scanned: number;
