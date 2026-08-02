@@ -38,14 +38,17 @@ export default async function RoomsPage() {
       assignedBookings: {
         where: {
           OR: [
-            { status: "CHECKED_IN" },
+            // Only stays that haven't passed their check-out date — a booking
+            // left CHECKED_IN from weeks ago must not claim the room. The hourly
+            // auto-checkout sweep closes those, this is the display-side guard.
+            { status: "CHECKED_IN", checkOutDate: { gte: todayStart } },
             { status: "CONFIRMED", checkInDate: { gte: todayStart, lte: todayEnd } },
           ],
         },
         include: {
           primaryGuest: { select: { name: true, phone: true } },
         },
-        orderBy: { checkInDate: "asc" },
+        orderBy: { checkInDate: "desc" },
       },
     },
     orderBy: [{ roomType: "asc" }, { roomNumber: "asc" }],
