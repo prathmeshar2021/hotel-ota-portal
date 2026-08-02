@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { useEffect } from "react";
 import { Zap, Loader2, X, User, Phone, IndianRupee, StickyNote, BedDouble } from "lucide-react";
 import { getCategoryMeta } from "@/lib/utils/room-categories";
+import GuestSearch, { type GuestResult } from "./GuestSearch";
 
 interface Props {
   /** Pre-selected when opened from a room card. Omit to pick a room in-modal
@@ -51,6 +52,9 @@ export default function InstantBookModal({ roomId, roomNumber, basePrice, onClos
   const [checkOut, setCheckOut] = useState(isoDate(1));
   const [guestName, setGuestName] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
+  // Set when a returning guest is picked from search, so the booking links to
+  // that exact person rather than matching on a number they may not have.
+  const [guestId, setGuestId] = useState<string | null>(null);
   const [price, setPrice] = useState("");
   const [notes, setNotes] = useState("");
 
@@ -93,6 +97,7 @@ export default function InstantBookModal({ roomId, roomNumber, basePrice, onClos
           roomId: effectiveRoomId,
           checkInDate: checkIn,
           checkOutDate: checkOut,
+          guestId: guestId ?? undefined,
           guestName: guestName.trim() || undefined,
           guestPhone: guestPhone.trim() || undefined,
           price: price.trim() ? Number(price) : undefined,
@@ -173,8 +178,25 @@ export default function InstantBookModal({ roomId, roomNumber, basePrice, onClos
         )}
 
         <div className="space-y-3">
+          {/* Returning guest? Pull their details in rather than retyping. A
+              first-timer is simply typed straight into the fields below. */}
+          <GuestSearch
+            placeholder="Search existing guest by name, phone or ID…"
+            onSelect={(g: GuestResult) => {
+              setGuestId(g.id);
+              setGuestName(g.name);
+              if (g.phone) setGuestPhone(g.phone);
+              toast.success(`Selected ${g.name}`);
+            }}
+          />
+
           <div>
-            <label className={labelCls}>Guest Name</label>
+            <label className={labelCls}>
+              Guest Name
+              {guestId && (
+                <span className="ml-2 normal-case font-normal text-green-400/70">· existing guest</span>
+              )}
+            </label>
             <div className="relative">
               <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/25" />
               <input value={guestName} onChange={e => setGuestName(e.target.value)}
@@ -186,7 +208,7 @@ export default function InstantBookModal({ roomId, roomNumber, basePrice, onClos
             <div className="relative">
               <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/25" />
               <input value={guestPhone} type="tel" inputMode="numeric"
-                onChange={e => setGuestPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                onChange={e => { setGuestId(null); setGuestPhone(e.target.value.replace(/\D/g, "").slice(0, 10)); }}
                 placeholder="Skip if not asked" className={`${inputCls} pl-10`} />
             </div>
           </div>

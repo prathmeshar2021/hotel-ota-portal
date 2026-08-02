@@ -18,6 +18,9 @@ const InstantSchema = z.object({
   checkInDate: z.string(),
   checkOutDate: z.string(),
   noOfPersons: z.number().min(1).max(10).optional(),
+  // Set when staff picked a returning guest from search — links to that exact
+  // person instead of re-matching on phone (which they may not have on file).
+  guestId: z.string().optional(),
   guestName: z.string().trim().max(120).optional(),
   guestPhone: z.string().optional(),
   // What the owner quoted, GST included. Omitted → the room's standard tariff.
@@ -73,15 +76,28 @@ export async function POST(req: NextRequest) {
   const name = d.guestName?.trim() || `Guest — Room ${room.roomNumber}`;
   let guestId: string;
 
-  const existing = phone.length === 10
-    ? await prisma.guest.findUnique({ where: { phone }, select: { id: true, name: true } })
-    : null;
+  // A guest chosen from search wins over phone matching; otherwise fall back to
+  // the number, and only then create someone new.
+  const existing = d.guestId
+    ? await prisma.guest.findUnique({ where: { id: d.guestId }, select: { id: true, name: true, phone: true } })
+    : phone.length === 10
+      ? await prisma.guest.findUnique({ where: { phone }, select: { id: true, name: true, phone: true } })
+      : null;
 
   if (existing) {
     guestId = existing.id;
-    // Only overwrite a stored name when the owner actually typed one.
-    if (d.guestName?.trim()) {
-      await prisma.guest.update({ where: { id: existing.id }, data: { name: d.guestName.trim() } });
+    // Only overwrite a stored name when the owner actually typed one, and fill
+    // in a number for a guest who had none — never clobber an existing one.
+    const patch: { name?: string; phone?: string } = {};
+    if (d.guestName?.trim()) patch.name = d.guestName.trim();
+    if (!existing.phone && phone.length === 10) {
+      const clash = await prisma.guest.findFirst({
+        where: { phone, NOT: { id: existing.id } }, select: { id: true },
+      });
+      if (!clash) patch.phone = phone;
+    }
+    if (Object.keys(patch).length > 0) {
+      await prisma.guest.update({ where: { id: existing.id }, data: patch });
     }
   } else {
     const created = await prisma.guest.create({
