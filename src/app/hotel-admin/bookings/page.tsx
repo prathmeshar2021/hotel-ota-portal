@@ -11,6 +11,7 @@ import { format, startOfDay, endOfDay } from "date-fns";
 import { fmtIST } from "@/lib/utils/datetime";
 import { Calendar, User, ArrowRight, Phone, Search, LogIn, LogOut } from "lucide-react";
 import { getCategoryMeta } from "@/lib/utils/room-categories";
+import InstantBookButton from "@/components/hotel-admin/InstantBookButton";
 
 type Filter = "all" | "arrivals-today" | "departures-today" | "in-house" | "upcoming" | "checked-out";
 type SortKey = "checkin-desc" | "checkin-asc" | "created-desc" | "checkout-asc";
@@ -149,9 +150,12 @@ export default async function BookingsPage({ searchParams }: Props) {
   return (
     <div className="p-6 max-w-5xl">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white mb-1">{t("bookings.title")}</h1>
-        <p className="text-white/35 text-sm">{bookings.length} booking{bookings.length !== 1 ? "s" : ""} found</p>
+      <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold text-white mb-1">{t("bookings.title")}</h1>
+          <p className="text-white/35 text-sm">{bookings.length} booking{bookings.length !== 1 ? "s" : ""} found</p>
+        </div>
+        <InstantBookButton />
       </div>
 
       {/* Status filter tabs */}

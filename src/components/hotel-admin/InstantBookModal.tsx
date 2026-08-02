@@ -3,13 +3,25 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Zap, Loader2, X, User, Phone, IndianRupee, StickyNote } from "lucide-react";
+import { useEffect } from "react";
+import { Zap, Loader2, X, User, Phone, IndianRupee, StickyNote, BedDouble } from "lucide-react";
+import { getCategoryMeta } from "@/lib/utils/room-categories";
 
 interface Props {
-  roomId: string;
-  roomNumber: string;
-  basePrice: number;
+  /** Pre-selected when opened from a room card. Omit to pick a room in-modal
+   *  (how it opens from the bookings list, where there's no room context). */
+  roomId?: string;
+  roomNumber?: string;
+  basePrice?: number;
   onClose: () => void;
+}
+
+interface AvailableRoom {
+  id: string;
+  roomNumber: string;
+  roomType: string;
+  capacity: number;
+  basePrice: number;
 }
 
 const inputCls =
@@ -30,6 +42,11 @@ function isoDate(offsetDays = 0) {
 export default function InstantBookModal({ roomId, roomNumber, basePrice, onClose }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  // Room-picking mode: no room was handed in, so offer whatever is free.
+  const picksRoom = !roomId;
+  const [rooms, setRooms] = useState<AvailableRoom[]>([]);
+  const [loadingRooms, setLoadingRooms] = useState(false);
+  const [pickedRoom, setPickedRoom] = useState<AvailableRoom | null>(null);
   const [checkIn, setCheckIn] = useState(isoDate(0));
   const [checkOut, setCheckOut] = useState(isoDate(1));
   const [guestName, setGuestName] = useState("");
@@ -42,7 +59,30 @@ export default function InstantBookModal({ roomId, roomNumber, basePrice, onClos
     Math.ceil((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / 86400000)
   );
 
+  useEffect(() => {
+    if (!picksRoom) return;
+    if (nights < 1) { setRooms([]); return; }
+    let cancelled = false;
+    setLoadingRooms(true);
+    fetch(`/api/hotel-admin/rooms/available?checkIn=${checkIn}&checkOut=${checkOut}`)
+      .then(r => (r.ok ? r.json() : []))
+      .then((data: AvailableRoom[]) => {
+        if (cancelled) return;
+        setRooms(Array.isArray(data) ? data : []);
+        // Drop a selection that these dates no longer allow.
+        setPickedRoom(prev => (prev && data.some(r => r.id === prev.id) ? prev : null));
+      })
+      .catch(() => !cancelled && setRooms([]))
+      .finally(() => !cancelled && setLoadingRooms(false));
+    return () => { cancelled = true; };
+  }, [picksRoom, checkIn, checkOut, nights]);
+
+  const effectiveRoomId = roomId ?? pickedRoom?.id;
+  const effectiveRoomNumber = roomNumber ?? pickedRoom?.roomNumber;
+  const effectiveBase = basePrice ?? pickedRoom?.basePrice ?? 0;
+
   async function submit() {
+    if (!effectiveRoomId) { toast.error("Pick a room first"); return; }
     if (nights < 1) { toast.error("Check-out must be after check-in"); return; }
     setLoading(true);
     try {
@@ -50,7 +90,7 @@ export default function InstantBookModal({ roomId, roomNumber, basePrice, onClos
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          roomId,
+          roomId: effectiveRoomId,
           checkInDate: checkIn,
           checkOutDate: checkOut,
           guestName: guestName.trim() || undefined,
@@ -83,7 +123,9 @@ export default function InstantBookModal({ roomId, roomNumber, basePrice, onClos
             </div>
             <div>
               <h2 className="font-bold text-white">Instant Book</h2>
-              <p className="text-white/35 text-xs">Room {roomNumber} · everything below is optional</p>
+              <p className="text-white/35 text-xs">
+                {effectiveRoomNumber ? `Room ${effectiveRoomNumber} · ` : ""}everything below is optional
+              </p>
             </div>
           </div>
           <button onClick={() => !loading && onClose()} className="text-white/30 hover:text-white/60 p-1 rounded-lg transition-colors">
@@ -102,6 +144,33 @@ export default function InstantBookModal({ roomId, roomNumber, basePrice, onClos
             <input type="date" value={checkOut} min={checkIn} onChange={e => setCheckOut(e.target.value)} className={inputCls} />
           </div>
         </div>
+
+        {picksRoom && (
+          <div className="mb-4">
+            <label className={labelCls}>
+              Room {loadingRooms && <Loader2 className="inline w-3 h-3 animate-spin ml-1" />}
+            </label>
+            {nights < 1 ? (
+              <p className="text-xs text-white/30">Pick valid dates to see free rooms.</p>
+            ) : rooms.length === 0 && !loadingRooms ? (
+              <p className="text-xs text-amber-400/70">No rooms free for these dates.</p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {rooms.map(r => (
+                  <button type="button" key={r.id} onClick={() => setPickedRoom(r)}
+                    className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border transition-all ${
+                      pickedRoom?.id === r.id
+                        ? "bg-blue-500 text-white border-blue-400"
+                        : "bg-white/5 border-white/10 text-white/55 hover:text-white/85 hover:border-white/20"
+                    }`}
+                    title={getCategoryMeta(r.roomType as never)?.displayName ?? r.roomType}>
+                    <BedDouble className="inline w-3 h-3 mr-1" />{r.roomNumber}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="space-y-3">
           <div>
@@ -127,7 +196,7 @@ export default function InstantBookModal({ roomId, roomNumber, basePrice, onClos
               <IndianRupee className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/25" />
               <input value={price} type="number" min={0}
                 onChange={e => setPrice(e.target.value)}
-                placeholder={`Standard: ₹${Math.round(basePrice * 1.05 * Math.max(1, nights)).toLocaleString("en-IN")}`}
+                placeholder={effectiveBase ? `Standard: ₹${Math.round(effectiveBase * 1.05 * Math.max(1, nights)).toLocaleString("en-IN")}` : "Standard tariff"}
                 className={`${inputCls} pl-10`} />
             </div>
             <p className="text-[11px] text-white/25 mt-1.5">
@@ -146,7 +215,7 @@ export default function InstantBookModal({ roomId, roomNumber, basePrice, onClos
         </div>
 
         <p className="text-[11px] text-white/30 mt-4 leading-relaxed">
-          Blocks Room {roomNumber} for {nights} night{nights !== 1 ? "s" : ""} straight away. Name and mobile
+          Blocks {effectiveRoomNumber ? `Room ${effectiveRoomNumber}` : "the room"} for {nights} night{nights !== 1 ? "s" : ""} straight away. Name and mobile
           can be corrected at check-in, and the full guest details are captured there as usual.
         </p>
 
@@ -155,7 +224,7 @@ export default function InstantBookModal({ roomId, roomNumber, basePrice, onClos
             className="flex-1 py-3 rounded-xl border border-white/10 text-white/50 hover:text-white hover:border-white/20 text-sm font-semibold transition-all disabled:opacity-50">
             Cancel
           </button>
-          <button onClick={submit} disabled={loading || nights < 1}
+          <button onClick={submit} disabled={loading || nights < 1 || !effectiveRoomId}
             className="flex-1 py-3 rounded-xl bg-blue-500 hover:bg-blue-400 text-white text-sm font-bold transition-all disabled:opacity-50 flex items-center justify-center gap-2">
             {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Blocking…</> : <><Zap className="w-4 h-4" /> Block Room</>}
           </button>
