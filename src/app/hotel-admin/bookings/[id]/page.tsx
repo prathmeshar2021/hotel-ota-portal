@@ -40,6 +40,7 @@ import DeleteChargeButton from "@/components/hotel-admin/DeleteChargeButton";
 import AdminCancelBookingButton from "@/components/hotel-admin/CancelBookingButton";
 import AssignRoomButton from "@/components/hotel-admin/AssignRoomButton";
 import GuestCountEditor from "@/components/hotel-admin/GuestCountEditor";
+import AddCompanionButton from "@/components/hotel-admin/AddCompanionButton";
 import { getCategoryMeta, CATEGORY_ROOMS } from "@/lib/utils/room-categories";
 import { isOtaPrepaid, otaSourceLabel } from "@/lib/ota/sources";
 
@@ -106,6 +107,14 @@ export default async function BookingDetailPage({
   const isOta = isOtaPrepaid(booking.source);
   // Hoisted once per request so the JSX doesn't call an impure clock during render.
   const nowMs = new Date().getTime();
+
+  // People the booking is for, minus the primary guest and everyone already
+  // registered — what raising the guest count leaves outstanding. Only actionable
+  // while the stay is open.
+  const stayOpen = booking.status !== "CANCELLED" && booking.status !== "CHECKED_OUT";
+  const unregisteredGuests = stayOpen
+    ? Math.max(0, booking.noOfPersons - (booking.companions.length + 1))
+    : 0;
 
   const ID_LABELS: Record<string, string> = {
     AADHAR: "Aadhar Card",
@@ -302,13 +311,20 @@ export default async function BookingDetailPage({
             </div>
           )}
 
-          {/* Companions */}
-          {booking.companions.length > 0 && (
+          {/* Companions. Also shown when nobody is registered yet but the
+              booking is for more than one — raising the guest count on a
+              checked-in stay is exactly that case. */}
+          {(booking.companions.length > 0 || unregisteredGuests > 0) && (
             <div className="bg-white/3 border border-white/8 rounded-2xl p-5">
               <h2 className="font-semibold text-white text-sm mb-4 flex items-center gap-2">
                 <Users className="w-4 h-4 text-white/30" />
                 Companions ({booking.companions.length})
               </h2>
+              {unregisteredGuests > 0 && (
+                <div className="mb-4">
+                  <AddCompanionButton bookingId={booking.id} pending={unregisteredGuests} />
+                </div>
+              )}
               <div className="space-y-3">
                 {booking.companions.map((c, i) => (
                   <div key={c.id} className="bg-white/3 rounded-xl p-3">
