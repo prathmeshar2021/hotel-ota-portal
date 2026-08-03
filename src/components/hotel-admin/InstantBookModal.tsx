@@ -57,6 +57,8 @@ export default function InstantBookModal({ roomId, roomNumber, basePrice, onClos
   const [guestId, setGuestId] = useState<string | null>(null);
   const [price, setPrice] = useState("");
   const [notes, setNotes] = useState("");
+  // Couples are the common case, so 2 unless the owner says otherwise.
+  const [guests, setGuests] = useState(2);
 
   const nights = Math.max(
     0,
@@ -100,6 +102,7 @@ export default function InstantBookModal({ roomId, roomNumber, basePrice, onClos
           guestId: guestId ?? undefined,
           guestName: guestName.trim() || undefined,
           guestPhone: guestPhone.trim() || undefined,
+          noOfPersons: guests,
           price: price.trim() ? Number(price) : undefined,
           notes: notes.trim() || undefined,
         }),
@@ -210,6 +213,21 @@ export default function InstantBookModal({ roomId, roomNumber, basePrice, onClos
               <input value={guestPhone} type="tel" inputMode="numeric"
                 onChange={e => { setGuestId(null); setGuestPhone(e.target.value.replace(/\D/g, "").slice(0, 10)); }}
                 placeholder="Skip if not asked" className={`${inputCls} pl-10`} />
+            </div>
+          </div>
+          <div>
+            <label className={labelCls}>Guests</label>
+            <div className="flex gap-1.5">
+              {[1, 2, 3, 4, 5, 6].map(n => (
+                <button type="button" key={n} onClick={() => setGuests(n)}
+                  className={`flex-1 h-10 rounded-lg text-xs font-bold border transition-all ${
+                    guests === n
+                      ? "bg-blue-500 text-white border-blue-400"
+                      : "bg-white/5 border-white/10 text-white/50 hover:text-white/80"
+                  }`}>
+                  {n}
+                </button>
+              ))}
             </div>
           </div>
           <div>

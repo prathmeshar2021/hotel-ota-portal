@@ -124,7 +124,8 @@ export async function POST(req: NextRequest) {
       checkInDate: checkIn,
       checkOutDate: checkOut,
       noOfNights,
-      noOfPersons: d.noOfPersons ?? 1,
+      // Most phone bookings are couples; the owner rarely gets asked.
+      noOfPersons: d.noOfPersons ?? 2,
       roomRent: "roomRent" in totals ? totals.roomRent : totals.taxableAmount,
       taxableAmount: totals.taxableAmount,
       cgst: totals.cgst,

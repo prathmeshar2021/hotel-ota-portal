@@ -93,7 +93,8 @@ export default function AssignRoomButton({
   }
 
   async function handleAssign() {
-    if (!selectedRoomId || selectedRoomId === currentRoomId) return;
+    if (!selectedRoomId) return;
+    if (selectedRoomId === currentRoomId && !priceTyped) return;
     setSaving(true);
     setError(null);
 
@@ -122,6 +123,10 @@ export default function AssignRoomButton({
 
   const isAssigning = !currentRoomId;
   const hasChanged = selectedRoomId && selectedRoomId !== currentRoomId;
+  // Re-pricing is worth doing on its own — a rate agreed after the room was
+  // already assigned shouldn't force staff to "move" the guest to apply it.
+  const priceTyped = newPrice.trim() !== "" && Number(newPrice) >= 0;
+  const canSubmit = Boolean(selectedRoomId) && (hasChanged || priceTyped);
 
   return (
     <>
@@ -282,7 +287,7 @@ export default function AssignRoomButton({
 
                   {/* Optional re-price — only worth showing once a different
                       room is picked, since that's when the rate might change. */}
-                  {rooms.length > 0 && hasChanged && (
+                  {rooms.length > 0 && selectedRoomId && (
                     <div className="mb-4">
                       <label className="block text-[11px] font-semibold text-white/45 uppercase tracking-wider mb-1.5">
                         New Price (₹) <span className="normal-case font-normal text-white/25">— optional, GST included</span>
@@ -314,12 +319,18 @@ export default function AssignRoomButton({
                   {rooms.length > 0 && (
                     <button
                       onClick={handleAssign}
-                      disabled={!hasChanged || saving || !!success}
+                      disabled={!canSubmit || saving || !!success}
                       className="w-full py-3 rounded-xl font-bold text-sm text-black flex items-center justify-center gap-2 transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
                       style={{ background: accentColor }}
                     >
                       {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-                      {saving ? "Assigning…" : "Confirm Assignment"}
+                      {saving
+                        ? "Saving…"
+                        : hasChanged && priceTyped
+                          ? "Move Room & Re-price"
+                          : hasChanged
+                            ? "Confirm Room Change"
+                            : "Update Price"}
                     </button>
                   )}
                 </>

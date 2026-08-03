@@ -39,6 +39,7 @@ import AddChargeModal from "@/components/hotel-admin/AddChargeModal";
 import DeleteChargeButton from "@/components/hotel-admin/DeleteChargeButton";
 import AdminCancelBookingButton from "@/components/hotel-admin/CancelBookingButton";
 import AssignRoomButton from "@/components/hotel-admin/AssignRoomButton";
+import GuestCountEditor from "@/components/hotel-admin/GuestCountEditor";
 import { getCategoryMeta, CATEGORY_ROOMS } from "@/lib/utils/room-categories";
 import { isOtaPrepaid, otaSourceLabel } from "@/lib/ota/sources";
 
@@ -452,7 +453,11 @@ export default async function BookingDetailPage({
               </div>
               <div className="flex items-center gap-2.5 text-white/55">
                 <Users className="w-3.5 h-3.5" style={{ color: accent }} />
-                <span>{booking.noOfPersons} guest{booking.noOfPersons > 1 ? "s" : ""}</span>
+                <GuestCountEditor
+                  bookingId={booking.id}
+                  noOfPersons={booking.noOfPersons}
+                  editable={booking.status !== "CANCELLED" && booking.status !== "CHECKED_OUT"}
+                />
               </div>
             </div>
 
