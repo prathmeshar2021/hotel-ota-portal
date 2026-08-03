@@ -41,6 +41,7 @@ import AdminCancelBookingButton from "@/components/hotel-admin/CancelBookingButt
 import AssignRoomButton from "@/components/hotel-admin/AssignRoomButton";
 import GuestCountEditor from "@/components/hotel-admin/GuestCountEditor";
 import AddCompanionButton from "@/components/hotel-admin/AddCompanionButton";
+import IdPhotos from "@/components/hotel-admin/IdPhotos";
 import { getCategoryMeta, CATEGORY_ROOMS } from "@/lib/utils/room-categories";
 import { isOtaPrepaid, otaSourceLabel } from "@/lib/ota/sources";
 
@@ -252,33 +253,12 @@ export default async function BookingDetailPage({
               )}
             </div>
 
-            {/* ID images */}
-            {(booking.primaryGuest.idFrontUrl || booking.primaryGuest.idBackUrl) && (
-              <div className="flex gap-3 mt-4">
-                {booking.primaryGuest.idFrontUrl && (
-                  <a
-                    href={booking.primaryGuest.idFrontUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="relative flex-1 max-w-[140px] h-24 rounded-xl overflow-hidden border border-white/10 hover:border-white/25 transition-colors"
-                  >
-                    <img src={booking.primaryGuest.idFrontUrl} alt="ID Front" className="w-full h-full object-cover" />
-                    <div className="absolute bottom-0 inset-x-0 bg-black/60 text-[10px] text-white/70 text-center py-1">Front</div>
-                  </a>
-                )}
-                {booking.primaryGuest.idBackUrl && (
-                  <a
-                    href={booking.primaryGuest.idBackUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="relative flex-1 max-w-[140px] h-24 rounded-xl overflow-hidden border border-white/10 hover:border-white/25 transition-colors"
-                  >
-                    <img src={booking.primaryGuest.idBackUrl} alt="ID Back" className="w-full h-full object-cover" />
-                    <div className="absolute bottom-0 inset-x-0 bg-black/60 text-[10px] text-white/70 text-center py-1">Back</div>
-                  </a>
-                )}
-              </div>
-            )}
+            {/* ID images — click to read the whole document */}
+            <IdPhotos
+              frontUrl={booking.primaryGuest.idFrontUrl}
+              backUrl={booking.primaryGuest.idBackUrl}
+              who={booking.primaryGuest.name}
+            />
           </div>
 
           {/* Online Check-in info */}
@@ -326,13 +306,25 @@ export default async function BookingDetailPage({
                 </div>
               )}
               <div className="space-y-3">
-                {booking.companions.map((c, i) => (
+                {booking.companions.map((c) => (
                   <div key={c.id} className="bg-white/3 rounded-xl p-3">
                     <p className="text-white/70 text-sm font-medium">{c.name}</p>
                     <p className="text-white/35 text-xs mt-0.5">
                       {c.relation && `${c.relation} · `}
                       {c.idType && `${ID_LABELS[c.idType as string] ?? c.idType}: ${c.idNumber ?? "—"}`}
                     </p>
+                    {(c.guest?.phone || c.guest?.email) && (
+                      <p className="text-white/25 text-[11px] mt-0.5">
+                        {[c.guest?.phone ? `+91 ${c.guest.phone}` : null, c.guest?.email].filter(Boolean).join(" · ")}
+                      </p>
+                    )}
+                    {/* Companion ID was captured at check-in but never shown here */}
+                    <IdPhotos
+                      frontUrl={c.idFrontUrl}
+                      backUrl={c.idBackUrl}
+                      who={c.name}
+                      compact
+                    />
                   </div>
                 ))}
               </div>

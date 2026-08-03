@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import EditGuestModal from "@/components/hotel-admin/EditGuestModal";
+import IdPhotos from "@/components/hotel-admin/IdPhotos";
 import { getCategoryMeta } from "@/lib/utils/room-categories";
 
 export const metadata = { title: "Guest Profile – Front Desk" };
@@ -219,33 +220,15 @@ export default async function GuestDetailPage({ params }: { params: Promise<Para
                 </div>
               )}
 
-              {/* ID Photos */}
+              {/* ID Photos — click to read the whole document */}
               {(guest.idFrontUrl || guest.idBackUrl) && (
                 <div className="pt-2 border-t border-white/8">
                   <p className="text-white/30 text-xs mb-2">ID Photos</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {[
-                      { url: guest.idFrontUrl, label: "Front" },
-                      { url: guest.idBackUrl,  label: "Back"  },
-                    ].map(({ url, label }) =>
-                      url ? (
-                        <a key={label} href={url} target="_blank" rel="noreferrer">
-                          <div className="relative h-24 rounded-xl overflow-hidden border border-white/10 hover:border-white/25 transition-all">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={url} alt={`ID ${label}`} className="w-full h-full object-cover" />
-                            <div className="absolute bottom-0 left-0 right-0 text-center text-[10px] text-white/60 bg-black/50 py-0.5">
-                              {label}
-                            </div>
-                          </div>
-                        </a>
-                      ) : (
-                        <div key={label}
-                          className="h-24 rounded-xl border border-dashed border-white/8 flex items-center justify-center text-white/15 text-xs">
-                          {label} not uploaded
-                        </div>
-                      )
-                    )}
-                  </div>
+                  <IdPhotos
+                    frontUrl={guest.idFrontUrl}
+                    backUrl={guest.idBackUrl}
+                    who={guest.name}
+                  />
                 </div>
               )}
             </div>
