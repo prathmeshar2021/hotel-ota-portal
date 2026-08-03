@@ -25,6 +25,9 @@ export const PARTIAL_PAYMENT_AMOUNT = 500; // advance paid upfront for PAY_PARTI
  * booking (refundableDeposit = expected, depositCollected = actual), then netted
  * against the balance at checkout. So `totalAmount = roomRent − coupon + GST`.
  *
+ * The GST slab is decided by the per-night value after any discount, since GST
+ * follows what the guest is actually charged.
+ *
  * Guests always pay a **whole rupee**: room tariffs are set as the pre-tax value
  * behind a round sticker price (₹1,333.33 × 1.05 = ₹1,400), so we round the
  * gross and take the tax as the remainder (gross − taxable) rather than
@@ -39,9 +42,14 @@ export function computeTotals(params: {
 }) {
   const { roomRentPerNight, noOfNights, couponDiscount = 0 } = params;
   const roomRent = roomRentPerNight * noOfNights;
-  const { cgstRate, sgstRate } = calculateGST(roomRentPerNight);
-  const rate = cgstRate + sgstRate;
   const taxableRaw = Math.max(0, roomRent - couponDiscount);
+
+  // The slab follows the value actually being taxed, not the list price — GST
+  // is charged on the transaction value, so a coupon that brings a room under
+  // ₹1,000 a night moves it into the exempt band rather than staying at 5%.
+  const perNightTaxable = taxableRaw / Math.max(1, noOfNights);
+  const { cgstRate, sgstRate } = calculateGST(perNightTaxable);
+  const rate = cgstRate + sgstRate;
 
   // Tax-exempt slab: nothing to split, so the taxable value *is* the bill.
   if (rate === 0) {
