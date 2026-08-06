@@ -379,6 +379,15 @@ export default async function BookingDetailPage({
                           <p className="text-white/70 text-sm font-medium truncate">{displayLabel}</p>
                           <p className="text-white/30 text-xs mt-0.5">
                             {charge.quantity} × ₹{charge.unitPrice.toLocaleString("en-IN")}
+                            {" · "}
+                            {/* Whether this one still has to come off the deposit */}
+                            {charge.paidNow ? (
+                              <span className="text-green-400/70">
+                                paid {charge.mode === "ONLINE" ? "UPI" : "cash"}
+                              </span>
+                            ) : (
+                              <span className="text-amber-400/70">from deposit</span>
+                            )}
                           </p>
                         </div>
                         <p className="text-amber-300 font-semibold text-sm shrink-0">
@@ -551,14 +560,34 @@ export default async function BookingDetailPage({
                   <span>₹{booking.additionalCharges.toLocaleString("en-IN")}</span>
                 </div>
               )}
-              {booking.refundableDeposit > 0 && (
-                <div className="flex justify-between text-green-400/70 text-xs pt-0.5">
-                  <span className="flex items-center gap-1">
-                    <ShieldCheck className="w-3 h-3" /> Deposit {booking.depositCollected > 0 ? "held" : "(at check-in)"}
-                  </span>
-                  <span>₹{(booking.depositCollected > 0 ? booking.depositCollected : booking.refundableDeposit).toLocaleString("en-IN")}</span>
+              {/* Deposit — stated plainly, because staff need to know at a
+                  glance how much of the guest's money is being held. */}
+              {booking.depositCollected > 0 ? (
+                <div className="mt-2 rounded-xl border border-green-500/25 bg-green-500/8 px-3 py-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="flex items-center gap-1.5 text-green-300 text-xs font-bold">
+                      <ShieldCheck className="w-3.5 h-3.5" /> Deposit held
+                    </span>
+                    <span className="text-green-300 font-bold text-sm">
+                      ₹{booking.depositCollected.toLocaleString("en-IN")}
+                    </span>
+                  </div>
+                  <p className="text-green-400/50 text-[10px] mt-1">
+                    Taken {booking.depositMode === "ONLINE" ? "online / UPI" : "in cash"}
+                    {booking.depositPaymentId ? " · refundable to source" : ""}
+                    {booking.status === "CHECKED_OUT" ? " · settled at checkout" : " · returned at checkout, less any charges"}
+                  </p>
                 </div>
-              )}
+              ) : booking.refundableDeposit > 0 && booking.status !== "CHECKED_OUT" && booking.status !== "CANCELLED" ? (
+                <div className="mt-2 flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/3 px-3 py-2">
+                  <span className="flex items-center gap-1.5 text-white/45 text-xs">
+                    <ShieldCheck className="w-3.5 h-3.5" /> No deposit collected yet
+                  </span>
+                  <span className="text-white/35 text-[11px]">
+                    ₹{booking.refundableDeposit.toLocaleString("en-IN")} expected
+                  </span>
+                </div>
+              ) : null}
               {isOta && (
                 <div className="mt-2 flex items-center justify-between gap-2 rounded-xl border border-red-500/20 bg-red-500/8 px-3 py-2">
                   <span className="flex items-center gap-1.5 text-red-300 text-xs font-semibold">

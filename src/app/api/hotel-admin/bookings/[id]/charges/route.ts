@@ -12,6 +12,10 @@ const AddChargeSchema = z.object({
   description: z.string().optional(),
   quantity: z.number().positive("Quantity must be > 0").default(1),
   unitPrice: z.number().positive("Unit price must be > 0"),
+  // How the guest is settling it. DEPOSIT leaves it on the tab to be offset
+  // against the refundable deposit at checkout (the usual case); CASH/ONLINE
+  // mean they paid at the counter there and then.
+  settlement: z.enum(["DEPOSIT", "CASH", "ONLINE"]).default("DEPOSIT"),
 });
 
 interface Params { id: string }
@@ -48,8 +52,9 @@ export async function POST(
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { chargeType, description, quantity, unitPrice } = parsed.data;
+  const { chargeType, description, quantity, unitPrice, settlement } = parsed.data;
   const amount = Math.round(quantity * unitPrice * 100) / 100; // round to 2 dp
+  const paidNow = settlement !== "DEPOSIT";
 
   // Create the charge and update booking totals in a transaction
   const [charge] = await prisma.$transaction([
@@ -61,19 +66,30 @@ export async function POST(
         quantity,
         unitPrice,
         amount,
-        mode: "CASH", // default — collected via CollectPaymentModal at checkout
+        mode: paidNow && settlement === "ONLINE" ? "ONLINE" : "CASH",
+        paidNow,
       },
     }),
-    // Extra charges accrue into additionalCharges. They are NOT room revenue
-    // (kept out of totalAmount/balanceDue) — at checkout they are offset by the
-    // refundable deposit and only any excess is collected.
-    prisma.booking.update({
-      where: { id },
-      data: {
-        additionalCharges: { increment: amount },
-      },
-    }),
+    // Only an unpaid charge accrues into additionalCharges. That figure is what
+    // checkout offsets against the deposit, so anything already paid for must
+    // stay out of it or the guest would be charged for it twice.
+    ...(paidNow
+      ? []
+      : [
+          prisma.booking.update({
+            where: { id },
+            data: { additionalCharges: { increment: amount } },
+          }),
+        ]),
   ]);
 
-  return NextResponse.json(charge, { status: 201 });
+  return NextResponse.json(
+    {
+      ...charge,
+      message: paidNow
+        ? `₹${amount} collected in ${settlement === "ONLINE" ? "UPI" : "cash"}`
+        : `₹${amount} added — will come off the deposit at checkout`,
+    },
+    { status: 201 }
+  );
 }

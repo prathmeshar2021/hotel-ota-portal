@@ -528,6 +528,10 @@ model AdditionalCharge {
   unitPrice   Float
   amount      Float
   mode        PaymentMode @default(CASH)
+  // true  = guest paid for it there and then (mode says cash/UPI), so it never
+  //         touches the deposit.
+  // false = left on the tab, offset against the refundable deposit at checkout.
+  paidNow     Boolean     @default(false)
   addedAt     DateTime    @default(now())
   addedBy     String?
 

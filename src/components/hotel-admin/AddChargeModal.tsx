@@ -31,6 +31,9 @@ export default function AddChargeModal({ bookingId, disabled }: Props) {
   const [description, setDescription] = useState("");
   const [quantity, setQuantity] = useState("1");
   const [unitPrice, setUnitPrice] = useState("");
+  // Most extras go on the tab and come off the deposit at checkout, so that's
+  // the default; a guest who pays at the counter is the exception.
+  const [settlement, setSettlement] = useState<"DEPOSIT" | "CASH" | "ONLINE">("DEPOSIT");
 
   const qty = parseFloat(quantity) || 0;
   const price = parseFloat(unitPrice) || 0;
@@ -62,6 +65,7 @@ export default function AddChargeModal({ bookingId, disabled }: Props) {
           description: description.trim() || undefined,
           quantity: qty,
           unitPrice: price,
+          settlement,
         }),
       });
       const data = await res.json();
@@ -69,7 +73,7 @@ export default function AddChargeModal({ bookingId, disabled }: Props) {
         toast.error(data.error ?? "Failed to add charge");
         return;
       }
-      toast.success(`${CHARGE_TYPES.find(t => t.value === chargeType)?.label ?? "Charge"} — ₹${total.toLocaleString("en-IN")} added to bill`);
+      toast.success(data.message ?? `₹${total.toLocaleString("en-IN")} added`);
       setOpen(false);
       router.refresh();
     } finally {
@@ -202,10 +206,37 @@ export default function AddChargeModal({ bookingId, disabled }: Props) {
                 </div>
               </div>
 
-              {/* Info note */}
-              <p className="text-xs text-white/25 bg-white/3 rounded-xl px-4 py-2.5 leading-relaxed">
-                This charge will be added to the guest&apos;s bill. Collect the outstanding balance at checkout using the <strong className="text-white/40">Collect Payment</strong> button.
-              </p>
+              {/* How it's being settled */}
+              <div>
+                <p className="text-[10px] text-white/30 uppercase tracking-wider font-semibold mb-2">
+                  How is the guest paying?
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  {([
+                    { key: "DEPOSIT", label: "From deposit" },
+                    { key: "CASH",    label: "Cash now" },
+                    { key: "ONLINE",  label: "UPI now" },
+                  ] as const).map(o => (
+                    <button
+                      key={o.key}
+                      type="button"
+                      onClick={() => setSettlement(o.key)}
+                      className={`py-2.5 rounded-xl text-xs font-bold border transition-all ${
+                        settlement === o.key
+                          ? "bg-amber-500/20 border-amber-500/40 text-amber-300"
+                          : "bg-white/3 border-white/10 text-white/40 hover:text-white/70"
+                      }`}
+                    >
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-white/25 bg-white/3 rounded-xl px-4 py-2.5 leading-relaxed mt-2">
+                  {settlement === "DEPOSIT"
+                    ? "Goes on the guest's tab and is taken off the refundable deposit at checkout."
+                    : `Collected at the counter now — it won't touch the deposit or the room bill.`}
+                </p>
+              </div>
 
               {/* Actions */}
               <div className="flex gap-3">
