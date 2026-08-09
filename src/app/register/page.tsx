@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import { ShieldCheck } from "lucide-react";
 import GuestRegisterForm from "@/components/customer/GuestRegisterForm";
+import HouseRules from "@/components/customer/HouseRules";
 import { BUSINESS } from "@/lib/constants/business";
+import { prisma } from "@/lib/db/prisma";
+import { REFUNDABLE_DEPOSIT } from "@/lib/utils/booking-calc";
 
 // Reception-desk utility form — not a page we want in search results.
 export const metadata: Metadata = {
@@ -10,7 +13,13 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default function GuestRegisterPage() {
+export default async function GuestRegisterPage() {
+  // Quote the hotel's real times rather than hard-coding them here, so the rules
+  // can never drift from what the booking flow enforces.
+  const hotel = await prisma.hotel.findFirst({
+    where: { isActive: true },
+    select: { checkInTime: true, checkOutTime: true },
+  });
   return (
     <div className="min-h-screen bg-[#071209]">
       <div className="max-w-2xl mx-auto px-4 pt-12 pb-16">
@@ -28,6 +37,12 @@ export default function GuestRegisterPage() {
             too. Reception will then check you in without any queue or re-typing.
           </p>
         </div>
+
+        <HouseRules
+          checkInTime={hotel?.checkInTime ?? "12:00 PM"}
+          checkOutTime={hotel?.checkOutTime ?? "10:00 AM"}
+          depositAmount={REFUNDABLE_DEPOSIT}
+        />
 
         <GuestRegisterForm />
       </div>

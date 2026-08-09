@@ -91,6 +91,9 @@ export default function GuestRegisterForm() {
   const [done, setDone] = useState<string[] | null>(null);   // registered guest names
 
   const [guests, setGuests] = useState<GuestEntry[]>([blankGuest()]);
+  // Explicit acknowledgement of the rules above — chiefly the 20+ age rule for
+  // couples, which is what gets people turned away at the desk.
+  const [acceptedRules, setAcceptedRules] = useState(false);
   // Per-guest upload spinners: { [idx]: { front, back } }
   const [uploading, setUploading] = useState<Record<number, { front: boolean; back: boolean }>>({});
 
@@ -137,6 +140,7 @@ export default function GuestRegisterForm() {
   function resetForm() {
     setGuests([blankGuest()]);
     setUploading({});
+    setAcceptedRules(false);
     setDone(null);
   }
 
@@ -154,6 +158,10 @@ export default function GuestRegisterForm() {
       if (g.idNumber.trim().length < 3) { toast.error(`${who}: please enter the ID number`); return; }
       if (!g.idFrontUrl) { toast.error(`${who}: please upload the ID front`); return; }
       if (!g.idBackUrl)  { toast.error(`${who}: please upload the ID back`); return; }
+    }
+    if (!acceptedRules) {
+      toast.error("Please accept the rules and regulations to continue");
+      return;
     }
     // All phones must be different
     const phones = guests.map(g => g.phone.replace(/\D/g, ""));
@@ -314,8 +322,23 @@ export default function GuestRegisterForm() {
         <Plus className="w-4 h-4" /> Add another guest
       </button>
 
+      {/* Rules acknowledgement */}
+      <label className="flex items-start gap-3 bg-white/3 border border-white/10 rounded-2xl px-4 py-3.5 cursor-pointer hover:border-white/20 transition-colors">
+        <input
+          type="checkbox"
+          checked={acceptedRules}
+          onChange={e => setAcceptedRules(e.target.checked)}
+          className="accent-amber-500 w-4 h-4 mt-0.5 shrink-0"
+        />
+        <span className="text-[12.5px] text-white/60 leading-relaxed">
+          I have read and accept the rules and regulations above, and confirm that
+          everyone in my party meets them — including the{" "}
+          <span className="text-amber-300/90 font-semibold">20+ age requirement for couples</span>.
+        </span>
+      </label>
+
       {/* Submit */}
-      <button type="submit" disabled={loading || anyUploading}
+      <button type="submit" disabled={loading || anyUploading || !acceptedRules}
         className="w-full flex items-center justify-center gap-2 font-bold py-4 rounded-2xl text-base transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60 disabled:hover:scale-100 bg-amber-500 text-black shadow-xl shadow-amber-500/20">
         {loading
           ? <><Loader2 className="w-5 h-5 animate-spin" /> Registering…</>
