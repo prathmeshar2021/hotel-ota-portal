@@ -4,7 +4,6 @@ import GuestRegisterForm from "@/components/customer/GuestRegisterForm";
 import HouseRules from "@/components/customer/HouseRules";
 import { BUSINESS } from "@/lib/constants/business";
 import { prisma } from "@/lib/db/prisma";
-import { REFUNDABLE_DEPOSIT } from "@/lib/utils/booking-calc";
 
 // Reception-desk utility form — not a page we want in search results.
 export const metadata: Metadata = {
@@ -41,7 +40,6 @@ export default async function GuestRegisterPage() {
         <HouseRules
           checkInTime={hotel?.checkInTime ?? "12:00 PM"}
           checkOutTime={hotel?.checkOutTime ?? "10:00 AM"}
-          depositAmount={REFUNDABLE_DEPOSIT}
         />
 
         <GuestRegisterForm />

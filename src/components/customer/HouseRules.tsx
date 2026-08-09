@@ -9,13 +9,11 @@ import { houseRules } from "@/lib/constants/house-rules";
 export default function HouseRules({
   checkInTime,
   checkOutTime,
-  depositAmount,
 }: {
   checkInTime: string;
   checkOutTime: string;
-  depositAmount: number;
 }) {
-  const rules = houseRules({ checkInTime, checkOutTime, depositAmount });
+  const rules = houseRules({ checkInTime, checkOutTime });
   const headline = rules.filter(r => r.emphasis);
   const rest = rules.filter(r => !r.emphasis);
 

@@ -32,7 +32,6 @@ export function prettyTime(value: string): string {
 export function houseRules(opts: {
   checkInTime: string;
   checkOutTime: string;
-  depositAmount: number;
 }): HouseRule[] {
   return [
     {
@@ -52,9 +51,11 @@ export function houseRules(opts: {
         "Early check-in and late check-out are subject to availability, and late check-out may attract an additional charge.",
     },
     {
-      title: `Refundable deposit of ₹${opts.depositAmount}`,
+      // No figure quoted — the deposit varies by booking, and a number printed
+      // here would become the one the guest argues from at the desk.
+      title: "A refundable security deposit is collected at check-in",
       detail:
-        "Collected at check-in and returned at check-out, less any charges for damage or extras used during the stay.",
+        "The amount is confirmed at check-in and returned at check-out, less any charges for damage or extras used during the stay.",
     },
     {
       title: "Pets are not allowed",
