@@ -96,6 +96,8 @@ export const RESORT = {
     cancellation:
       "Free cancellation up to 24 hours before check-in. Late cancellations may be charged for 1 night stay.",
     pets: "Pets are not allowed at the property.",
+    nightCurfew:
+      "For security, entry to and exit from the property is restricted between 11:00 PM and 6:00 AM. Please plan your arrival and departure outside these hours.",
     extraBed: "Extra bed available on request — charges apply. Please contact us in advance.",
     idProof:
       "Government-issued photo ID mandatory at check-in (Aadhaar, PAN, Passport, or Driving License).",
@@ -130,6 +132,7 @@ ${RESORT.amenities.join(", ")}
 ## Key Policies
 - Cancellation: ${RESORT.policies.cancellation}
 - Pets: ${RESORT.policies.pets}
+- Night entry/exit: ${RESORT.policies.nightCurfew}
 - ID Proof: ${RESORT.policies.idProof}
 - GST: ${RESORT.policies.gst}
 

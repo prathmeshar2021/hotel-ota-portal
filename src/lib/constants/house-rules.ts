@@ -41,9 +41,9 @@ export function houseRules(opts: {
       emphasis: true,
     },
     {
-      title: "Entry or Exit Restricted between 11:00 am to 6:00 am due to security concerns.",
+      title: "No entry or exit between 11:00 PM and 6:00 AM",
       detail:
-        " ",
+        "The property is closed to movement overnight for security reasons. Please plan your arrival and departure outside these hours.",
     },
     {
       title: "Photo ID is mandatory for every guest",

@@ -48,6 +48,7 @@ export default function TermsPage() {
             `Standard check-in is from ${BUSINESS.checkInTime} and check-out by ${BUSINESS.checkOutTime}. Early check-in / late check-out is subject to availability.`,
             "A valid government-issued photo ID is mandatory for every guest at check-in, as required by law.",
             "Guests must be 18 years or older to make a booking and check in.",
+            "Entry to and exit from the property is restricted between 11:00 PM and 6:00 AM for security reasons. Please plan arrivals and departures accordingly.",
             "The number of guests must not exceed the booked room's capacity.",
           ]}
         />
