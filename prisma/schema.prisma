@@ -344,6 +344,12 @@ model Booking {
   source         BookingSource @default(PORTAL)
   status         BookingStatus @default(PENDING_PAYMENT)
 
+  // Explicit inventory-hold expiry for PENDING_PAYMENT bookings that need a longer
+  // or custom window than the default 15-min createdAt one — e.g. phone bookings
+  // awaiting payment via a WhatsApp link. null → the default window applies
+  // (website checkout). Consumed by inventoryHoldFilter().
+  holdExpiresAt  DateTime?
+
   checkInDate  DateTime
   checkOutDate DateTime
   noOfNights   Int
@@ -502,6 +508,7 @@ model Payment {
   bookingId         String      @unique
   razorpayOrderId   String?     @unique
   razorpayPaymentId String?     @unique
+  razorpayLinkId    String?     // Razorpay Payment Link id (phone bookings paid via WhatsApp link)
   amount            Float
   currency          String      @default("INR")
   mode              PaymentMode

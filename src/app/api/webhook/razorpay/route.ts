@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db/prisma";
 import { verifyWebhookSignature } from "@/lib/services/razorpay";
 import { confirmPaidBooking } from "@/lib/services/booking-confirm";
 import { DEPOSIT_REF_PREFIX } from "@/lib/utils/booking-calc";
+import { confirmPhonePaymentLink } from "@/lib/services/phone-booking";
 
 /**
  * Razorpay webhook — the server-side safety net for payment confirmation.
@@ -58,6 +59,16 @@ export async function POST(req: NextRequest) {
           },
         });
       }
+      return NextResponse.json({ received: true });
+    }
+
+    // WIP: phone bookings paid via a link — confirms the stay itself.
+    if (reference) {
+      await confirmPhonePaymentLink({
+        bookingRef: reference,
+        razorpayPaymentId: payEntity?.id,
+        capturedPaise: payEntity?.amount,
+      });
       return NextResponse.json({ received: true });
     }
   }

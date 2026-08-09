@@ -9,6 +9,14 @@ import type { RoomType, Prisma } from "@prisma/client";
  */
 export const PAYMENT_HOLD_MINUTES = 15;
 
+/**
+ * How long a phone booking holds inventory while the guest pays via the WhatsApp
+ * payment link. Longer than the website window because the guest has to leave the
+ * call, open WhatsApp, and complete payment. The Razorpay link is set to expire at
+ * the same instant, so a guest can never pay for an already-released room.
+ */
+export const PHONE_HOLD_MINUTES = 30;
+
 /** PENDING_PAYMENT bookings created before this no longer occupy inventory. */
 export function paymentHoldCutoff(): Date {
   return new Date(Date.now() - PAYMENT_HOLD_MINUTES * 60_000);
@@ -30,7 +38,16 @@ export function inventoryHoldFilter(): Prisma.BookingWhereInput {
   return {
     OR: [
       { status: { in: ["CONFIRMED", "CHECKED_IN"] } },
-      { status: "PENDING_PAYMENT", createdAt: { gte: paymentHoldCutoff() } },
+      // Explicit-expiry holds (e.g. phone bookings) occupy inventory until their
+      // holdExpiresAt passes.
+      { status: "PENDING_PAYMENT", holdExpiresAt: { gte: new Date() } },
+      // Default holds (website checkout, no explicit expiry) use the 15-min
+      // createdAt window.
+      {
+        status: "PENDING_PAYMENT",
+        holdExpiresAt: null,
+        createdAt: { gte: paymentHoldCutoff() },
+      },
     ],
   };
 }

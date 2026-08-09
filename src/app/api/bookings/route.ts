@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import { auth } from "@/lib/auth/auth";
-import { generateBookingRef, computeTotals, getUniversalDiscount, resolveBookingDiscount } from "@/lib/utils/booking";
+import { generateBookingRef } from "@/lib/utils/booking";
 import { REFUNDABLE_DEPOSIT, PARTIAL_PAYMENT_AMOUNT } from "@/lib/utils/booking-calc";
+import { quoteBooking } from "@/lib/services/quote";
 import { createOrder } from "@/lib/services/razorpay";
 import { enforceRateLimit } from "@/lib/ratelimit";
 import { gupshup } from "@/lib/services/gupshup";
@@ -125,68 +126,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Resolve category price for the check-in date — honours any date-wise
-  // override set by the super admin, else falls back to the base price.
-  const { resolveCategoryPrice } = await import("@/lib/utils/pricing");
-  const pricePerNight = await resolveCategoryPrice(
-    data.hotelId,
-    data.roomCategory as never,
-    checkIn
-  );
-
-  // Resolve discounts: the always-on hotel-wide marketing discount + an optional
-  // guest coupon (which either stacks on top of, or replaces, the universal one).
-  const roomRentBeforeDiscount = pricePerNight * noOfNights;
-  const universal = await getUniversalDiscount(data.hotelId);
-
-  let guestCoupon: {
-    id: string;
-    discountType: string;
-    discountValue: number;
-    maxDiscount: number | null;
-    minAmount: number;
-    stacksOnUniversal: boolean;
-  } | null = null;
-
-  if (data.couponCode) {
-    const coupon = await prisma.coupon.findFirst({
-      where: {
-        code: data.couponCode.toUpperCase(),
-        isActive: true,
-        isUniversal: false,
-        AND: [
-          { OR: [{ hotelId: data.hotelId }, { hotelId: null }] },
-          { OR: [{ expiryDate: null }, { expiryDate: { gte: new Date() } }] },
-        ],
-      },
-    });
-    if (coupon) {
-      guestCoupon = {
-        id: coupon.id,
-        discountType: coupon.discountType,
-        discountValue: coupon.discountValue,
-        maxDiscount: coupon.maxDiscount,
-        minAmount: coupon.minAmount,
-        stacksOnUniversal: coupon.stacksOnUniversal,
-      };
-    }
-  }
-
-  const breakdown = resolveBookingDiscount({
-    roomRent: roomRentBeforeDiscount,
-    universal,
-    coupon: guestCoupon,
-  });
-  const couponDiscount = breakdown.totalDiscount;
-  // Link the guest coupon when one was used; otherwise link the universal discount
-  // so the saving is still traceable on the booking record.
-  const couponId: string | undefined =
-    guestCoupon?.id ?? (breakdown.universalDiscount > 0 ? universal?.id : undefined);
-
-  const totals = computeTotals({
-    roomRentPerNight: pricePerNight,
-    noOfNights,
-    couponDiscount,
+  // Price + discounts + GST totals. Shared with the AI phone-assistant quote
+  // endpoint (see services/quote.ts) so a price quoted on a call can never diverge
+  // from the price the booking is actually created at.
+  const { couponDiscount, couponId, totals } = await quoteBooking({
+    hotelId: data.hotelId,
+    roomCategory: data.roomCategory,
+    checkIn,
+    checkOut,
+    couponCode: data.couponCode,
   });
 
   const bookingRef = await generateBookingRef();

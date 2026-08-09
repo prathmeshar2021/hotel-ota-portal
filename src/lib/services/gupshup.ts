@@ -185,23 +185,46 @@ export const gupshup = {
     });
   },
 
+  // Payment link for a phone booking. Template param order (when
+  // GUPSHUP_TEMPLATE_PAYMENT_LINK is set): {{1}} guest name, {{2}} hotel name,
+  // {{3}} booking ref, {{4}} amount, {{5}} stay dates, {{6}} payment URL.
+  sendPaymentLink: (phone: string, data: {
+    guestName: string;
+    hotelName: string;
+    bookingRef: string;
+    amount: number;
+    checkIn: string;
+    checkOut: string;
+    paymentUrl: string;
+    holdMinutes?: number;
+  }) => {
+    if (process.env.GUPSHUP_TEMPLATE_PAYMENT_LINK) {
+      return sendTemplate(phone, process.env.GUPSHUP_TEMPLATE_PAYMENT_LINK, [
+        data.guestName,
+        data.hotelName,
+        data.bookingRef,
+        `₹${data.amount.toLocaleString("en-IN")}`,
+        `${data.checkIn} to ${data.checkOut}`,
+        data.paymentUrl,
+      ]);
+    }
+    // Fallback: session message (only works within 24h opt-in window)
+    return send({
+      to: phone,
+      message:
+        `🏨 *${data.hotelName}*\n\n` +
+        `Dear ${data.guestName}, please complete your payment to confirm your booking.\n\n` +
+        `📋 *Booking Ref:* ${data.bookingRef}\n` +
+        `📅 *Stay:* ${data.checkIn} → ${data.checkOut}\n` +
+        `💰 *Amount:* ₹${data.amount.toLocaleString("en-IN")}\n\n` +
+        `👉 Pay securely here:\n${data.paymentUrl}\n\n` +
+        `This link is valid for ${data.holdMinutes ?? 30} minutes and your room is held until then. 🙏`,
+    });
+  },
+
   // Refundable security deposit link. Reuses the payment-link template when one
   // is configured ({{1}} guest, {{2}} hotel, {{3}} ref, {{4}} amount, {{5}} dates,
   // {{6}} URL); otherwise falls back to a session message.
-  // Refundable security deposit link.
-  //
-  // Needs its OWN approved template: the phone-booking payment-link template has
-  // a stay-dates parameter that a deposit has nothing sensible to put in, so
-  // reusing it would send a garbled message. Params for
-  // GUPSHUP_TEMPLATE_DEPOSIT_LINK: {{1}} guest, {{2}} hotel, {{3}} booking ref,
-  // {{4}} amount, {{5}} payment URL.
-  //
-  // Wording deliberately avoids promising a full refund — staff can withhold
-  // part of the deposit at checkout for damage or extra charges.
-  //
-  // With no template configured this falls back to a session message, which
-  // only reaches guests who have messaged the hotel in the last 24h — so the
-  // caller reports delivery failures rather than assuming it landed.
   sendDepositLink: (phone: string, data: {
     guestName: string;
     hotelName: string;
@@ -209,22 +232,21 @@ export const gupshup = {
     amount: number;
     paymentUrl: string;
   }) => {
-    const amount = `\u20b9${data.amount.toLocaleString("en-IN")}`;
     if (process.env.GUPSHUP_TEMPLATE_DEPOSIT_LINK) {
       return sendTemplate(phone, process.env.GUPSHUP_TEMPLATE_DEPOSIT_LINK, [
         data.guestName,
         data.hotelName,
         data.bookingRef,
-        amount,
+        `₹${data.amount.toLocaleString("en-IN")}`,
         data.paymentUrl,
       ]);
     }
     return send({
       to: phone,
       message:
-        `\ud83c\udfe8 *${data.hotelName}*\n\n` +
+        `🏨 *${data.hotelName}*\n\n` +
         `Hi ${data.guestName}, please pay the refundable security deposit of ` +
-        `*${amount}* for booking *${data.bookingRef}*:\n\n` +
+        `*₹${data.amount.toLocaleString("en-IN")}* for booking *${data.bookingRef}*:\n\n` +
         `${data.paymentUrl}\n\n` +
         `The deposit is returned to the same account at check-out, after any\n` +
         `deduction for extra charges or damage.`,
@@ -286,6 +308,13 @@ export const gupshup = {
         `💰 ₹${data.totalAmount.toLocaleString("en-IN")} · ${payLabel}` +
         (data.source && OTA_SOURCES.includes(data.source) ? `\n📡 via ${data.source}` : ""),
     });
+  },
+
+  /** Free-form alert to the owner's WhatsApp (best-effort; needs 24h opt-in window). */
+  sendOwnerText: (message: string) => {
+    const ownerPhone = process.env.OWNER_WHATSAPP;
+    if (!ownerPhone) return Promise.resolve(null);
+    return send({ to: ownerPhone, message });
   },
 
   sendCheckinReminder: (phone: string, data: {

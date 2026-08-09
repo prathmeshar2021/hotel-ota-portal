@@ -41,6 +41,11 @@ export function houseRules(opts: {
       emphasis: true,
     },
     {
+      title: "Entry or Exit Restricted between 11:00 am to 6:00 am due to security concerns.",
+      detail:
+        " ",
+    },
+    {
       title: "Photo ID is mandatory for every guest",
       detail:
         "Aadhaar, Passport, Driving Licence or Voter ID for each person staying — not just the person who booked. This is a legal requirement.",
