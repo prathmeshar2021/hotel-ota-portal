@@ -11,7 +11,9 @@ const AddChargeSchema = z.object({
   chargeType: z.string().min(1, "Charge type is required"),
   description: z.string().optional(),
   quantity: z.number().positive("Quantity must be > 0").default(1),
-  unitPrice: z.number().positive("Unit price must be > 0"),
+  // 0 is valid — a complimentary juice is still worth recording, so the item
+  // shows on the guest's bill at no charge rather than going unlogged.
+  unitPrice: z.number().min(0, "Price can't be negative"),
   // How the guest is settling it. DEPOSIT leaves it on the tab to be offset
   // against the refundable deposit at checkout (the usual case); CASH/ONLINE
   // mean they paid at the counter there and then.

@@ -5,16 +5,18 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { X, Plus, Loader2, Receipt } from "lucide-react";
 
+// Ordered by how often they're actually used. Water and tea were previously
+// typed into "Other" by hand on most charges, so they lead as one-tap options.
+// Laundry, parking, transport, room service and minibar are gone — never used
+// once across every charge recorded, and not things this property bills for.
 const CHARGE_TYPES = [
-  { value: "FOOD",         label: "Food",         emoji: "🍽️" },
-  { value: "LAUNDRY",      label: "Laundry",      emoji: "🧺" },
-  { value: "EXTRA_BED",    label: "Extra Bed",    emoji: "🛏️" },
-  { value: "PARKING",      label: "Parking",      emoji: "🚗" },
-  { value: "TRANSPORT",    label: "Transport",    emoji: "🛺" },
-  { value: "ROOM_SERVICE", label: "Room Service", emoji: "🛎️" },
-  { value: "MINIBAR",      label: "Minibar",      emoji: "🧃" },
-  { value: "DAMAGE",       label: "Damage",       emoji: "⚠️" },
-  { value: "OTHER",        label: "Other",        emoji: "📋" },
+  { value: "WATER",     label: "Water",     emoji: "💧" },
+  { value: "JUICE",     label: "Juice",     emoji: "🧃" },
+  { value: "TEA",       label: "Tea",       emoji: "☕" },
+  { value: "FOOD",      label: "Food",      emoji: "🍽️" },
+  { value: "EXTRA_BED", label: "Extra Bed", emoji: "🛏️" },
+  { value: "DAMAGE",    label: "Damage",    emoji: "⚠️" },
+  { value: "OTHER",     label: "Other",     emoji: "📋" },
 ] as const;
 
 interface Props {
@@ -53,7 +55,7 @@ export default function AddChargeModal({ bookingId, disabled }: Props) {
     e.preventDefault();
     if (!chargeType) { toast.error("Select a charge type"); return; }
     if (qty <= 0)    { toast.error("Quantity must be greater than 0"); return; }
-    if (price <= 0)  { toast.error("Unit price must be greater than 0"); return; }
+    if (price < 0)   { toast.error("Price can't be negative"); return; }
 
     setLoading(true);
     try {
@@ -198,9 +200,11 @@ export default function AddChargeModal({ bookingId, disabled }: Props) {
                     <div className={`w-full rounded-xl px-3 py-2.5 text-sm text-center font-bold border ${
                       total > 0
                         ? "bg-amber-500/10 border-amber-500/25 text-amber-300"
-                        : "bg-white/3 border-white/8 text-white/25"
+                        : unitPrice.trim() !== ""
+                          ? "bg-green-500/10 border-green-500/25 text-green-300"
+                          : "bg-white/3 border-white/8 text-white/25"
                     }`}>
-                      ₹{total > 0 ? total.toLocaleString("en-IN") : "—"}
+                      {unitPrice.trim() === "" ? "—" : total > 0 ? `₹${total.toLocaleString("en-IN")}` : "Free"}
                     </div>
                   </div>
                 </div>
