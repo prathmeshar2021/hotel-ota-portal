@@ -42,6 +42,7 @@ import AssignRoomButton from "@/components/hotel-admin/AssignRoomButton";
 import GuestCountEditor from "@/components/hotel-admin/GuestCountEditor";
 import AddCompanionButton from "@/components/hotel-admin/AddCompanionButton";
 import IdPhotos from "@/components/hotel-admin/IdPhotos";
+import { isLateEntry, daysLate } from "@/lib/utils/late-entry";
 import { getCategoryMeta, CATEGORY_ROOMS } from "@/lib/utils/room-categories";
 import { isOtaPrepaid, otaSourceLabel } from "@/lib/ota/sources";
 
@@ -143,6 +144,14 @@ export default async function BookingDetailPage({
             {SOURCE_CONFIG[booking.source] && (
               <span className={`text-xs font-bold px-3 py-1 rounded-full border ${SOURCE_CONFIG[booking.source].cls}`}>
                 {SOURCE_CONFIG[booking.source].label}
+              </span>
+            )}
+            {isLateEntry(booking.createdAt, booking.checkInDate, booking.source) && (
+              <span
+                className="text-xs font-bold px-3 py-1 rounded-full border bg-purple-500/15 text-purple-300 border-purple-500/30"
+                title={`Recorded ${daysLate(booking.createdAt, booking.checkInDate)} day(s) after the stay began`}
+              >
+                Added late
               </span>
             )}
             {booking.instantBooking && (

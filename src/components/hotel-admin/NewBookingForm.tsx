@@ -288,6 +288,9 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   const today = new Date().toISOString().split("T")[0];
+  // Recording a stay that already started — allowed, but called out so it's a
+  // deliberate catch-up entry rather than a mistyped year.
+  const isBackdated = !!checkIn && checkIn < today;
 
   return (
     <div className="max-w-4xl">
@@ -317,16 +320,27 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
             <h2 className="font-semibold text-white mb-4 flex items-center gap-2">
               <Calendar className="w-4 h-4 text-blue-400" /> Stay Dates
             </h2>
+            {isBackdated && (
+              <div className="flex items-start gap-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 mb-4">
+                <Calendar className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <p className="text-amber-200/80 text-xs leading-relaxed">
+                  <span className="font-bold text-amber-200">Back-dated booking.</span>{" "}
+                  This stay has already started, so it will be tagged{" "}
+                  <span className="font-semibold">Added late</span> for the owner&apos;s records.
+                </p>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <label className={labelCls}>Check-in Date</label>
-                <input type="date" min={today} value={checkIn}
+                <input type="date" value={checkIn}
                   onChange={e => { setCheckIn(e.target.value); setRooms([]); setSelectedRoom(null); }}
                   className={inputCls} />
               </div>
               <div>
                 <label className={labelCls}>Check-out Date</label>
-                <input type="date" min={checkIn || today} value={checkOut}
+                <input type="date" min={checkIn || undefined} value={checkOut}
                   onChange={e => { setCheckOut(e.target.value); setRooms([]); setSelectedRoom(null); }}
                   className={inputCls} />
               </div>

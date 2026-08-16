@@ -12,6 +12,7 @@ import { fmtIST } from "@/lib/utils/datetime";
 import { Calendar, User, ArrowRight, Phone, Search, LogIn, LogOut } from "lucide-react";
 import { getCategoryMeta } from "@/lib/utils/room-categories";
 import InstantBookButton from "@/components/hotel-admin/InstantBookButton";
+import { isLateEntry } from "@/lib/utils/late-entry";
 
 type Filter = "all" | "arrivals-today" | "departures-today" | "in-house" | "upcoming" | "checked-out";
 type SortKey = "checkin-desc" | "checkin-asc" | "created-desc" | "checkout-asc";
@@ -262,6 +263,11 @@ export default async function BookingsPage({ searchParams }: Props) {
                     {SOURCE_CONFIG[b.source] && (
                       <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border shrink-0 ${SOURCE_CONFIG[b.source].cls}`}>
                         {SOURCE_CONFIG[b.source].label}
+                      </span>
+                    )}
+                    {isLateEntry(b.createdAt, b.checkInDate, b.source) && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 bg-purple-500/15 text-purple-300 border-purple-500/30">
+                        Added late
                       </span>
                     )}
                     {b.instantBooking && (
