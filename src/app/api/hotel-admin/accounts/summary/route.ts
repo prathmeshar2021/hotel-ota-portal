@@ -15,71 +15,66 @@ export async function GET() {
   const todayStart = startOfDay(new Date());
   const monthStart = startOfMonth(new Date());
 
+  // Every figure below that concerns guest money reads the BookingTxn ledger,
+  // the same source the statement itself uses — so a total on a card and the
+  // rows it summarises can never disagree. The refundable deposit is not in the
+  // ledger while the hotel merely holds it, which is deliberate: it is the
+  // guest's money until it is applied to a bill or withheld for damage, and
+  // only then does it show up (as DEPOSIT_APPLIED / DEPOSIT_WITHHELD).
+  const guestMoney = { hotelId, booking: { source: { notIn: OTA_PREPAID_SOURCES } } };
+  const isCredit = { kind: { not: "REFUND" as const } };
+
   const [
-    bookingAgg,
-    cashChargeAgg,
-    onlineChargeAgg,
+    drawerAgg,            // all-time signed cash effect of guest money
+    onlineAgg,            // all-time online receipts
+    refundOnlineAgg,      // all-time online refunds
     collectionAgg,
     pendingAgg,
-    todayBookingAgg,
-    todayCashChargeAgg,
+    todayDrawerAgg,
+    todayOnlineAgg,
+    todayRefundOnlineAgg,
     lastCollection,
-    cancellationAgg,
-    damageAgg,
     cashExpenseAgg,       // all-time cash expenses → for Cash in Hand formula
     cashCreditAgg,        // all-time cash credits  → for Cash in Hand formula
-    // Monthly figures for the revenue & expense cards
-    monthBookingAgg,
-    monthCashChargeAgg,
-    monthOnlineChargeAgg,
+    monthCreditAgg,       // this month's guest receipts
+    monthRefundAgg,       // this month's refunds
     monthExpenseAgg,
   ] = await Promise.all([
-    prisma.booking.aggregate({ where: { hotelId, source: { notIn: OTA_PREPAID_SOURCES } }, _sum: { cashPaid: true, onlinePaid: true } }),
-    prisma.additionalCharge.aggregate({ where: { booking: { hotelId, source: { notIn: OTA_PREPAID_SOURCES } }, mode: "CASH" }, _sum: { amount: true } }),
-    prisma.additionalCharge.aggregate({ where: { booking: { hotelId, source: { notIn: OTA_PREPAID_SOURCES } }, mode: "ONLINE" }, _sum: { amount: true } }),
+    prisma.bookingTxn.aggregate({ where: guestMoney, _sum: { cashImpact: true } }),
+    prisma.bookingTxn.aggregate({ where: { ...guestMoney, ...isCredit, mode: "ONLINE" }, _sum: { amount: true } }),
+    prisma.bookingTxn.aggregate({ where: { ...guestMoney, kind: "REFUND", mode: "ONLINE" }, _sum: { amount: true } }),
     prisma.cashCollection.aggregate({ where: { hotelId }, _sum: { amount: true } }),
     prisma.booking.aggregate({
       where: { hotelId, status: { in: ["CONFIRMED", "CHECKED_IN"] }, source: { notIn: OTA_PREPAID_SOURCES } },
       _sum: { balanceDue: true }, _count: { _all: true },
     }),
-    prisma.booking.aggregate({ where: { hotelId, createdAt: { gte: todayStart }, source: { notIn: OTA_PREPAID_SOURCES } }, _sum: { cashPaid: true, onlinePaid: true } }),
-    prisma.additionalCharge.aggregate({ where: { booking: { hotelId, source: { notIn: OTA_PREPAID_SOURCES } }, addedAt: { gte: todayStart }, mode: "CASH" }, _sum: { amount: true } }),
+    prisma.bookingTxn.aggregate({ where: { ...guestMoney, occurredAt: { gte: todayStart } }, _sum: { cashImpact: true } }),
+    prisma.bookingTxn.aggregate({ where: { ...guestMoney, ...isCredit, mode: "ONLINE", occurredAt: { gte: todayStart } }, _sum: { amount: true } }),
+    prisma.bookingTxn.aggregate({ where: { ...guestMoney, kind: "REFUND", mode: "ONLINE", occurredAt: { gte: todayStart } }, _sum: { amount: true } }),
     prisma.cashCollection.findFirst({ where: { hotelId }, orderBy: { createdAt: "desc" } }),
-    prisma.booking.aggregate({ where: { hotelId, status: "CANCELLED", cancellationCharge: { gt: 0 }, source: { notIn: OTA_PREPAID_SOURCES } }, _sum: { cancellationCharge: true } }),
-    prisma.booking.aggregate({ where: { hotelId, status: "CHECKED_OUT", depositDeducted: { gt: 0 }, source: { notIn: OTA_PREPAID_SOURCES } }, _sum: { depositDeducted: true } }),
     // All-time cash expenses (debits paid in cash) — used for Cash in Hand
     prisma.hotelExpense.aggregate({ where: { hotelId, entryType: "DEBIT", mode: "CASH" }, _sum: { amount: true } }),
     // All-time cash credits — used for Cash in Hand
     prisma.hotelExpense.aggregate({ where: { hotelId, entryType: "CREDIT", mode: "CASH" }, _sum: { amount: true } }),
-    // This month's bookings revenue
-    prisma.booking.aggregate({ where: { hotelId, createdAt: { gte: monthStart }, source: { notIn: OTA_PREPAID_SOURCES } }, _sum: { cashPaid: true, onlinePaid: true } }),
-    // This month's additional charges — cash
-    prisma.additionalCharge.aggregate({ where: { booking: { hotelId, source: { notIn: OTA_PREPAID_SOURCES } }, addedAt: { gte: monthStart }, mode: "CASH" }, _sum: { amount: true } }),
-    // This month's additional charges — online
-    prisma.additionalCharge.aggregate({ where: { booking: { hotelId, source: { notIn: OTA_PREPAID_SOURCES } }, addedAt: { gte: monthStart }, mode: "ONLINE" }, _sum: { amount: true } }),
+    prisma.bookingTxn.aggregate({ where: { ...guestMoney, ...isCredit, occurredAt: { gte: monthStart } }, _sum: { amount: true } }),
+    prisma.bookingTxn.aggregate({ where: { ...guestMoney, kind: "REFUND", occurredAt: { gte: monthStart } }, _sum: { amount: true } }),
     // This month's ledger expenses (any mode)
     prisma.hotelExpense.aggregate({ where: { hotelId, entryType: "DEBIT", expenseDate: { gte: monthStart } }, _sum: { amount: true } }),
   ]);
 
-  const cashFromBookings = bookingAgg._sum.cashPaid ?? 0;
-  const onlineFromBookings = bookingAgg._sum.onlinePaid ?? 0;
-  const cashFromCharges = cashChargeAgg._sum.amount ?? 0;
-  const onlineFromCharges = onlineChargeAgg._sum.amount ?? 0;
   const totalCollected = collectionAgg._sum.amount ?? 0;
-  const cancellationRevenue = cancellationAgg._sum.cancellationCharge ?? 0;
-  const damageRevenue = damageAgg._sum.depositDeducted ?? 0;
   const cashExpenses = cashExpenseAgg._sum.amount ?? 0;
   const cashCredits = cashCreditAgg._sum.amount ?? 0;
 
-  // Cash in Hand — all-time formula (unchanged)
-  const cashInHand = cashFromBookings + cashFromCharges + cashCredits - cashExpenses - totalCollected;
-  const onlineTotal = onlineFromBookings + onlineFromCharges;
+  // Cash in Hand — what should physically be in the drawer. cashImpact already
+  // nets refunds handed back over the counter, and counts deposit money only
+  // once it has become the hotel's.
+  const cashInHand =
+    (drawerAgg._sum.cashImpact ?? 0) + cashCredits - cashExpenses - totalCollected;
+  const onlineTotal = (onlineAgg._sum.amount ?? 0) - (refundOnlineAgg._sum.amount ?? 0);
 
-  // This month's revenue card
-  const totalRevenue =
-    (monthBookingAgg._sum.cashPaid ?? 0) + (monthBookingAgg._sum.onlinePaid ?? 0)
-    + (monthCashChargeAgg._sum.amount ?? 0) + (monthOnlineChargeAgg._sum.amount ?? 0)
-    + cancellationRevenue + damageRevenue; // cancellation/damage included (filtered by status, not date)
+  // This month's revenue card — receipts less anything refunded.
+  const totalRevenue = (monthCreditAgg._sum.amount ?? 0) - (monthRefundAgg._sum.amount ?? 0);
 
   // This month's expenses card
   const totalExpenses = monthExpenseAgg._sum.amount ?? 0;
@@ -87,8 +82,8 @@ export async function GET() {
   const pendingDue = pendingAgg._sum.balanceDue ?? 0;
   const pendingCount = pendingAgg._count._all;
 
-  const todayCash = (todayBookingAgg._sum.cashPaid ?? 0) + (todayCashChargeAgg._sum.amount ?? 0);
-  const todayOnline = todayBookingAgg._sum.onlinePaid ?? 0;
+  const todayCash = todayDrawerAgg._sum.cashImpact ?? 0;
+  const todayOnline = (todayOnlineAgg._sum.amount ?? 0) - (todayRefundOnlineAgg._sum.amount ?? 0);
 
   return NextResponse.json({
     cashInHand,

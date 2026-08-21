@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db/prisma";
 import { createRefund } from "@/lib/services/razorpay";
+import { recordTxn, netCredited } from "@/lib/services/booking-txn";
 
 export type RefundOutcome = {
   refundStatus: "NONE" | "PENDING" | "PROCESSED" | "FAILED";
@@ -32,6 +33,7 @@ export async function processBookingRefund(
     select: {
       id: true,
       bookingRef: true,
+      hotelId: true,
       onlinePaid: true,
       cashPaid: true,
       refundStatus: true,
@@ -98,6 +100,20 @@ export async function processBookingRefund(
           },
         });
       }
+      // Ledger — money genuinely on its way back to the guest's account. The
+      // cash portion (if any) is recorded separately, when the desk hands it
+      // over, so the drawer isn't debited for notes still sitting in it.
+      await recordTxn({
+        hotelId: booking.hotelId,
+        bookingId,
+        kind: "REFUND",
+        mode: "ONLINE",
+        refundVia: "ONLINE",
+        amount: Math.min(onlinePortion, await netCredited(bookingId)),
+        note: opts.reason ?? "Refunded to the original payment method",
+        idemKey: `refund:${refund.id}`,
+      });
+
       return {
         refundStatus: fullySettled ? "PROCESSED" : "PENDING",
         refundAmount: owed,
@@ -139,13 +155,27 @@ export async function markRefundManual(
 ): Promise<RefundOutcome> {
   const booking = await prisma.booking.findUnique({
     where: { id: bookingId },
-    select: { refundAmount: true, refundStatus: true },
+    select: { refundAmount: true, refundStatus: true, hotelId: true },
   });
   if (!booking) return { refundStatus: "NONE", refundAmount: 0, message: "Booking not found" };
 
   await prisma.booking.update({
     where: { id: bookingId },
     data: { refundStatus: "PROCESSED", refundedAt: new Date(), refundId: `MANUAL:${by}` },
+  });
+
+  // The notes have now physically left the drawer, so this is the moment the
+  // cash figure should drop — not when the refund was first agreed.
+  await recordTxn({
+    hotelId: booking.hotelId,
+    bookingId,
+    kind: "REFUND",
+    mode: "CASH",
+    refundVia: "CASH",
+    amount: Math.min(booking.refundAmount ?? 0, await netCredited(bookingId)),
+    note: "Refunded in cash at the desk",
+    recordedBy: by,
+    idemKey: `refund-manual:${bookingId}`,
   });
   return {
     refundStatus: "PROCESSED",

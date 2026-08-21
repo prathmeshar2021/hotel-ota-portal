@@ -6,6 +6,7 @@ import { generateBookingRef, applyCoupon } from "@/lib/utils/booking";
 import {
   REFUNDABLE_DEPOSIT, computeTotals, computeTotalsForPrice, computeTotalsWithStaffDiscount,
 } from "@/lib/utils/booking-calc";
+import { recordTxn, roomPaymentNote } from "@/lib/services/booking-txn";
 import { gupshup } from "@/lib/services/gupshup";
 import { email } from "@/lib/services/email";
 import { format } from "date-fns";
@@ -262,6 +263,19 @@ export async function POST(req: NextRequest) {
         ? `Cash: ₹${d.cashPaid}, Online: ₹${d.onlinePaid}`
         : undefined,
     },
+  });
+
+  // Ledger — whatever the guest handed over at the desk when the booking was
+  // made. Anything paid later is recorded separately, on the day it arrives.
+  const recordedBy = session.user.name || session.user.email || "Staff";
+  const stage = balanceDue === 0 ? "paid in full at booking" : "part payment at booking";
+  await recordTxn({
+    hotelId, bookingId: booking.id, kind: "ROOM_PAYMENT", mode: "CASH",
+    amount: d.cashPaid, note: roomPaymentNote("CASH", stage), recordedBy,
+  });
+  await recordTxn({
+    hotelId, bookingId: booking.id, kind: "ROOM_PAYMENT", mode: "ONLINE",
+    amount: d.onlinePaid, note: roomPaymentNote("ONLINE", stage), recordedBy,
   });
 
   // If ID details provided, create online check-in record (pre-filled)

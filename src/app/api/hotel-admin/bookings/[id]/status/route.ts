@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
 import { ensureRoomAssigned, isConsentConfirmed, CHECKIN_GATE_MESSAGES } from "@/lib/services/checkin-gate";
+import { recordTxn, roomPaymentNote, type RecordTxnInput } from "@/lib/services/booking-txn";
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
   PENDING_PAYMENT: ["CONFIRMED", "CANCELLED"],
@@ -32,6 +33,7 @@ export async function PATCH(
       id: true, status: true, roomId: true, checkInDate: true, checkOutDate: true,
       hotelId: true, roomCategory: true,
       depositCollected: true, additionalCharges: true, balanceDue: true,
+      depositMode: true,
       cashPaid: true, onlinePaid: true,
       // Needed to push a deposit refund back to the card/UPI it came from.
       depositPaymentId: true,
@@ -66,6 +68,11 @@ export async function PATCH(
 
   const now = new Date();
   const updateData: Record<string, unknown> = { status: newStatus };
+  const recordedBy = session.user.name || session.user.email || "Staff";
+  // Ledger entries are gathered as the settlement is worked out and written
+  // only once the booking update has succeeded, so a rejected checkout never
+  // leaves phantom money behind.
+  const ledger: RecordTxnInput[] = [];
 
   if (newStatus === "CHECKED_IN") {
     // Gate: a stay cannot be checked in until (1) a physical room is assigned
@@ -122,6 +129,45 @@ export async function PATCH(
       const mode = settlement?.collectMode === "ONLINE" ? "ONLINE" : "CASH";
       if (mode === "ONLINE") updateData.onlinePaid = booking.onlinePaid + collect;
       else updateData.cashPaid = booking.cashPaid + collect;
+      ledger.push({
+        hotelId: booking.hotelId, bookingId: booking.id, kind: "ROOM_PAYMENT", mode,
+        amount: collect, note: roomPaymentNote(mode, "balance settled at checkout"),
+        occurredAt: now, recordedBy,
+      });
+    }
+
+    // What the deposit actually paid for. Extras come off it first — that is
+    // what the guest was told the deposit was for — and only what's left over
+    // goes against an unpaid room balance. Split into two entries so the
+    // statement says which, instead of one opaque "deposit deduction".
+    // The deposit itself never appears: taking it and handing it back are the
+    // guest's money moving, not the hotel's. It shows up here, at the moment it
+    // stops being refundable and becomes income.
+    const depositMode = booking.depositMode === "ONLINE" ? "ONLINE" : "CASH";
+    const toExtras = Math.min(depositUsed, booking.additionalCharges);
+    const toRoom = +(depositUsed - toExtras).toFixed(2);
+    if (toExtras > 0) {
+      ledger.push({
+        hotelId: booking.hotelId, bookingId: booking.id, kind: "DEPOSIT_APPLIED",
+        mode: "DEPOSIT", amount: toExtras, depositMode, occurredAt: now, recordedBy,
+        note: "Extras during the stay — deducted from deposit",
+      });
+    }
+    if (toRoom > 0) {
+      ledger.push({
+        hotelId: booking.hotelId, bookingId: booking.id, kind: "DEPOSIT_APPLIED",
+        mode: "DEPOSIT", amount: toRoom, depositMode, occurredAt: now, recordedBy,
+        note: "Unpaid room balance — deducted from deposit",
+      });
+    }
+    if (deduction > 0) {
+      ledger.push({
+        hotelId: booking.hotelId, bookingId: booking.id, kind: "DEPOSIT_WITHHELD",
+        mode: "DEPOSIT", amount: deduction, depositMode, occurredAt: now, recordedBy,
+        note: settlement?.notes?.trim()
+          ? `Withheld for damage or cleaning — ${String(settlement.notes).trim()}`
+          : "Withheld for damage or cleaning",
+      });
     }
 
     // Push the refund back to the card/UPI it came from when staff ask for it
@@ -206,6 +252,8 @@ export async function PATCH(
     where: { id },
     data: updateData,
   });
+
+  for (const entry of ledger) await recordTxn(entry);
 
   // Issue the GST tax invoice at check-out so every completed stay gets a
   // sequential invoice number automatically. Idempotent; never blocks check-out.

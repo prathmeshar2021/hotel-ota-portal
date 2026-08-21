@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
 import { z } from "zod";
+import { recordTxn, roomPaymentNote } from "@/lib/services/booking-txn";
 
 const CollectSchema = z.object({
   amount: z.number().positive("Amount must be greater than 0"),
@@ -77,6 +78,18 @@ export async function PATCH(
       balanceDue: newBalance,
       ...(willConfirm ? { status: "CONFIRMED" } : {}),
     },
+  });
+
+  // Ledger entry — this instalment on its own date, so the accounts statement
+  // shows it as its own line rather than folding it into the booking total.
+  await recordTxn({
+    hotelId: session.user.hotelId,
+    bookingId: id,
+    kind: "ROOM_PAYMENT",
+    mode,
+    amount: collected,
+    note: roomPaymentNote(mode, isFullyPaid ? "balance settled at the counter" : "part payment at the counter"),
+    recordedBy: collectedBy,
   });
 
   // Upsert payment record

@@ -435,10 +435,59 @@ model Booking {
   payment      Payment?
   gstInvoice   GstInvoice?
   charges      AdditionalCharge[]
+  txns         BookingTxn[]
   onlineCheckin OnlineCheckin?
   syncLogs     AppsheetSyncLog[]
 
   @@index([bookingGroupId])
+}
+
+// ─── BOOKING TRANSACTION ──────────────────────────────────────────────────────
+// One row per movement of money, written at the moment it happens and never
+// edited afterwards. The Booking's own cashPaid/onlinePaid are running totals:
+// they say how much has been paid, but not when, in how many instalments, or by
+// whom — so a guest who pays ₹500 at booking and the rest at check-in used to
+// appear in the accounts statement as a single payment dated at booking. This
+// table is what the statement reads, so every instalment shows on its own date.
+
+enum TxnKind {
+  ROOM_PAYMENT     // paid towards the room bill
+  EXTRA_CHARGE     // paid at the counter for an extra (water, food, …)
+  DEPOSIT_APPLIED  // deposit money used to settle what the guest owed
+  DEPOSIT_WITHHELD // deposit money kept back for dirt or damage
+  CANCELLATION_FEE // retained when a booking was cancelled
+  REFUND           // money returned to the guest
+}
+
+enum TxnMode {
+  CASH
+  ONLINE
+  DEPOSIT // settled out of the deposit already held — no money changed hands at the desk
+}
+
+model BookingTxn {
+  id         String   @id @default(cuid())
+  hotelId    String
+  bookingId  String
+  kind       TxnKind
+  mode       TxnMode
+  amount     Float
+  /// Signed effect on the physical cash drawer. Cash taken is +, cash handed
+  /// back is −, and anything online or on paper is 0. Deposit money only lands
+  /// here when it stops being the guest's — i.e. when it is applied or withheld.
+  cashImpact Float    @default(0)
+  note       String?
+  occurredAt DateTime
+  recordedBy String?
+  /// Stable key for events that could be replayed (webhook retries, a double
+  /// submit at the desk), so the same rupee is never recorded twice.
+  idemKey    String?  @unique
+  createdAt  DateTime @default(now())
+
+  booking Booking @relation(fields: [bookingId], references: [id])
+
+  @@index([hotelId, occurredAt])
+  @@index([bookingId, occurredAt])
 }
 
 // ─── BOOKING COMPANION ────────────────────────────────────────────────────────

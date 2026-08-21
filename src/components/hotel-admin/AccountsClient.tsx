@@ -50,6 +50,8 @@ function txTypeLabel(type: TransactionItem["type"]): string {
     case "CHARGE_CASH":          return "Extra Charge";
     case "CHARGE_ONLINE":        return "Extra Charge";
     case "CHARGE_MIXED":         return "Extra Charge";
+    case "DEPOSIT_APPLIED":      return "From Deposit";
+    case "REFUND":               return "Refund";
     case "CANCELLATION_FEE":     return "Cancellation";
     case "DAMAGE_CHARGE":        return "Damage";
     case "CASH_COLLECTION":      return "Withdrawn";
@@ -66,6 +68,11 @@ function txBadge(type: TransactionItem["type"], mode: TransactionItem["mode"]) {
     return { text: "Cancellation", cls: "bg-orange-500/15 text-orange-400 border-orange-500/25" };
   if (type === "DAMAGE_CHARGE")
     return { text: "Damage", cls: "bg-red-500/10 text-red-400/80 border-red-500/15" };
+  // No money crossed the counter — it came out of the deposit already held.
+  if (type === "DEPOSIT_APPLIED")
+    return { text: "From deposit", cls: "bg-amber-500/15 text-amber-400 border-amber-500/25" };
+  if (type === "REFUND")
+    return { text: "Refunded", cls: "bg-red-500/15 text-red-400 border-red-500/25" };
   if (type === "BOOKING_PAY_AT_HOTEL")
     return { text: "Due", cls: "bg-orange-500/15 text-orange-400 border-orange-500/25" };
   if (type === "EXPENSE_DEBIT")
@@ -79,6 +86,14 @@ function txBadge(type: TransactionItem["type"], mode: TransactionItem["mode"]) {
   return { text: "Mixed", cls: "bg-purple-500/15 text-purple-400 border-purple-500/25" };
 }
 
+/** How the money moved, for the exported columns. */
+function paymentModeLabel(t: TransactionItem): string {
+  if (t.type === "CASH_COLLECTION") return "Cash";
+  if (t.mode === "DEPOSIT") return "From deposit";
+  if (t.mode === "INTERNAL") return "—";
+  return t.mode.charAt(0) + t.mode.slice(1).toLowerCase();
+}
+
 function downloadCSV(transactions: TransactionItem[], summary: Summary | null) {
   const rows = [
     ["Date", "Type", "Description", "Guest", "Booking Ref", "Mode", "Amount (₹)", "Direction"],
@@ -88,7 +103,7 @@ function downloadCSV(transactions: TransactionItem[], summary: Summary | null) {
       t.description,
       t.guestName ?? "",
       t.bookingRef ?? "",
-      t.mode,
+      paymentModeLabel(t),
       t.amount.toFixed(2),
       t.isDebit ? "Debit" : "Credit",
     ]),
@@ -210,7 +225,7 @@ async function downloadPDF(
       t.description + (t.subDescription ? `\n${t.subDescription}` : ""),
       t.guestName ?? "—",
       t.bookingRef ?? "—",
-      t.type === "CASH_COLLECTION" ? "Cash" : t.mode === "INTERNAL" ? "—" : t.mode,
+      paymentModeLabel(t),
       t.type === "BOOKING_PAY_AT_HOTEL"
         ? `Due: ${fmt(t.amount)}`
         : `${t.isDebit ? "−" : "+"}${fmt(t.amount)}`,

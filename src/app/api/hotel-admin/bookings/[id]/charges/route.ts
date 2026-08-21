@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
 import { z } from "zod";
+import { recordTxn } from "@/lib/services/booking-txn";
 
 function staffGuard(role?: string) {
   return role === "HOTEL_ADMIN" || role === "HOTEL_STAFF" || role === "SUPER_ADMIN";
@@ -84,6 +85,21 @@ export async function POST(
           }),
         ]),
   ]);
+
+  // Ledger — only what the guest actually settled at the counter. A charge left
+  // on the tab is not income yet; it becomes one at checkout, when the deposit
+  // is applied to it and a DEPOSIT_APPLIED entry is written.
+  if (paidNow) {
+    await recordTxn({
+      hotelId: session.user.hotelId,
+      bookingId: id,
+      kind: "EXTRA_CHARGE",
+      mode: settlement === "ONLINE" ? "ONLINE" : "CASH",
+      amount,
+      note: `${chargeType.toLowerCase().replace(/_/g, " ")} — paid at the counter`,
+      recordedBy: session.user.name || session.user.email || "Staff",
+    });
+  }
 
   return NextResponse.json(
     {
