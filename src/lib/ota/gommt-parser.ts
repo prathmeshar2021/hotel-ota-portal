@@ -158,11 +158,6 @@ export function parseGommtEmail(email: RawEmail): ParseResult {
   const body = normalize(rawBody);
   const hay = `${subject}\n${body}`;
 
-  // Source
-  const source: OtaSource = /goibibo/i.test(hay) && !/makemytrip|make my trip/i.test(hay)
-    ? "GOIBIBO"
-    : "MMT";
-
   // Event type — subject is the most reliable signal
   let eventType: OtaEventType = "UNKNOWN";
   if (/cancellation received|booking cancelled|cancelled/i.test(subject)) eventType = "CANCELLATION";
@@ -181,8 +176,37 @@ export function parseGommtEmail(email: RawEmail): ParseResult {
     (body.match(/\b([A-Z]{2}\d{8,})\b/) ?? [])[1];
 
   if (!otaBookingId) {
-    return { ok: false, error: "Could not find OTA booking id", partial: { source, eventType, roomQty: 1 } };
+    return { ok: false, error: "Could not find OTA booking id", partial: { eventType, roomQty: 1 } };
   }
+
+  // Source — read from the fields that actually name the channel, never from a
+  // whole-body scan. Every Goibibo voucher carries MakeMyTrip's corporate
+  // boilerplate in its footer ("MakeMyTrip Contact Info", "MakeMyTrip (India)
+  // Limited", the cancellation note), so a body-wide "mentions MakeMyTrip"
+  // test marks every Goibibo booking as MMT.
+  //
+  // In priority order: the "Booked Via" field, the subject line ("… on
+  // GoIbibo - GH…"), the sending address, and finally the booking-id prefix
+  // (GH = Goibibo, NH = MakeMyTrip). Anything unrecognised stays MMT, which is
+  // the channel this inbox has always carried.
+  const bookedViaRaw = (body.match(/booked via\s*\n?\s*([A-Za-z ]+)/i) ?? [])[1]?.trim();
+  const source: OtaSource = (() => {
+    if (bookedViaRaw) {
+      if (/goibibo/i.test(bookedViaRaw)) return "GOIBIBO";
+      if (/makemytrip|make my trip/i.test(bookedViaRaw)) return "MMT";
+    }
+    if (/goibibo/i.test(subject)) return "GOIBIBO";
+    if (/makemytrip|make my trip/i.test(subject)) return "MMT";
+    // The id prefix outranks the sending address: GoMMT sends both brands'
+    // mail from go-mmt.com, and cancellation notices name only the booking id.
+    // Since the stored bookingRef is `${source}-${otaBookingId}`, guessing the
+    // brand wrong here means a cancellation can never match its own booking.
+    if (/^GH/i.test(otaBookingId)) return "GOIBIBO";
+    if (/^NH/i.test(otaBookingId)) return "MMT";
+    if (/goibibo\.com/i.test(from)) return "GOIBIBO";
+    return "MMT";
+  })();
+
 
   // PNR
   const pnr = (body.match(/\bpnr\b\s*[:\-]?\s*\n?\s*([0-9]{5,})/i) ?? [])[1];
@@ -234,7 +258,7 @@ export function parseGommtEmail(email: RawEmail): ParseResult {
   );
 
   const bookingStatus = (body.match(/booking status\s*\n?\s*([A-Za-z ]+)/i) ?? [])[1]?.trim();
-  const bookedVia = (body.match(/booked via\s*\n?\s*([A-Za-z ]+)/i) ?? [])[1]?.trim();
+  const bookedVia = bookedViaRaw;
   const propertyName = (body.match(/^(the urban escape[^\n,]*)/im) ?? [])[1]?.trim();
 
   return {
