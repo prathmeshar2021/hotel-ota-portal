@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { prisma } from "@/lib/db/prisma";
+import { resolvePayMode } from "@/lib/services/pay-mode-guard";
 import { auth } from "@/lib/auth/auth";
 import {
   computeTotals,
@@ -80,6 +81,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Guest details required" }, { status: 400 });
     }
     await linkGuestContact(guestId, { email: data.guestEmail, phone: data.guestPhone, name: data.guestName });
+
+    // The owner's payment settings are enforced here, not just in the booking UI —
+    // this endpoint is public, so a hidden button is not a closed door.
+    const payModeCheck = await resolvePayMode(data.hotelId, data.payMode);
+    if (!payModeCheck.ok) {
+      return NextResponse.json({ error: payModeCheck.error }, { status: 400 });
+    }
 
     const universal = await getUniversalDiscount(data.hotelId);
 

@@ -33,7 +33,7 @@ export async function PATCH(
       id: true, status: true, roomId: true, checkInDate: true, checkOutDate: true,
       hotelId: true, roomCategory: true,
       depositCollected: true, additionalCharges: true, balanceDue: true,
-      depositMode: true,
+      depositMode: true, totalAmount: true,
       cashPaid: true, onlinePaid: true,
       // Needed to push a deposit refund back to the card/UPI it came from.
       depositPaymentId: true,
@@ -73,6 +73,35 @@ export async function PATCH(
   // only once the booking update has succeeded, so a rejected checkout never
   // leaves phantom money behind.
   const ledger: RecordTxnInput[] = [];
+
+  // Confirming a booking the guest never paid for online. Staff say how it was
+  // actually settled, because a confirmed booking with the full balance still
+  // outstanding is indistinguishable from a pay-at-hotel one — which is how a
+  // guest once checked out owing the entire stay without anyone noticing.
+  if (newStatus === "CONFIRMED" && booking.status === "PENDING_PAYMENT") {
+    const raw = Number(settlement?.amount) || 0;
+    const collectMode = settlement?.collectMode === "ONLINE" ? "ONLINE" : "CASH";
+    const outstanding = +(booking.totalAmount - booking.cashPaid - booking.onlinePaid).toFixed(2);
+    // Never record more than is actually owed — the desk shouldn't be able to
+    // over-credit a booking by fat-fingering the amount.
+    const collected = Math.min(Math.max(0, +raw.toFixed(2)), Math.max(0, outstanding));
+
+    if (collected > 0) {
+      if (collectMode === "ONLINE") updateData.onlinePaid = booking.onlinePaid + collected;
+      else updateData.cashPaid = booking.cashPaid + collected;
+      updateData.balanceDue = +(outstanding - collected).toFixed(2);
+      ledger.push({
+        hotelId: booking.hotelId, bookingId: booking.id, kind: "ROOM_PAYMENT",
+        mode: collectMode, amount: collected, occurredAt: now, recordedBy,
+        note: roomPaymentNote(collectMode, "collected when the booking was confirmed at the desk"),
+      });
+    } else {
+      // Confirmed with nothing taken. Legitimate (the guest is on their way and
+      // will pay at the desk), but it has to leave the balance visible rather
+      // than looking settled.
+      updateData.balanceDue = Math.max(0, outstanding);
+    }
+  }
 
   if (newStatus === "CHECKED_IN") {
     // Gate: a stay cannot be checked in until (1) a physical room is assigned
@@ -254,6 +283,23 @@ export async function PATCH(
   });
 
   for (const entry of ledger) await recordTxn(entry);
+
+  // Keep the Payment row in step when the desk settled a pending booking, so it
+  // no longer reads "pending" against money that has actually been taken.
+  if (newStatus === "CONFIRMED" && booking.status === "PENDING_PAYMENT") {
+    const paid = +((updateData.cashPaid as number ?? booking.cashPaid) +
+                   (updateData.onlinePaid as number ?? booking.onlinePaid)).toFixed(2);
+    if (paid > 0) {
+      await prisma.payment.updateMany({
+        where: { bookingId: id },
+        data: {
+          status: paid >= booking.totalAmount - 0.5 ? "captured" : "partial",
+          mode: (updateData.onlinePaid as number | undefined) ? "ONLINE" : "CASH",
+          paidAt: new Date(),
+        },
+      });
+    }
+  }
 
   // Issue the GST tax invoice at check-out so every completed stay gets a
   // sequential invoice number automatically. Idempotent; never blocks check-out.

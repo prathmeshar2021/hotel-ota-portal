@@ -230,6 +230,7 @@ export default async function BookingDetailPage({
               depositCollected={booking.depositCollected}
               additionalCharges={booking.additionalCharges}
               balanceDue={booking.balanceDue}
+              totalAmount={booking.totalAmount}
               // Only when the DEPOSIT itself was paid online. Refunding a cash
               // deposit against the room payment would push money to a card it
               // never came from and eat into that payment's refundable balance.

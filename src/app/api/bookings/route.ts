@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
+import { resolvePayMode } from "@/lib/services/pay-mode-guard";
 import { auth } from "@/lib/auth/auth";
 import { generateBookingRef } from "@/lib/utils/booking";
 import { REFUNDABLE_DEPOSIT, PARTIAL_PAYMENT_AMOUNT } from "@/lib/utils/booking-calc";
@@ -136,6 +137,13 @@ export async function POST(req: NextRequest) {
     checkOut,
     couponCode: data.couponCode,
   });
+
+  // The owner's payment settings are enforced here, not just in the booking UI —
+  // this endpoint is public, so a hidden button is not a closed door.
+  const payModeCheck = await resolvePayMode(data.hotelId, data.payMode);
+  if (!payModeCheck.ok) {
+    return NextResponse.json({ error: payModeCheck.error }, { status: 400 });
+  }
 
   const bookingRef = await generateBookingRef();
 

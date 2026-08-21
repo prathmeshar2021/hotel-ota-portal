@@ -14,41 +14,21 @@ interface Props {
   depositCollected?: number;  // refundable deposit actually held
   additionalCharges?: number; // extra charges accrued during the stay
   balanceDue?: number;        // outstanding room balance owed by the guest
+  totalAmount?: number;       // full price of the stay — what a pending booking still owes
   /** an online payment exists that a deposit refund can be pushed back to */
   canRefundToSource?: boolean;
 }
 
 // ─── Check-In Button ──────────────────────────────────────────────────────────
 // Simple: just confirm then PATCH
-export default function BookingStatusButton({ bookingId, currentStatus, depositCollected = 0, additionalCharges = 0, balanceDue = 0, canRefundToSource = false }: Props) {
+export default function BookingStatusButton({ bookingId, currentStatus, depositCollected = 0, additionalCharges = 0, balanceDue = 0, totalAmount = 0, canRefundToSource = false }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [checkoutModalOpen, setCheckoutModalOpen] = useState(false);
+  const [confirmModalOpen, setConfirmModalOpen] = useState(false);
 
   // Render for PENDING_PAYMENT (manual confirm), CONFIRMED and CHECKED_IN
   if (currentStatus !== "PENDING_PAYMENT" && currentStatus !== "CONFIRMED" && currentStatus !== "CHECKED_IN") return null;
-
-  // ── Confirm a still-pending booking (e.g. paid externally / pay-at-hotel) ──
-  async function handleConfirm() {
-    if (!window.confirm("Confirm this booking? It will hold the room and unlock check-in.")) return;
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/hotel-admin/bookings/${bookingId}/status`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "CONFIRMED" }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        toast.success(data.message ?? "Booking confirmed");
-        router.refresh();
-      } else {
-        toast.error(data.error ?? "Failed to confirm booking");
-      }
-    } finally {
-      setLoading(false);
-    }
-  }
 
   // ── Check In (no deposit prompt) ──────────────────────────────────────────
   async function handleCheckIn() {
@@ -74,14 +54,25 @@ export default function BookingStatusButton({ bookingId, currentStatus, depositC
 
   if (currentStatus === "PENDING_PAYMENT") {
     return (
-      <button
-        onClick={handleConfirm}
-        disabled={loading}
-        className="flex items-center gap-2 font-bold px-6 py-3 rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60 shadow-lg bg-blue-500 hover:bg-blue-400 text-white shadow-blue-500/20"
-      >
-        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-        {loading ? "Confirming…" : "Confirm Booking"}
-      </button>
+      <>
+        <button
+          onClick={() => setConfirmModalOpen(true)}
+          disabled={loading}
+          className="flex items-center gap-2 font-bold px-6 py-3 rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60 shadow-lg bg-blue-500 hover:bg-blue-400 text-white shadow-blue-500/20"
+        >
+          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+          {loading ? "Confirming…" : "Confirm Booking"}
+        </button>
+
+        {confirmModalOpen && (
+          <ConfirmBookingModal
+            bookingId={bookingId}
+            outstanding={balanceDue > 0 ? balanceDue : totalAmount}
+            onClose={() => setConfirmModalOpen(false)}
+            onSuccess={() => { setConfirmModalOpen(false); router.refresh(); }}
+          />
+        )}
+      </>
     );
   }
 
@@ -125,6 +116,156 @@ export default function BookingStatusButton({ bookingId, currentStatus, depositC
   );
 }
 
+// ─── Confirm Booking Modal ────────────────────────────────────────────────────
+// A pending booking is one the guest started paying for online and never
+// finished. Confirming it holds the room and unlocks check-in — but if it also
+// records nothing, the result is indistinguishable from a pay-at-hotel booking,
+// and a guest can check out owing the whole stay without anyone noticing. So the
+// desk has to say how it was actually settled.
+
+function ConfirmBookingModal({
+  bookingId, outstanding, onClose, onSuccess,
+}: {
+  bookingId: string;
+  outstanding: number;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [settledNow, setSettledNow] = useState(true);
+  const [collectMode, setCollectMode] = useState<"CASH" | "ONLINE">("CASH");
+  const [amount, setAmount] = useState(outstanding);
+
+  const collected = settledNow ? Math.min(Math.max(0, amount), outstanding) : 0;
+  const stillDue = +(outstanding - collected).toFixed(2);
+
+  async function doConfirm() {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/hotel-admin/bookings/${bookingId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: "CONFIRMED",
+          settlement: { amount: collected, collectMode },
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(
+          collected > 0
+            ? `Booking confirmed — ₹${collected.toLocaleString("en-IN")} recorded`
+            : `Booking confirmed — ₹${stillDue.toLocaleString("en-IN")} to collect at the desk`
+        );
+        onSuccess();
+      } else {
+        toast.error(data.error ?? "Failed to confirm booking");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => !loading && onClose()} />
+      <div className="relative bg-[#0d1a0e] border border-white/10 rounded-3xl p-6 w-full max-w-md shadow-2xl">
+
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
+              <CheckCircle2 className="w-5 h-5 text-blue-400" />
+            </div>
+            <div>
+              <h2 className="font-bold text-white">Confirm Booking</h2>
+              <p className="text-white/35 text-xs">The guest never completed payment online</p>
+            </div>
+          </div>
+          <button onClick={() => !loading && onClose()} className="text-white/30 hover:text-white/60 p-1 rounded-lg transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-4 mb-4">
+          <div className="flex justify-between text-sm">
+            <span className="text-white/50">Outstanding on this booking</span>
+            <span className="text-white/85 font-semibold">₹{outstanding.toLocaleString("en-IN")}</span>
+          </div>
+        </div>
+
+        <p className="text-xs text-white/40 uppercase tracking-wider font-semibold mb-2.5">
+          How was it settled?
+        </p>
+        <div className="grid grid-cols-3 gap-2 mb-4">
+          {[
+            { label: "Cash now", on: true, m: "CASH" as const },
+            { label: "UPI now", on: true, m: "ONLINE" as const },
+            { label: "Not paid", on: false, m: null },
+          ].map(opt => {
+            const active = opt.on ? settledNow && collectMode === opt.m : !settledNow;
+            return (
+              <button
+                key={opt.label}
+                type="button"
+                onClick={() => {
+                  if (opt.on) { setSettledNow(true); setCollectMode(opt.m!); setAmount(outstanding); }
+                  else setSettledNow(false);
+                }}
+                className={`px-2.5 py-2.5 rounded-xl text-xs font-semibold border transition-all ${
+                  active
+                    ? "bg-blue-500 text-white border-blue-400"
+                    : "bg-white/5 border-white/10 text-white/55 hover:text-white/85 hover:border-white/20"
+                }`}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {settledNow ? (
+          <div className="mb-4">
+            <label className="block text-[10px] text-white/35 uppercase tracking-wider font-semibold mb-1.5">
+              Amount taken (₹)
+            </label>
+            <input
+              type="number" min={0} max={outstanding} value={amount || ""}
+              onChange={e => setAmount(Math.min(Math.max(0, Number(e.target.value) || 0), outstanding))}
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder:text-white/25 text-sm focus:outline-none focus:border-blue-400/50 transition-all"
+            />
+            {stillDue > 0 && (
+              <p className="text-[11px] text-amber-400/80 mt-2">
+                ₹{stillDue.toLocaleString("en-IN")} will remain due at the desk.
+              </p>
+            )}
+          </div>
+        ) : (
+          <div className="flex items-start gap-2.5 bg-amber-500/10 border border-amber-500/25 rounded-2xl px-4 py-3 mb-4">
+            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+            <p className="text-amber-200/85 text-xs leading-relaxed">
+              The room will be held and check-in unlocked, but{" "}
+              <strong>₹{outstanding.toLocaleString("en-IN")}</strong> stays outstanding —
+              collect it before the guest leaves.
+            </p>
+          </div>
+        )}
+
+        <div className="flex gap-2.5">
+          <button onClick={() => !loading && onClose()} disabled={loading}
+            className="flex-1 px-4 py-3 rounded-xl border border-white/10 text-white/60 font-semibold text-sm hover:text-white/85 hover:border-white/20 transition-all disabled:opacity-50">
+            Cancel
+          </button>
+          <button onClick={doConfirm} disabled={loading}
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-blue-500 hover:bg-blue-400 text-white font-bold text-sm transition-all disabled:opacity-60">
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+            {loading ? "Confirming…" : "Confirm"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Checkout Deposit Modal ───────────────────────────────────────────────────
 
 interface ModalProps {
@@ -154,6 +295,11 @@ function CheckoutDepositModal({
   const [collectMode, setCollectMode] = useState<"CASH" | "ONLINE">("CASH");
   const [notes, setNotes] = useState("");
   const [deduction, setDeduction] = useState(0);
+  // Ticked by staff to say the outstanding balance really is being taken now.
+  // Deliberately unticked by default: checkout records the balance as collected,
+  // and a guest once walked out owing the whole stay because nothing made that
+  // consequence visible at the desk.
+  const [balanceAcknowledged, setBalanceAcknowledged] = useState(false);
   // Default to sending it back the way it came, when that's possible.
   const [refundMode, setRefundMode] = useState<"RAZORPAY" | "CASH" | "ONLINE">(
     canRefundToSource ? "RAZORPAY" : "CASH"
@@ -232,6 +378,22 @@ function CheckoutDepositModal({
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Unpaid room balance — the one thing that must not slip past the desk */}
+        {balanceDue > 0 && (
+          <div className="flex items-start gap-2.5 bg-red-500/12 border border-red-500/30 rounded-2xl px-4 py-3 mb-4">
+            <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-red-200 text-sm font-bold">
+                This guest still owes ₹{balanceDue.toLocaleString("en-IN")} for the room
+              </p>
+              <p className="text-red-200/70 text-xs mt-0.5 leading-relaxed">
+                They never paid online. Take it now — checking out records this balance as
+                collected, so it will show in the accounts either way.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Settlement breakdown — deposit nets against everything owed */}
         <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-4 space-y-2 mb-4">
@@ -361,6 +523,22 @@ function CheckoutDepositModal({
           className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder:text-white/25 text-sm focus:outline-none focus:border-amber-400/40 transition-all resize-none mb-4"
         />
 
+        {/* Explicit acknowledgement — no accidental "check out and forget" */}
+        {balanceDue > 0 && (
+          <label className="flex items-start gap-2.5 bg-white/[0.03] border border-white/10 rounded-2xl px-4 py-3 mb-4 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={balanceAcknowledged}
+              onChange={e => setBalanceAcknowledged(e.target.checked)}
+              className="mt-0.5 w-4 h-4 accent-amber-500 shrink-0"
+            />
+            <span className="text-white/70 text-xs leading-relaxed">
+              I have collected the ₹{balanceDue.toLocaleString("en-IN")} room balance
+              {collect > 0 ? " (included in the amount below)" : ""}, or the owner has agreed to write it off.
+            </span>
+          </label>
+        )}
+
         {/* Actions */}
         <div className="flex gap-3">
           <button
@@ -372,8 +550,9 @@ function CheckoutDepositModal({
           </button>
           <button
             onClick={doCheckout}
-            disabled={loading}
-            className="flex-1 py-3 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/25 text-amber-400 hover:text-amber-300 text-sm font-bold transition-all disabled:opacity-50"
+            disabled={loading || (balanceDue > 0 && !balanceAcknowledged)}
+            title={balanceDue > 0 && !balanceAcknowledged ? "Confirm the room balance has been collected first" : undefined}
+            className="flex-1 py-3 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/25 text-amber-400 hover:text-amber-300 text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? (
               <span className="flex items-center justify-center gap-2">
