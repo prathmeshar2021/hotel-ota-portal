@@ -254,7 +254,11 @@ export default function AddChargeModal({ bookingId, disabled }: Props) {
                 </button>
                 <button
                   type="submit"
-                  disabled={loading || !chargeType || total <= 0}
+                  // A complimentary item is still worth recording, so ₹0 must
+                  // submit. The price field only has to be filled in — blank
+                  // means staff haven't priced it yet, which is not the same
+                  // as free.
+                  disabled={loading || !chargeType || qty <= 0 || unitPrice.trim() === "" || price < 0}
                   className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black font-bold text-sm transition-all shadow-lg shadow-amber-500/20"
                 >
                   {loading ? (

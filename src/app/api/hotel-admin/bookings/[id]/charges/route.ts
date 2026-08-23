@@ -104,9 +104,13 @@ export async function POST(
   return NextResponse.json(
     {
       ...charge,
-      message: paidNow
-        ? `₹${amount} collected in ${settlement === "ONLINE" ? "UPI" : "cash"}`
-        : `₹${amount} added — will come off the deposit at checkout`,
+      message: amount === 0
+        // Complimentary: it belongs on the guest's bill as something given,
+        // but there is nothing to collect or deduct for it.
+        ? `${chargeType.toLowerCase().replace(/_/g, " ")} added as complimentary — no charge`
+        : paidNow
+          ? `₹${amount} collected in ${settlement === "ONLINE" ? "UPI" : "cash"}`
+          : `₹${amount} added — will come off the deposit at checkout`,
     },
     { status: 201 }
   );
