@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
-import { consumeOtp } from "@/lib/utils/otp";
+import { recordStaffAction } from "@/lib/services/staff-action";
 import { z } from "zod";
 
 const Schema = z.object({
   amount: z.number().positive("Amount must be positive"),
   note: z.string().optional(),
-  otpId: z.string(),
-  otpCode: z.string(),
 });
 
 export async function POST(req: NextRequest) {
@@ -25,16 +23,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: msgs[0] ?? "Invalid request" }, { status: 400 });
   }
 
-  const { amount, note, otpId, otpCode } = parsed.data;
-
-  // Owner OTP approval required for any cash collection (debit of cash)
-  const otp = await consumeOtp({
-    hotelId,
-    otpId,
-    code: otpCode,
-    purpose: "CASH_COLLECTION",
-  });
-  if (!otp.ok) return NextResponse.json({ error: otp.error }, { status: 403 });
+  const { amount, note } = parsed.data;
 
   const collection = await prisma.cashCollection.create({
     data: {
@@ -43,6 +32,21 @@ export async function POST(req: NextRequest) {
       note: note || undefined,
       collectedBy: session.user.name ?? "Staff",
     },
+  });
+
+  // No approval code to wait for — the owner is told instead, and it is kept in
+  // the activity log for them to review whenever they like.
+  await recordStaffAction({
+    hotelId,
+    kind: "CASH_COLLECTION",
+    summary: `₹${amount.toLocaleString("en-IN")} in cash was taken out of the till.`,
+    amount,
+    refType: "collection",
+    refId: collection.id,
+    reason: note || undefined,
+    actorId: session.user.id,
+    actorName: session.user.name ?? session.user.email ?? "Staff",
+    actorRole: session.user.role ?? "HOTEL_STAFF",
   });
 
   return NextResponse.json({

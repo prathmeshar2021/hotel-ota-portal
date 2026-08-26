@@ -119,61 +119,37 @@ export default function LedgerClient() {
 
     setSubmitting(true);
     try {
-      if (entryType === "CREDIT") {
-        // Credits don't need approval — post directly
-        const res = await fetch("/api/hotel-admin/ledger", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ entryType: "CREDIT", ...payload }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "Failed to save entry");
-        toast.success(data.message);
-        resetForm();
-        fetchEntries(range, fromDate, toDate);
-      } else {
-        // Debits require owner OTP approval — send a non-blocking request
-        const res = await fetch("/api/hotel-admin/otp/request", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            purpose: "EXPENSE_DEBIT",
-            description: `Expense — ${finalCategory}`,
-            amount: amt,
-            actionPayload: { ...payload },
-          }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error ?? "Failed to submit request");
-        toast.success("Approval request sent — complete in Pending Approvals once the owner issues the code.", {
-          duration: 5000,
-        });
-        resetForm();
-      }
+      // Both go in directly. Money-out used to wait on the owner's approval code;
+      // it is now recorded at once and the owner notified as it happens.
+      const res = await fetch("/api/hotel-admin/ledger", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entryType, ...payload }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "Failed to save entry");
+      toast.success(data.message);
+      resetForm();
+      fetchEntries(range, fromDate, toDate);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed");
     } finally { setSubmitting(false); }
   }
 
-  // ── Delete ── (requires owner OTP approval — send non-blocking request)
+  // ── Delete ── Removing an entry rewrites the accounts, so the owner is told.
   async function handleDelete(entry: LedgerEntry) {
-    if (!confirm("Request approval to delete this entry?")) return;
+    if (!confirm(
+      `Delete this ${entry.entryType.toLowerCase()} of ₹${entry.amount.toLocaleString("en-IN")} (${entry.category})?\n\nIt will come out of your accounts and the owner will be notified.`
+    )) return;
     setDeletingId(entry.id);
     try {
-      const res = await fetch("/api/hotel-admin/otp/request", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          purpose: "DELETE_TRANSACTION",
-          description: `Delete ${entry.entryType.toLowerCase()} — ${entry.category} (₹${entry.amount.toLocaleString("en-IN")})`,
-          amount: entry.amount,
-          refId: entry.id,
-          actionPayload: {},
-        }),
+      const res = await fetch(`/api/hotel-admin/ledger?id=${encodeURIComponent(entry.id)}`, {
+        method: "DELETE",
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to submit request");
-      toast.success("Approval request sent — complete in Pending Approvals.", { duration: 4000 });
+      if (!res.ok) throw new Error(data.error ?? "Failed to delete entry");
+      toast.success("Entry deleted — owner notified");
+      fetchEntries(range, fromDate, toDate);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed");
     } finally { setDeletingId(null); }

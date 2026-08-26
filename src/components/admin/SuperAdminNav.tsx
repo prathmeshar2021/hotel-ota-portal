@@ -42,6 +42,7 @@ const NAV_LINKS: { href: string; tKey: PanelKey; icon: typeof LayoutDashboard; b
   { href: "/admin/discounts", tKey: "nav.staffDiscounts", icon: Percent },
   { href: "/admin/approvals", tKey: "nav.approvals", icon: ShieldCheck, badge: true },
   { href: "/admin/staff", tKey: "nav.staff", icon: Users },
+  { href: "/admin/activity", tKey: "nav.activityLog", icon: ShieldCheck },
   { href: "/admin/deleted-bookings", tKey: "nav.deletedBookings", icon: Trash2 },
   { href: "/admin/hotel-admin/support", tKey: "nav.supportChat", icon: MessageCircle },
 ];

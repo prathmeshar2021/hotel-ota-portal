@@ -296,4 +296,47 @@ export const email = {
     `);
     return send(ownerEmail, `Booking Deleted – ${data.bookingRef} | ${data.guestName}`, html);
   },
+
+  /**
+   * A sensitive desk action just happened — cash out of the till, an expense, a
+   * deleted ledger entry, a cancelled booking. These used to wait on the
+   * owner's OTP; now they go through and the owner is told straight away.
+   */
+  sendOwnerStaffAction: (data: {
+    label: string;
+    summary: string;
+    amount?: number;
+    actorName: string;
+    actorRole: string;
+    bookingRef?: string;
+    guestName?: string;
+    reason?: string;
+    extraLines?: string[];
+    moneyOut?: boolean;
+  }) => {
+    const ownerEmail = process.env.OWNER_EMAIL;
+    if (!ownerEmail) return Promise.resolve(undefined);
+
+    const accent = data.moneyOut ? "#B91C1C" : "#B45309";
+    const html = shell(`
+      <p style="margin:0 0 4px;color:${accent};font-size:16px;font-weight:700;">${data.label}</p>
+      <p style="margin:0 0 24px;color:#666;font-size:14px;">${data.summary}</p>
+
+      <div style="background:#f9f9f7;border-radius:8px;padding:16px 20px;margin-bottom:20px;">
+        <table width="100%" cellpadding="0" cellspacing="0">
+          ${data.amount != null ? row("Amount", `₹${data.amount.toLocaleString("en-IN")}`) : ""}
+          ${data.bookingRef ? row("Booking", data.bookingRef + (data.guestName ? ` · ${data.guestName}` : "")) : ""}
+          ${(data.extraLines ?? []).map((l, i) => row(i === 0 ? "Details" : "", l)).join("")}
+          ${row("Done by", `${data.actorName} (${data.actorRole.replace(/_/g, " ").toLowerCase()})`)}
+          ${row("Reason", data.reason || "Not given")}
+          ${row("When", new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }))}
+        </table>
+      </div>
+
+      <p style="margin:0 0 20px;color:#666;font-size:13px;line-height:1.6;">This action no longer waits for your approval code — it has already been applied. Every one is kept in the activity log if you want to review them together.</p>
+
+      <a href="${APP_URL}/admin/activity" style="display:block;background:#F59E0B;color:#000;font-weight:700;font-size:14px;text-align:center;padding:13px 24px;border-radius:8px;text-decoration:none;">View Activity Log →</a>
+    `);
+    return send(ownerEmail, `${data.label} – ${data.amount != null ? `₹${data.amount.toLocaleString("en-IN")} · ` : ""}${data.actorName}`, html);
+  },
 };

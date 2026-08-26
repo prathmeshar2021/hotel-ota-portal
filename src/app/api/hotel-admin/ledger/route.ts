@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
-import { consumeOtp } from "@/lib/utils/otp";
+import { recordStaffAction } from "@/lib/services/staff-action";
 import { z } from "zod";
 import { startOfDay, endOfDay, subDays, startOfMonth, endOfMonth, subMonths } from "date-fns";
 
@@ -25,8 +25,6 @@ const CreateSchema = z.object({
   mode: z.enum(["CASH", "ONLINE"]),
   expenseDate: z.string().optional(), // ISO date string; defaults to now
   // Required only for DEBIT entries (owner-approved)
-  otpId: z.string().optional(),
-  otpCode: z.string().optional(),
 });
 
 // ── GET — list entries ────────────────────────────────────────────────────────
@@ -104,15 +102,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: msgs[0] ?? "Invalid request" }, { status: 400 });
     }
 
-    const { entryType, category, description, amount, mode, expenseDate, otpId, otpCode } = parsed.data;
-
-    // Owner OTP approval required for any DEBIT (money going out)
-    if (entryType === "DEBIT") {
-      if (!otpId || !otpCode)
-        return NextResponse.json({ error: "Owner OTP approval required for debits" }, { status: 403 });
-      const otp = await consumeOtp({ hotelId, otpId, code: otpCode, purpose: "EXPENSE_DEBIT" });
-      if (!otp.ok) return NextResponse.json({ error: otp.error }, { status: 403 });
-    }
+    const { entryType, category, description, amount, mode, expenseDate } = parsed.data;
 
     const entry = await prisma.hotelExpense.create({
       data: {
@@ -126,6 +116,24 @@ export async function POST(req: NextRequest) {
         addedBy: session.user.name ?? "Staff",
       },
     });
+
+    // Money going out no longer waits on an approval code; the owner is told as
+    // it happens and it stays in the activity log.
+    if (entryType === "DEBIT") {
+      await recordStaffAction({
+        hotelId,
+        kind: "EXPENSE_DEBIT",
+        summary: `₹${amount.toLocaleString("en-IN")} expense recorded under ${category}.`,
+        amount,
+        refType: "expense",
+        refId: entry.id,
+        reason: description || undefined,
+        actorId: session.user.id,
+        actorName: session.user.name ?? session.user.email ?? "Staff",
+        actorRole: session.user.role ?? "HOTEL_STAFF",
+        notifyLines: [`Paid by ${mode === "CASH" ? "cash" : mode === "ONLINE" ? "UPI / bank" : "mixed"}`],
+      });
+    }
 
     return NextResponse.json({
       success: true,
@@ -156,20 +164,26 @@ export async function DELETE(req: NextRequest) {
     });
     if (!entry) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    // Owner OTP approval required to delete any ledger entry
-    const otpId = searchParams.get("otpId");
-    const otpCode = searchParams.get("otpCode");
-    if (!otpId || !otpCode)
-      return NextResponse.json({ error: "Owner OTP approval required to delete entries" }, { status: 403 });
-    const otp = await consumeOtp({
-      hotelId: session.user.hotelId,
-      otpId,
-      code: otpCode,
-      purpose: "DELETE_TRANSACTION",
-    });
-    if (!otp.ok) return NextResponse.json({ error: otp.error }, { status: 403 });
-
     await prisma.hotelExpense.delete({ where: { id } });
+
+    // Deleting a ledger entry rewrites what the accounts say, so the owner
+    // hears about it — including what the entry was, since it no longer exists
+    // for them to look up.
+    await recordStaffAction({
+      hotelId: session.user.hotelId,
+      kind: "DELETE_TRANSACTION",
+      summary: `A ${entry.entryType === "DEBIT" ? "money-out" : "money-in"} ledger entry of ₹${entry.amount.toLocaleString("en-IN")} (${entry.category}) was deleted.`,
+      amount: entry.amount,
+      refType: "expense",
+      refId: entry.id,
+      reason: entry.description || undefined,
+      actorId: session.user.id,
+      actorName: session.user.name ?? session.user.email ?? "Staff",
+      actorRole: session.user.role ?? "HOTEL_ADMIN",
+      details: { entryType: entry.entryType, category: entry.category, mode: entry.mode, addedBy: entry.addedBy },
+      notifyLines: [`Originally added by ${entry.addedBy ?? "unknown"}`],
+    });
+
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error("[Ledger DELETE]", err);

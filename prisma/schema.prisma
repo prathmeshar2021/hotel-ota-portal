@@ -452,6 +452,59 @@ model Booking {
   @@index([hotelId, deletedAt])
 }
 
+// ─── STAFF ACTION LOG ─────────────────────────────────────────────────────────
+// Sensitive desk actions used to need the owner's OTP before they could happen,
+// which meant staff waiting on a phone to take cash out of the till or cancel a
+// booking. They now go through immediately and are recorded here instead, with
+// the owner notified on WhatsApp and by email as each one happens. The gate
+// moved from before the action to after it: nothing is blocked, nothing is
+// unseen.
+
+enum StaffActionKind {
+  CASH_COLLECTION    // cash taken out of the till by the owner/staff
+  EXPENSE_DEBIT      // money-out entry added to the ledger
+  DELETE_TRANSACTION // a ledger entry removed
+  CANCEL_BOOKING     // booking cancelled, usually with a refund
+  DELETE_BOOKING     // booking removed from the panel
+  DEPOSIT_DEDUCTION
+  REFUND
+  OTHER
+}
+
+model StaffActionLog {
+  id      String          @id @default(cuid())
+  hotelId String
+  kind    StaffActionKind
+  /// One line describing what happened, in the words the owner would use.
+  summary String
+  amount  Float?
+  /// What it was done to, so the log can link back.
+  refType String? // "booking" | "expense" | "collection"
+  refId   String?
+  /// Denormalised so the log stays searchable and readable even after the thing
+  /// it refers to is itself deleted.
+  bookingRef String?
+  guestName  String?
+  reason     String?
+
+  actorId   String?
+  actorName String
+  actorRole String
+
+  details Json?
+
+  /// Whether the owner's WhatsApp and email actually went out. A false here is
+  /// the case worth looking at — the action happened but nobody was told.
+  notifiedWhatsapp Boolean @default(false)
+  notifiedEmail    Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([hotelId, createdAt])
+  @@index([hotelId, kind])
+  @@index([bookingRef])
+}
+
 // ─── BOOKING TRANSACTION ──────────────────────────────────────────────────────
 // One row per movement of money, written at the moment it happens and never
 // edited afterwards. The Booking's own cashPaid/onlinePaid are running totals:

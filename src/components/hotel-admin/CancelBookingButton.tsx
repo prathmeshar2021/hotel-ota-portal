@@ -20,6 +20,7 @@ export default function AdminCancelBookingButton({
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [waiveCharge, setWaiveCharge] = useState(false);
+  const [reason, setReason] = useState("");
   const router = useRouter();
 
   const policy = getCancellationPolicy(new Date(checkInDate));
@@ -32,30 +33,23 @@ export default function AdminCancelBookingButton({
     policy.tier === "HALF" ? "bg-amber-500/10 border-amber-500/20 text-amber-400" :
     "bg-red-500/10 border-red-500/20 text-red-400";
 
-  // Non-blocking: create an OTP approval request and let admin continue.
-  // The actual cancellation is completed later in Pending Approvals.
-  async function requestCancellationApproval() {
+  // Cancels immediately. This used to raise an OTP request the owner had to
+  // approve before anything happened, which left a guest at the desk waiting on
+  // a phone call; the owner is now notified as it happens instead.
+  async function cancelBooking() {
     setSubmitting(true);
     try {
-      const res = await fetch("/api/hotel-admin/otp/request", {
+      const res = await fetch(`/api/hotel-admin/bookings/${bookingId}/cancel`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          purpose: "DELETE_BOOKING",
-          description: `Cancel booking #${bookingRef}`,
-          amount: finalCharge > 0 ? finalCharge : undefined,
-          refId: bookingId,
-          actionPayload: {
-            overrideCharge: finalCharge,
-            bookingRef,
-          },
+          overrideCharge: finalCharge,
+          reason: reason.trim() || undefined,
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to submit request");
-      toast.success("Approval request sent — go to Pending Approvals to complete when the owner issues the code.", {
-        duration: 5000,
-      });
+      if (!res.ok) throw new Error(data.error ?? "Failed to cancel booking");
+      toast.success(data.refundMessage ?? `${bookingRef} cancelled`, { duration: 5000 });
       setOpen(false);
       router.refresh();
     } catch (e) {
@@ -151,10 +145,18 @@ export default function AdminCancelBookingButton({
               </label>
             )}
 
-            {/* Owner approval notice */}
+            {/* Reason — goes to the owner and into the activity log */}
+            <input
+              value={reason}
+              onChange={e => setReason(e.target.value)}
+              placeholder="Reason for cancelling (optional)"
+              maxLength={300}
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder:text-white/25 text-sm focus:outline-none focus:border-red-400/40 transition-all mb-4"
+            />
+
             <div className="bg-amber-500/8 border border-amber-500/20 rounded-xl px-4 py-3 mb-4 text-xs text-amber-300/80">
               <ShieldCheck className="w-3.5 h-3.5 inline mr-1.5" />
-              This will send an approval request to the owner. Once approved, complete the cancellation from <strong>Pending Approvals</strong>.
+              This cancels straight away and refunds the guest. The owner is notified on WhatsApp and email.
             </div>
 
             {/* Actions */}
@@ -167,7 +169,7 @@ export default function AdminCancelBookingButton({
                 Keep Booking
               </button>
               <button
-                onClick={requestCancellationApproval}
+                onClick={cancelBooking}
                 disabled={submitting}
                 className="flex-1 py-3 rounded-xl bg-red-500/15 hover:bg-red-500/25 border border-red-500/25 text-red-400 hover:text-red-300 text-sm font-bold transition-all disabled:opacity-60"
               >

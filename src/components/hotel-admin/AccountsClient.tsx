@@ -321,29 +321,23 @@ function CollectCashModal({
   const parsed = Number(amount) || 0;
   const isOverdraw = parsed > cashInHand;
 
-  // Non-blocking: submit an OTP approval request and close the modal.
-  // Admin completes the collection later in Pending Approvals.
+  // Records the collection immediately. It used to raise an OTP request that
+  // the owner had to approve before the cash could be booked out; the owner is
+  // notified as it happens instead.
   async function handleSubmit() {
     if (parsed <= 0) { toast.error("Enter a valid amount"); return; }
     if (isOverdraw) { toast.error("Cannot collect more than cash in hand"); return; }
     setLoading(true);
     try {
-      const res = await fetch("/api/hotel-admin/otp/request", {
+      const res = await fetch("/api/hotel-admin/accounts/collect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          purpose: "CASH_COLLECTION",
-          description: note ? `Cash collection — ${note}` : `Cash collection of ₹${parsed.toLocaleString("en-IN")}`,
-          amount: parsed,
-          actionPayload: { amount: parsed, note: note || undefined },
-        }),
+        body: JSON.stringify({ amount: parsed, note: note || undefined }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to submit request");
+      if (!res.ok) throw new Error(data.error ?? "Failed to record collection");
       setDone(true);
-      toast.success("Approval request sent — complete in Pending Approvals once the owner issues a code.", {
-        duration: 5000,
-      });
+      toast.success(data.message ?? `₹${parsed.toLocaleString("en-IN")} recorded`, { duration: 4000 });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Something went wrong");
     } finally { setLoading(false); }
@@ -373,12 +367,12 @@ function CollectCashModal({
         {done ? (
           /* Success state */
           <div className="text-center py-4">
-            <div className="w-14 h-14 rounded-full bg-amber-500/15 border border-amber-500/20 flex items-center justify-center mx-auto mb-4">
-              <CheckCircle2 className="w-7 h-7 text-amber-400" />
+            <div className="w-14 h-14 rounded-full bg-green-500/15 border border-green-500/20 flex items-center justify-center mx-auto mb-4">
+              <CheckCircle2 className="w-7 h-7 text-green-400" />
             </div>
-            <p className="text-white font-bold text-lg">Request Sent</p>
+            <p className="text-white font-bold text-lg">Cash Collected</p>
             <p className="text-white/40 text-sm mt-1">
-              Approval request submitted. Go to <strong className="text-white/60">Pending Approvals</strong> to complete once the owner issues the OTP code.
+              Recorded and taken out of cash in hand. The owner has been notified.
             </p>
             <button onClick={onSuccess}
               className="mt-5 w-full py-3 rounded-xl bg-white/8 hover:bg-white/12 border border-white/10 text-white/70 font-semibold text-sm transition-all">

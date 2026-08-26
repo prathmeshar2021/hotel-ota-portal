@@ -6,6 +6,7 @@ import { format } from "date-fns";
 import { getCategoryMeta } from "@/lib/utils/room-categories";
 import { gupshup } from "@/lib/services/gupshup";
 import { email } from "@/lib/services/email";
+import { recordStaffAction } from "@/lib/services/staff-action";
 
 /**
  * Delete a booking (archive).
@@ -106,6 +107,27 @@ export async function POST(
     gupshup.sendOwnerBookingDeleted(notif),
     email.sendOwnerBookingDeleted(notif),
   ]);
+
+  // Also lands in the activity log, so every sensitive desk action is reviewable
+  // from one place rather than only in the owner's inbox.
+  await recordStaffAction({
+    hotelId: session.user.hotelId,
+    kind: "DELETE_BOOKING",
+    summary: `Booking ${booking.bookingRef} was deleted from the panel.`,
+    amount: amountPaid > 0 ? amountPaid : null,
+    refType: "booking",
+    refId: booking.id,
+    bookingRef: booking.bookingRef,
+    guestName: booking.primaryGuest.name,
+    reason,
+    actorId: session.user.id,
+    actorName: deletedByName,
+    actorRole: session.user.role ?? "HOTEL_STAFF",
+    details: { statusWhenDeleted: booking.status, totalAmount: booking.totalAmount, amountPaid },
+    notifyLines: amountPaid > 0
+      ? [`₹${amountPaid.toLocaleString("en-IN")} had been paid — check if it needs refunding`]
+      : [],
+  });
 
   return NextResponse.json({
     success: true,

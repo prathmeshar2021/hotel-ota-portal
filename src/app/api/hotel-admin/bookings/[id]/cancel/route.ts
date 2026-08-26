@@ -2,15 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
 import { getCancellationPolicy, computeCancellationBreakdown, DEPOSIT_AMOUNT } from "@/lib/utils/cancellation";
-import { consumeOtp } from "@/lib/utils/otp";
+import { recordStaffAction } from "@/lib/services/staff-action";
 import { processBookingRefund } from "@/lib/services/refund";
 import { z } from "zod";
 
 const Schema = z.object({
   // Admin can optionally override the charge (e.g., waive it as goodwill)
   overrideCharge: z.number().min(0).optional(),
-  otpId: z.string(),
-  otpCode: z.string(),
+  /** Why it's being cancelled — goes to the owner and into the activity log. */
+  reason: z.string().trim().max(300).optional(),
 });
 
 export async function POST(
@@ -43,6 +43,7 @@ export async function POST(
       checkInDate: true,
       totalAmount: true,
       onlinePaid: true,
+      primaryGuest: { select: { name: true } },
       refundableDeposit: true,
       bookingRef: true,
       roomId: true,
@@ -56,16 +57,6 @@ export async function POST(
       { status: 404 }
     );
   }
-
-  // Owner OTP approval required to cancel a booking
-  const otp = await consumeOtp({
-    hotelId: session.user.hotelId,
-    otpId: parsed.data.otpId,
-    code: parsed.data.otpCode,
-    purpose: "DELETE_BOOKING",
-    refId: booking.id,
-  });
-  if (!otp.ok) return NextResponse.json({ error: otp.error }, { status: 403 });
 
   const policy = getCancellationPolicy(new Date(booking.checkInDate));
 
@@ -109,6 +100,28 @@ export async function POST(
   // Issue the refund (auto via Razorpay where possible; otherwise flagged for the desk).
   const refund = await processBookingRefund(booking.id, totalRefund, {
     reason: `Admin cancellation (${policy.tier})`,
+  });
+
+  // Cancelling no longer waits on an approval code. The owner is told as it
+  // happens — including the refund, which is the part they'd want to query.
+  await recordStaffAction({
+    hotelId: session.user.hotelId,
+    kind: "CANCEL_BOOKING",
+    summary: `Booking ${booking.bookingRef} was cancelled (${policy.tier} policy).`,
+    amount: totalRefund,
+    refType: "booking",
+    refId: booking.id,
+    bookingRef: booking.bookingRef,
+    guestName: booking.primaryGuest?.name ?? undefined,
+    reason: parsed.data.reason?.trim() || undefined,
+    actorId: session.user.id,
+    actorName: session.user.name ?? session.user.email ?? "Staff",
+    actorRole: session.user.role ?? "HOTEL_STAFF",
+    details: { cancellationCharge: finalCharge, totalRefund, tier: policy.tier, refundStatus: refund.refundStatus },
+    notifyLines: [
+      `Refund to guest: ₹${totalRefund.toLocaleString("en-IN")} (${refund.refundStatus.toLowerCase()})`,
+      `Retained as cancellation fee: ₹${finalCharge.toLocaleString("en-IN")}`,
+    ],
   });
 
   return NextResponse.json({
