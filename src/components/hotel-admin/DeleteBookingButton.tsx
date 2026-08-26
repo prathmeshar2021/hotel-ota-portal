@@ -19,11 +19,14 @@ import { Trash2, Loader2, X, AlertTriangle } from "lucide-react";
 
 /** Why a booking usually gets removed — one tap instead of typing. */
 const REASONS = [
+  "Guest never turned up",
   "Test / duplicate entry",
   "Entered by mistake",
-  "Guest never turned up",
   "Booked on the wrong dates",
 ];
+
+/** The common case, pre-selected so the usual delete is one tap. */
+const DEFAULT_REASON = REASONS[0];
 
 export default function DeleteBookingButton({
   bookingId,
@@ -39,7 +42,7 @@ export default function DeleteBookingButton({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [reason, setReason] = useState("");
+  const [reason, setReason] = useState(DEFAULT_REASON);
   const [moneyAcknowledged, setMoneyAcknowledged] = useState(false);
 
   const blocked = !reason.trim() || (amountPaid > 0 && !moneyAcknowledged);
@@ -69,7 +72,7 @@ export default function DeleteBookingButton({
   return (
     <>
       <button
-        onClick={() => { setReason(""); setMoneyAcknowledged(false); setOpen(true); }}
+        onClick={() => { setReason(DEFAULT_REASON); setMoneyAcknowledged(false); setOpen(true); }}
         className="flex items-center gap-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 hover:border-red-500/40 text-red-400 hover:text-red-300 text-sm font-semibold px-3.5 py-2 rounded-xl transition-all"
       >
         <Trash2 className="w-4 h-4" />
