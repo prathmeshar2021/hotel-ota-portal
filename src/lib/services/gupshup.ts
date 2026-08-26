@@ -310,6 +310,54 @@ export const gupshup = {
     });
   },
 
+  /**
+   * A booking was archived by staff. The owner hears about every one, because
+   * this is the action that makes a booking — and any money on it — vanish from
+   * the panel.
+   */
+  sendOwnerBookingDeleted: (data: {
+    bookingRef: string;
+    guestName: string;
+    roomType: string;
+    checkIn: string;
+    checkOut: string;
+    status: string;
+    totalAmount: number;
+    amountPaid: number;
+    deletedBy: string;
+    reason?: string;
+  }) => {
+    const ownerPhone = process.env.OWNER_WHATSAPP;
+    if (!ownerPhone) return Promise.resolve(null);
+
+    if (process.env.GUPSHUP_TEMPLATE_BOOKING_DELETED) {
+      return sendTemplate(ownerPhone, process.env.GUPSHUP_TEMPLATE_BOOKING_DELETED, [
+        data.bookingRef,
+        data.guestName,
+        `${data.checkIn} to ${data.checkOut}`,
+        `₹${data.amountPaid.toLocaleString("en-IN")} paid of ₹${data.totalAmount.toLocaleString("en-IN")}`,
+        data.deletedBy,
+        data.reason || "Not given",
+      ]);
+    }
+
+    return send({
+      to: ownerPhone,
+      message:
+        `🗑️ *Booking Deleted — ${data.bookingRef}*\n\n` +
+        `👤 ${data.guestName}\n` +
+        `🛏️ ${data.roomType}\n` +
+        `📅 ${data.checkIn} → ${data.checkOut}\n` +
+        `📋 Was: ${data.status}\n` +
+        `💰 ₹${data.amountPaid.toLocaleString("en-IN")} paid of ₹${data.totalAmount.toLocaleString("en-IN")}\n` +
+        `🧑‍💼 By: ${data.deletedBy}\n` +
+        `📝 Reason: ${data.reason || "Not given"}` +
+        (data.amountPaid > 0
+          ? `\n\n⚠️ Money was collected on this booking — check if it needs refunding.`
+          : ""),
+    });
+  },
+
   /** Free-form alert to the owner's WhatsApp (best-effort; needs 24h opt-in window). */
   sendOwnerText: (message: string) => {
     const ownerPhone = process.env.OWNER_WHATSAPP;

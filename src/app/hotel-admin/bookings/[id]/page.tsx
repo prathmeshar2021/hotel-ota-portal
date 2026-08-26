@@ -38,6 +38,7 @@ import CollectPaymentModal from "@/components/hotel-admin/CollectPaymentModal";
 import AddChargeModal from "@/components/hotel-admin/AddChargeModal";
 import DeleteChargeButton from "@/components/hotel-admin/DeleteChargeButton";
 import AdminCancelBookingButton from "@/components/hotel-admin/CancelBookingButton";
+import DeleteBookingButton from "@/components/hotel-admin/DeleteBookingButton";
 import AssignRoomButton from "@/components/hotel-admin/AssignRoomButton";
 import GuestCountEditor from "@/components/hotel-admin/GuestCountEditor";
 import AddCompanionButton from "@/components/hotel-admin/AddCompanionButton";
@@ -168,6 +169,15 @@ export default async function BookingDetailPage({
 
         {/* Action buttons */}
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Removing a booking entirely — available in any state, since the
+              usual reasons (a test entry, a duplicate, wrong dates) are just as
+              likely to be spotted after check-in as before. */}
+          <DeleteBookingButton
+            bookingId={booking.id}
+            bookingRef={booking.bookingRef}
+            guestName={booking.primaryGuest.name}
+            amountPaid={booking.cashPaid + booking.onlinePaid}
+          />
           {booking.status === "CONFIRMED" && (
             <>
               <AdminCancelBookingButton

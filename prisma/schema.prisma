@@ -434,12 +434,22 @@ model Booking {
   consent      Consent?
   payment      Payment?
   gstInvoice   GstInvoice?
+  // Archived ("deleted") by staff. The row, its payments and any GST invoice are
+  // kept — a tax invoice is a legal record and its numbering must stay
+  // unbroken — but an archived booking is invisible everywhere: lists, the room
+  // board, availability, and the accounts statement. Reversible by a super admin.
+  deletedAt     DateTime?
+  deletedById   String?
+  deletedByName String?
+  deleteReason  String?
+
   charges      AdditionalCharge[]
   txns         BookingTxn[]
   onlineCheckin OnlineCheckin?
   syncLogs     AppsheetSyncLog[]
 
   @@index([bookingGroupId])
+  @@index([hotelId, deletedAt])
 }
 
 // ─── BOOKING TRANSACTION ──────────────────────────────────────────────────────

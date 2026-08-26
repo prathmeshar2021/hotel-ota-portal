@@ -248,4 +248,52 @@ export const email = {
     `);
     return send(ownerEmail, `New Booking – ${data.bookingRef} | ${data.roomType}`, html);
   },
+
+  /**
+   * A booking was archived by staff. Sent to the owner every time, because this
+   * is the one action that makes a booking — and any money on it — disappear
+   * from the panel, so it should never happen without them hearing about it.
+   */
+  sendOwnerBookingDeleted: (data: {
+    bookingRef: string;
+    guestName: string;
+    guestPhone?: string;
+    roomType: string;
+    checkIn: string;
+    checkOut: string;
+    status: string;
+    totalAmount: number;
+    amountPaid: number;
+    deletedBy: string;
+    reason?: string;
+  }) => {
+    const ownerEmail = process.env.OWNER_EMAIL;
+    if (!ownerEmail) return Promise.resolve(undefined);
+
+    const html = shell(`
+      <p style="margin:0 0 4px;color:#B91C1C;font-size:16px;font-weight:700;">Booking Deleted</p>
+      <p style="margin:0 0 24px;color:#666;font-size:14px;">${data.deletedBy} removed a booking from the admin panel. It no longer holds a room or counts towards your accounts.</p>
+
+      <div style="background:#f9f9f7;border-radius:8px;padding:16px 20px;margin-bottom:20px;">
+        <table width="100%" cellpadding="0" cellspacing="0">
+          ${row("Booking Ref", data.bookingRef)}
+          ${row("Guest", data.guestName + (data.guestPhone ? ` · ${data.guestPhone}` : ""))}
+          ${row("Room", data.roomType)}
+          ${row("Stay", `${data.checkIn} → ${data.checkOut}`)}
+          ${row("Status when deleted", data.status)}
+          ${row("Booking Total", `₹${data.totalAmount.toLocaleString("en-IN")}`)}
+          ${row("Amount Paid", `₹${data.amountPaid.toLocaleString("en-IN")}`)}
+          ${row("Deleted By", data.deletedBy)}
+          ${row("Reason", data.reason || "Not given")}
+        </table>
+      </div>
+
+      ${data.amountPaid > 0 ? `<p style="margin:0 0 20px;padding:12px 16px;background:#FEF2F2;border-left:3px solid #B91C1C;color:#7F1D1D;font-size:13px;line-height:1.6;">₹${data.amountPaid.toLocaleString("en-IN")} had been collected on this booking. That money has been removed from your revenue figures — check whether it needs refunding.</p>` : ""}
+
+      <p style="margin:0 0 20px;color:#666;font-size:13px;line-height:1.6;">Nothing has been erased. The booking, its payments and any tax invoice are retained and can be restored.</p>
+
+      <a href="${APP_URL}/hotel-admin/bookings" style="display:block;background:#F59E0B;color:#000;font-weight:700;font-size:14px;text-align:center;padding:13px 24px;border-radius:8px;text-decoration:none;">Open Admin Panel →</a>
+    `);
+    return send(ownerEmail, `Booking Deleted – ${data.bookingRef} | ${data.guestName}`, html);
+  },
 };
