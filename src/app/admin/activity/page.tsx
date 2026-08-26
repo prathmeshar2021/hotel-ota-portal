@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { requireSuperAdmin } from "@/lib/auth/superAdmin";
 import { prisma } from "@/lib/db/prisma";
-import { ShieldCheck, Banknote, CalendarX } from "lucide-react";
+import { ShieldCheck, Banknote, CalendarX, Pencil } from "lucide-react";
 import { startOfMonth } from "date-fns";
 import ActivityLogClient, { type ActivityRow } from "@/components/admin/ActivityLogClient";
 
@@ -21,7 +21,7 @@ export default async function ActivityLogPage() {
 
   const monthStart = startOfMonth(new Date());
 
-  const [logs, monthCash, monthCancels] = await Promise.all([
+  const [logs, monthCash, monthCancels, monthEdits] = await Promise.all([
     prisma.staffActionLog.findMany({
       where: { hotelId: ctx.hotelId },
       orderBy: { createdAt: "desc" },
@@ -33,6 +33,9 @@ export default async function ActivityLogPage() {
     }),
     prisma.staffActionLog.count({
       where: { hotelId: ctx.hotelId, kind: { in: ["CANCEL_BOOKING", "DELETE_BOOKING"] }, createdAt: { gte: monthStart } },
+    }),
+    prisma.staffActionLog.count({
+      where: { hotelId: ctx.hotelId, kind: { in: ["PRICE_CHANGE", "DEPOSIT_CHANGE"] }, createdAt: { gte: monthStart } },
     }),
   ]);
 
@@ -62,8 +65,8 @@ export default async function ActivityLogPage() {
           <ShieldCheck className="w-6 h-6 text-amber-400" /> Activity Log
         </h1>
         <p className="text-white/40 text-sm mt-1.5">
-          Cash taken from the till, expenses, deleted entries, cancelled and deleted bookings —
-          every one, with who did it and why.
+          Price and deposit edits, cash taken from the till, expenses, deleted entries, cancelled
+          and deleted bookings — every one, with who did it and why.
         </p>
       </div>
 
@@ -85,9 +88,11 @@ export default async function ActivityLogPage() {
           <p className="text-white/25 text-[11px] mt-1">cancelled or deleted</p>
         </div>
         <div className="bg-white/3 border border-white/8 rounded-2xl p-5">
-          <p className="text-white/35 text-xs uppercase tracking-wider mb-1.5">Actions recorded</p>
-          <p className="text-2xl font-bold text-white">{rows.length}</p>
-          <p className="text-white/25 text-[11px] mt-1">most recent 500</p>
+          <p className="text-white/35 text-xs uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+            <Pencil className="w-3.5 h-3.5" /> Price / deposit edits
+          </p>
+          <p className="text-2xl font-bold text-amber-300">{monthEdits}</p>
+          <p className="text-white/25 text-[11px] mt-1">this month</p>
         </div>
       </div>
 

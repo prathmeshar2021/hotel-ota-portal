@@ -39,6 +39,7 @@ import AddChargeModal from "@/components/hotel-admin/AddChargeModal";
 import DeleteChargeButton from "@/components/hotel-admin/DeleteChargeButton";
 import AdminCancelBookingButton from "@/components/hotel-admin/CancelBookingButton";
 import DeleteBookingButton from "@/components/hotel-admin/DeleteBookingButton";
+import EditPricingButton from "@/components/hotel-admin/EditPricingButton";
 import AssignRoomButton from "@/components/hotel-admin/AssignRoomButton";
 import GuestCountEditor from "@/components/hotel-admin/GuestCountEditor";
 import AddCompanionButton from "@/components/hotel-admin/AddCompanionButton";
@@ -104,6 +105,16 @@ export default async function BookingDetailPage({
 
   const categoryMeta = getCategoryMeta(booking.roomCategory as never);
   const accent = categoryMeta?.accentColor ?? "#F59E0B";
+
+  // The rate actually applied, derived from what was charged rather than the
+  // slab table — an edited price can land in a different band from the tariff.
+  const gstRate = booking.taxableAmount > 0
+    ? Math.round((booking.cgst / booking.taxableAmount) * 1000) / 10
+    : 0;
+  // True once the price charged differs from the room's standard tariff.
+  const priceEdited =
+    booking.originalTotal != null &&
+    Math.abs(booking.originalTotal - booking.totalAmount) > 0.5;
   const categoryLabel = categoryMeta?.displayName ?? booking.roomCategory;
   const categoryRooms = CATEGORY_ROOMS[booking.roomCategory as never] ?? [];
   const status = STATUS_CONFIG[booking.status] ?? { label: booking.status, cls: "bg-white/8 text-white/40 border-white/10" };
@@ -172,6 +183,18 @@ export default async function BookingDetailPage({
           {/* Removing a booking entirely — available in any state, since the
               usual reasons (a test entry, a duplicate, wrong dates) are just as
               likely to be spotted after check-in as before. */}
+          {booking.status !== "CANCELLED" && (
+            <EditPricingButton
+              bookingId={booking.id}
+              bookingRef={booking.bookingRef}
+              noOfNights={booking.noOfNights}
+              currentTotal={booking.totalAmount}
+              currentDeposit={booking.refundableDeposit}
+              depositCollected={booking.depositCollected}
+              amountPaid={booking.cashPaid + booking.onlinePaid}
+              status={booking.status}
+            />
+          )}
           <DeleteBookingButton
             bookingId={booking.id}
             bookingRef={booking.bookingRef}
@@ -537,10 +560,14 @@ export default async function BookingDetailPage({
               <Banknote className="w-4 h-4 text-white/30" /> Payment
             </h2>
             <div className="space-y-2 text-sm">
-              <div className="flex justify-between text-white/45">
-                <span>Room Rent</span>
-                <span>₹{booking.roomRent.toLocaleString("en-IN")}</span>
-              </div>
+              {/* The tariff the room is listed at — shown only when the price
+                  actually charged differs, so the two are never confused. */}
+              {priceEdited && (
+                <div className="flex justify-between text-white/30 text-xs">
+                  <span>Standard tariff</span>
+                  <span className="line-through">₹{(booking.originalTotal ?? booking.roomRent).toLocaleString("en-IN")}</span>
+                </div>
+              )}
               {booking.couponDiscount > 0 && (
                 <div className="flex justify-between text-green-400/80">
                   <span>Coupon Discount</span>
@@ -558,17 +585,28 @@ export default async function BookingDetailPage({
                   <span>-₹{booking.staffDiscount.toLocaleString("en-IN")}</span>
                 </div>
               )}
-              {booking.cgst > 0 && (
+              {/* Taxable + GST, as actually charged. These three add up to the
+                  room total; the listed tariff does not once a price is edited. */}
+              <div className="flex justify-between text-white/45">
+                <span>Taxable value</span>
+                <span>₹{booking.taxableAmount.toLocaleString("en-IN")}</span>
+              </div>
+              {booking.cgst > 0 ? (
                 <>
                   <div className="flex justify-between text-white/30 text-xs">
-                    <span>CGST</span>
+                    <span>CGST @ {gstRate}%</span>
                     <span>₹{booking.cgst.toLocaleString("en-IN")}</span>
                   </div>
                   <div className="flex justify-between text-white/30 text-xs">
-                    <span>SGST</span>
+                    <span>SGST @ {gstRate}%</span>
                     <span>₹{booking.sgst.toLocaleString("en-IN")}</span>
                   </div>
                 </>
+              ) : (
+                <div className="flex justify-between text-white/25 text-xs">
+                  <span>GST</span>
+                  <span>Nil — under ₹1,000 per night</span>
+                </div>
               )}
               <div className="flex justify-between font-bold text-white border-t border-white/8 pt-2 mt-2">
                 <span>Room Total</span>

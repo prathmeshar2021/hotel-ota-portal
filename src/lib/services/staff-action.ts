@@ -20,6 +20,8 @@ import { email } from "@/lib/services/email";
 import type { Prisma } from "@prisma/client";
 
 export type StaffActionKind =
+  | "PRICE_CHANGE"
+  | "DEPOSIT_CHANGE"
   | "CASH_COLLECTION"
   | "EXPENSE_DEBIT"
   | "DELETE_TRANSACTION"
@@ -30,6 +32,8 @@ export type StaffActionKind =
   | "OTHER";
 
 export const ACTION_LABEL: Record<StaffActionKind, string> = {
+  PRICE_CHANGE: "Booking price changed",
+  DEPOSIT_CHANGE: "Deposit amount changed",
   CASH_COLLECTION: "Cash taken from till",
   EXPENSE_DEBIT: "Expense recorded",
   DELETE_TRANSACTION: "Ledger entry deleted",
@@ -44,6 +48,9 @@ export const ACTION_LABEL: Record<StaffActionKind, string> = {
 const MONEY_OUT: StaffActionKind[] = [
   "CASH_COLLECTION", "EXPENSE_DEBIT", "REFUND", "DELETE_TRANSACTION",
 ];
+
+/** Edits to what a booking costs — the owner's first question is always "who". */
+const PRICE_EDIT: StaffActionKind[] = ["PRICE_CHANGE", "DEPOSIT_CHANGE"];
 
 export interface StaffActionInput {
   hotelId: string;
@@ -77,7 +84,7 @@ export async function recordStaffAction(input: StaffActionInput): Promise<void> 
   ];
 
   const message =
-    `${MONEY_OUT.includes(input.kind) ? "💸" : "🔔"} *${label}*\n\n` +
+    `${MONEY_OUT.includes(input.kind) ? "💸" : PRICE_EDIT.includes(input.kind) ? "✏️" : "🔔"} *${label}*\n\n` +
     `${input.summary}\n` +
     (input.amount != null ? `💰 ${inr(input.amount)}\n` : "") +
     lines.join("\n");

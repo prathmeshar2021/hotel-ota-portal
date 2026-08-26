@@ -71,7 +71,19 @@ async function main() {
   const problems: string[] = [];
   let reconciled = 0;
 
+  // Bookings the live code has already recorded must be left alone. Their
+  // entries carry no idemKey, and re-deriving them from cashPaid/onlinePaid
+  // would add a second copy of money that is already in the ledger — the
+  // reconciliation below would not catch it, because it only checks that the
+  // ledger is not SHORT.
+  const alreadyLive = new Set(
+    (await prisma.bookingTxn.groupBy({ by: ["bookingId"], where: { idemKey: null } }))
+      .map(x => x.bookingId)
+  );
+  let skipped = 0;
+
   for (const b of bookings) {
+    if (alreadyLive.has(b.id)) { skipped++; continue; }
     const local: typeof rows = [];
     const push = (
       kind: string, mode: string, amount: number, note: string,
@@ -172,7 +184,7 @@ async function main() {
 
   console.log(`\nBookings scanned : ${bookings.length}`);
   console.log(`Ledger entries   : ${rows.length}`);
-  console.log(`Reconciled       : ${reconciled}/${bookings.length}`);
+  console.log(`Reconciled       : ${reconciled}/${bookings.length - skipped}`);
   console.log(`Credits ₹${credits.toFixed(0)} | Refunds ₹${debits.toFixed(0)} | Cash drawer effect ₹${cash.toFixed(0)}`);
   console.log("\nBy kind:");
   for (const [k, v] of Object.entries(byKind)) console.log(`  ${k.padEnd(18)} ${String(v.n).padStart(4)} entries  ₹${v.sum.toFixed(0)}`);

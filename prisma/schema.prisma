@@ -461,6 +461,8 @@ model Booking {
 // unseen.
 
 enum StaffActionKind {
+  PRICE_CHANGE       // a booking's total was edited after it was made
+  DEPOSIT_CHANGE     // the refundable deposit on a booking was edited
   CASH_COLLECTION    // cash taken out of the till by the owner/staff
   EXPENSE_DEBIT      // money-out entry added to the ledger
   DELETE_TRANSACTION // a ledger entry removed

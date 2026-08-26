@@ -5,7 +5,7 @@ import Link from "next/link";
 import { format } from "date-fns";
 import {
   Search, X, Banknote, Receipt, Trash2, CalendarX, ShieldAlert,
-  ExternalLink, Inbox, AlertTriangle, MailWarning,
+  ExternalLink, Inbox, AlertTriangle, MailWarning, Pencil,
 } from "lucide-react";
 
 export interface ActivityRow {
@@ -26,6 +26,8 @@ export interface ActivityRow {
 }
 
 const KIND_META: Record<string, { label: string; icon: typeof Banknote; cls: string }> = {
+  PRICE_CHANGE:       { label: "Price changed",     icon: Pencil,     cls: "bg-amber-500/12 text-amber-300 border-amber-500/25" },
+  DEPOSIT_CHANGE:     { label: "Deposit changed",   icon: Pencil,     cls: "bg-amber-500/12 text-amber-300 border-amber-500/25" },
   CASH_COLLECTION:    { label: "Cash taken",        icon: Banknote,   cls: "bg-red-500/12 text-red-300 border-red-500/25" },
   EXPENSE_DEBIT:      { label: "Expense",           icon: Receipt,    cls: "bg-orange-500/12 text-orange-300 border-orange-500/25" },
   DELETE_TRANSACTION: { label: "Entry deleted",     icon: Trash2,     cls: "bg-red-500/12 text-red-300 border-red-500/25" },
@@ -36,8 +38,12 @@ const KIND_META: Record<string, { label: string; icon: typeof Banknote; cls: str
   OTHER:              { label: "Other",             icon: ShieldAlert,cls: "bg-white/8 text-white/60 border-white/15" },
 };
 
+/** Edits to money already agreed — the group the owner most often wants alone. */
+export const FINANCIAL_EDITS = ["PRICE_CHANGE", "DEPOSIT_CHANGE"];
+
 const FILTERS = [
   { key: "ALL", label: "All" },
+  { key: "FINANCIAL_EDITS", label: "Price & deposit edits" },
   { key: "CASH_COLLECTION", label: "Cash taken" },
   { key: "EXPENSE_DEBIT", label: "Expenses" },
   { key: "DELETE_TRANSACTION", label: "Entries deleted" },
@@ -62,7 +68,9 @@ export default function ActivityLogClient({ rows }: { rows: ActivityRow[] }) {
     // usually typing half a name or a booking ref from memory.
     const needle = q.trim().toLowerCase().replace(/\s+/g, " ");
     return rows.filter(r => {
-      if (kind !== "ALL" && r.kind !== kind) return false;
+      if (kind === "FINANCIAL_EDITS") {
+        if (!FINANCIAL_EDITS.includes(r.kind)) return false;
+      } else if (kind !== "ALL" && r.kind !== kind) return false;
       if (staff !== "ALL" && r.actorName !== staff) return false;
       if (!needle) return true;
       const hay = [
