@@ -35,6 +35,7 @@ export const PANEL_DICT = {
   "nav.logout":        { en: "Logout",         hi: "लॉगआउट" },
   "nav.owner":         { en: "Owner",          hi: "मालिक" },
   "nav.staff":         { en: "Staff",          hi: "स्टाफ" },
+  "nav.deletedBookings": { en: "Deleted Bookings", hi: "हटाई गई बुकिंग" },
   "nav.overview":      { en: "Overview",       hi: "ओवरव्यू" },
   "nav.pricing":       { en: "Pricing",        hi: "रेट / प्राइसिंग" },
   "nav.inventory":     { en: "Inventory",      hi: "इन्वेंटरी" },
