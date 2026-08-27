@@ -74,7 +74,7 @@ export interface StaffActionInput {
 
 const inr = (n: number) => `₹${n.toLocaleString("en-IN")}`;
 
-export async function recordStaffAction(input: StaffActionInput): Promise<void> {
+export async function recordStaffAction(input: StaffActionInput): Promise<string | null> {
   const label = ACTION_LABEL[input.kind];
   const lines = [
     `👤 By: ${input.actorName}`,
@@ -105,7 +105,7 @@ export async function recordStaffAction(input: StaffActionInput): Promise<void> 
     }),
   ]);
 
-  await prisma.staffActionLog.create({
+  const row = await prisma.staffActionLog.create({
     data: {
       hotelId: input.hotelId,
       kind: input.kind,
@@ -123,8 +123,11 @@ export async function recordStaffAction(input: StaffActionInput): Promise<void> 
       notifiedWhatsapp: wa.status === "fulfilled" && wa.value != null,
       notifiedEmail: mail.status === "fulfilled" && mail.value != null,
     },
+    select: { id: true },
   }).catch(e => {
     // The action itself already succeeded; losing the log entry must not undo it.
     console.error("[staff-action] failed to write log:", e);
+    return null;
   });
+  return row?.id ?? null;
 }

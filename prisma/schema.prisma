@@ -500,6 +500,12 @@ model StaffActionLog {
   notifiedWhatsapp Boolean @default(false)
   notifiedEmail    Boolean @default(false)
 
+  /// Set once this action has been reversed, so it can never be undone twice.
+  /// Reversal is itself recorded as its own entry — the log is a history, not
+  /// a a set of switches, and "this was undone" is part of the history.
+  undoneAt     DateTime?
+  undoneByName String?
+
   createdAt DateTime @default(now())
 
   @@index([hotelId, createdAt])

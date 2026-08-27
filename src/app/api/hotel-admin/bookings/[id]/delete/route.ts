@@ -110,7 +110,7 @@ export async function POST(
 
   // Also lands in the activity log, so every sensitive desk action is reviewable
   // from one place rather than only in the owner's inbox.
-  await recordStaffAction({
+  const actionId = await recordStaffAction({
     hotelId: session.user.hotelId,
     kind: "DELETE_BOOKING",
     summary: `Booking ${booking.bookingRef} was deleted from the panel.`,
@@ -131,6 +131,8 @@ export async function POST(
 
   return NextResponse.json({
     success: true,
+    // Lets the desk undo straight from the toast, while it is still on screen.
+    actionId,
     bookingRef: booking.bookingRef,
     amountPaid,
     message:

@@ -57,7 +57,22 @@ export default function DeleteBookingButton({
       });
       const data = await res.json();
       if (res.ok) {
-        toast.success(data.message ?? `${bookingRef} deleted`);
+        // Offered right here, because the moment staff realise it was the wrong
+        // booking is the moment the toast is still on screen.
+        toast.success(data.message ?? `${bookingRef} deleted`, {
+          duration: 12000,
+          action: data.actionId
+            ? {
+                label: "Undo",
+                onClick: async () => {
+                  const r = await fetch(`/api/hotel-admin/activity/${data.actionId}/undo`, { method: "POST" });
+                  const d = await r.json();
+                  if (r.ok) { toast.success(d.message ?? `${bookingRef} restored`); router.push(`/hotel-admin/bookings/${bookingId}`); }
+                  else toast.error(d.error ?? "Could not undo");
+                },
+              }
+            : undefined,
+        });
         setOpen(false);
         router.push("/hotel-admin/bookings");
         router.refresh();

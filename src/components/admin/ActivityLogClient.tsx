@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import Link from "next/link";
 import { format } from "date-fns";
 import {
   Search, X, Banknote, Receipt, Trash2, CalendarX, ShieldAlert,
-  ExternalLink, Inbox, AlertTriangle, MailWarning, Pencil,
+  ExternalLink, Inbox, AlertTriangle, MailWarning, Pencil, Undo2, Loader2,
 } from "lucide-react";
 
 export interface ActivityRow {
@@ -23,7 +25,16 @@ export interface ActivityRow {
   notifiedWhatsapp: boolean;
   notifiedEmail: boolean;
   createdAt: string;
+  undoneAt: string | null;
+  undoneByName: string | null;
 }
+
+/** What can genuinely be put back. Anything that moved money through the
+ *  payment gateway is not on this list, because it cannot be. */
+const UNDOABLE = [
+  "DELETE_BOOKING", "PRICE_CHANGE", "DEPOSIT_CHANGE",
+  "CASH_COLLECTION", "EXPENSE_DEBIT", "DELETE_TRANSACTION",
+];
 
 const KIND_META: Record<string, { label: string; icon: typeof Banknote; cls: string }> = {
   PRICE_CHANGE:       { label: "Price changed",     icon: Pencil,     cls: "bg-amber-500/12 text-amber-300 border-amber-500/25" },
@@ -54,6 +65,8 @@ const FILTERS = [
 const inr = (n: number) => `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
 export default function ActivityLogClient({ rows }: { rows: ActivityRow[] }) {
+  const router = useRouter();
+  const [undoing, setUndoing] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [kind, setKind] = useState("ALL");
   const [staff, setStaff] = useState("ALL");
@@ -82,6 +95,17 @@ export default function ActivityLogClient({ rows }: { rows: ActivityRow[] }) {
   }, [rows, q, kind, staff]);
 
   const unnotified = filtered.filter(r => !r.notifiedWhatsapp && !r.notifiedEmail);
+
+  async function undo(r: ActivityRow) {
+    if (!confirm(`Undo this?\n\n${r.summary}\n\nIt will be put back as it was, and the owner is told.`)) return;
+    setUndoing(r.id);
+    try {
+      const res = await fetch(`/api/hotel-admin/activity/${r.id}/undo`, { method: "POST" });
+      const d = await res.json();
+      if (res.ok) { toast.success(d.message ?? "Undone"); router.refresh(); }
+      else toast.error(d.error ?? "Could not undo");
+    } finally { setUndoing(null); }
+  }
 
   return (
     <>
@@ -177,9 +201,27 @@ export default function ActivityLogClient({ rows }: { rows: ActivityRow[] }) {
                         </span>
                         <p className="text-white/85 text-sm font-medium leading-snug">{r.summary}</p>
                       </div>
-                      {r.amount != null && (
-                        <span className="text-white font-bold text-sm shrink-0">{inr(r.amount)}</span>
-                      )}
+                      <div className="flex items-center gap-2 shrink-0">
+                        {r.amount != null && (
+                          <span className="text-white font-bold text-sm">{inr(r.amount)}</span>
+                        )}
+                        {r.undoneAt ? (
+                          <span className="text-[10px] px-2 py-1 rounded-lg border border-white/10 text-white/30">
+                            undone
+                          </span>
+                        ) : UNDOABLE.includes(r.kind) ? (
+                          <button
+                            onClick={() => undo(r)}
+                            disabled={undoing === r.id}
+                            className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-white/10 text-white/45 hover:text-white/85 hover:border-white/25 transition-all disabled:opacity-40"
+                          >
+                            {undoing === r.id
+                              ? <Loader2 className="w-3 h-3 animate-spin" />
+                              : <Undo2 className="w-3 h-3" />}
+                            Undo
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
 
                     <div className="flex items-center gap-x-3 gap-y-1 flex-wrap mt-2 text-[11px] text-white/35">
@@ -198,6 +240,9 @@ export default function ActivityLogClient({ rows }: { rows: ActivityRow[] }) {
                         )
                       )}
                       {r.guestName && <span className="text-white/45">{r.guestName}</span>}
+                      {r.undoneAt && r.undoneByName && (
+                        <span className="text-white/30">undone by {r.undoneByName}</span>
+                      )}
                       {!r.notifiedWhatsapp && !r.notifiedEmail && (
                         <span className="inline-flex items-center gap-1 text-amber-400/80">
                           <AlertTriangle className="w-3 h-3" /> alert failed

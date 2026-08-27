@@ -66,18 +66,28 @@ export const prisma = prismaBase.$extends({
         },
       ])
     ),
-    bookingTxn: Object.fromEntries(
-      READS.map((op) => [
-        op,
-        ({ args, query }: { args: Record<string, unknown>; query: (a: unknown) => unknown }) => {
-          const a = (args ?? {}) as { where?: Record<string, unknown> };
-          const where = (a.where ?? {}) as Record<string, unknown>;
-          // Money belonging to an archived booking leaves the statement with it.
-          if (!("booking" in where)) {
-            a.where = { ...where, booking: { deletedAt: null } };
-          }
-          return query(a);
-        },
+    // Everything that hangs off a booking has to disappear with it. The filter
+    // is MERGED into whatever the caller already asked for, never skipped when
+    // they happen to mention `booking` — the statement filters bookings by
+    // source, and an earlier version backed off entirely on seeing that, which
+    // let a deleted booking's money stay in the accounts.
+    ...Object.fromEntries(
+      (["bookingTxn", "additionalCharge", "payment", "gstInvoice"] as const).map((model) => [
+        model,
+        Object.fromEntries(
+          READS.map((op) => [
+            op,
+            ({ args, query }: { args: Record<string, unknown>; query: (a: unknown) => unknown }) => {
+              const a = (args ?? {}) as { where?: Record<string, unknown> };
+              const where = (a.where ?? {}) as Record<string, unknown>;
+              const rel = where.booking as Record<string, unknown> | undefined;
+              // An explicit deletedAt means the caller knows what it's asking for.
+              if (rel && "deletedAt" in rel) return query(a);
+              a.where = { ...where, booking: { ...(rel ?? {}), deletedAt: null } };
+              return query(a);
+            },
+          ])
+        ),
       ])
     ),
   },

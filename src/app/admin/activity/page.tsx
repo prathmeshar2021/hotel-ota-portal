@@ -54,6 +54,8 @@ export default async function ActivityLogPage() {
     notifiedWhatsapp: l.notifiedWhatsapp,
     notifiedEmail: l.notifiedEmail,
     createdAt: l.createdAt.toISOString(),
+    undoneAt: l.undoneAt?.toISOString() ?? null,
+    undoneByName: l.undoneByName,
   }));
 
   const inr = (n: number) => `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
