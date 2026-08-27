@@ -139,7 +139,7 @@ export default function EditPricingButton({
 
             {/* Room total */}
             <label className="block text-[10px] text-white/35 uppercase tracking-wider font-semibold mb-1.5">
-              Room total the guest pays (GST included)
+              Total the guest pays (with GST)
             </label>
             <input
               type="number" min={0} value={total}
@@ -160,11 +160,11 @@ export default function EditPricingButton({
                 <span className="text-amber-300">{inr(preview.totalAmount)}</span>
               </div>
               <div className="flex justify-between text-xs pt-1">
-                <span className="text-white/35">Already paid</span>
+                <span className="text-white/35">Paid so far</span>
                 <span className="text-white/55">{inr(amountPaid)}</span>
               </div>
               <div className="flex justify-between text-xs">
-                <span className="text-white/35">Balance after this change</span>
+                <span className="text-white/35">Still to pay</span>
                 <span className={newBalance > 0 ? "text-amber-300 font-semibold" : "text-green-400 font-semibold"}>
                   {inr(newBalance)}
                 </span>
@@ -173,9 +173,7 @@ export default function EditPricingButton({
 
             {unreachable && (
               <p className="text-[11px] text-amber-400/80 mb-3 leading-relaxed">
-                {inr(typedTotal)} isn&rsquo;t reachable as a whole-rupee total under the GST slabs —
-                it will be saved as <strong>{inr(preview.totalAmount)}</strong>, the closest legal
-                price at or below it.
+                {inr(typedTotal)} is not possible with the GST slabs — it will be saved as <strong>{inr(preview.totalAmount)}</strong>, the nearest price below it.
               </p>
             )}
 
@@ -183,8 +181,8 @@ export default function EditPricingButton({
               <div className="flex items-start gap-2.5 bg-red-500/12 border border-red-500/30 rounded-2xl px-4 py-3 mb-3">
                 <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
                 <p className="text-red-200/85 text-xs leading-relaxed">
-                  {inr(amountPaid)} has already been paid. Set the total to at least that, or
-                  refund the difference first — this doesn&rsquo;t issue refunds.
+                  {inr(amountPaid)} is already paid. Set the total to at least that, or give the difference back
+                  first — this does not refund.
                 </p>
               </div>
             )}
@@ -214,14 +212,14 @@ export default function EditPricingButton({
               </div>
             </div>
             <p className="text-[11px] text-white/25 mb-4 leading-relaxed">
-              The deposit sits outside the room total and never appears in the accounts until it is
-              applied to a bill or withheld.
+              The deposit is separate from the bill. It is not counted as income unless it is used
+              or kept back.
             </p>
 
             <input
               value={reason}
               onChange={e => setReason(e.target.value)}
-              placeholder="Why is the price changing?"
+              placeholder="Reason for the change"
               maxLength={300}
               className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder:text-white/25 text-sm focus:outline-none focus:border-amber-400/40 transition-all mb-4"
             />

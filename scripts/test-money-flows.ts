@@ -165,5 +165,50 @@ console.log("\n── 6. Flags fire on everything unusual, and only that ──"
   }
 }
 
+console.log("\n── 7. Giving back more than the deposit at checkout ──");
+{
+  // Mirrors the CHECKED_OUT branch when staff type a refund above the deposit.
+  function over(o: { dep: number; bal: number; extra: number; typed: number; paid: number; billed: number }) {
+    const owed = +(o.bal + o.extra).toFixed(2);
+    const net = +(o.dep - owed).toFixed(2);
+    const refundable = Math.max(0, net);
+    const depositUsed = Math.min(o.dep, owed);
+    const deduction = o.typed <= refundable ? +(refundable - o.typed).toFixed(2) : 0;
+    const extraRefund = Math.min(Math.max(0, +(o.typed - refundable).toFixed(2)), Math.max(0, o.paid));
+    const refund = +(refundable - deduction + extraRefund).toFixed(2);
+    const newBilled = +Math.max(0, o.billed - extraRefund).toFixed(2);
+    return { refundable, depositUsed, deduction, extraRefund, refund, newBilled };
+  }
+
+  const t = [
+    { n: "refund exactly the deposit",        dep: 500, typed: 500,  paid: 1200, billed: 1200, wantExtra: 0 },
+    { n: "refund ₹300 over the deposit",      dep: 500, typed: 800,  paid: 1200, billed: 1200, wantExtra: 300 },
+    { n: "early checkout, half the stay back",dep: 500, typed: 1100, paid: 1200, billed: 1200, wantExtra: 600 },
+    { n: "refund more than was ever paid",    dep: 500, typed: 9999, paid: 1200, billed: 1200, wantExtra: 1200 },
+    { n: "no deposit, refund room money",     dep: 0,   typed: 400,  paid: 1200, billed: 1200, wantExtra: 400 },
+  ];
+  for (const c of t) {
+    const r = over({ dep: c.dep, bal: 0, extra: 0, typed: c.typed, paid: c.paid, billed: c.billed });
+    const capped = r.extraRefund <= c.paid + 0.01;
+    const billedDropped = Math.abs(r.newBilled - (c.billed - r.extraRefund)) < 0.01;
+    // The deposit must still account for itself exactly.
+    const depOk = Math.abs(r.depositUsed + r.deduction + (r.refund - r.extraRefund) - c.dep) < 0.01;
+    ok(`${c.n}: gives back ${f(r.refund)}, ${f(r.extraRefund)} from the bill, bill now ${f(r.newBilled)}`,
+       r.extraRefund === c.wantExtra && capped && billedDropped && depOk);
+  }
+
+  // After an over-refund the account must still settle to zero.
+  const entries: Entry[] = [
+    { kind: "ROOM_PAYMENT", direction: "CREDIT", mode: "CASH", amount: 1200 },
+    { kind: "DEPOSIT_TAKEN", direction: "CREDIT", mode: "CASH", amount: 500 },
+    { kind: "DEPOSIT_RETURNED", direction: "DEBIT", mode: "CASH", amount: 500 },
+    { kind: "REFUND", direction: "DEBIT", mode: "CASH", amount: 300 },
+  ];
+  const a = summarise(entries, { roomTotal: 900, extrasOnTab: 0 });
+  ok("account settles to zero and holds nothing after an over-refund",
+     Math.abs(a.balance) < 0.01 && Math.abs(a.depositHeld) < 0.01,
+     `balance ${a.balance}, held ${a.depositHeld}`);
+}
+
 console.log(`\n${fail === 0 ? `All ${pass} checks passed.` : `${fail} FAILED of ${pass + fail}`}`);
 process.exitCode = fail === 0 ? 0 : 1;

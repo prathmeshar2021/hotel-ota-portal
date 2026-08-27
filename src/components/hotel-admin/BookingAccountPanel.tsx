@@ -55,12 +55,12 @@ const KIND_LABEL: Record<string, string> = {
 
 /** What the desk actually does, in its own words. */
 const ACTIONS = [
-  { key: "TAKE",     label: "Take payment",    kind: "ROOM_PAYMENT",     direction: "CREDIT" as const, help: "Guest pays towards the bill" },
-  { key: "DEPOSIT",  label: "Take deposit",    kind: "DEPOSIT_TAKEN",    direction: "CREDIT" as const, help: "Refundable — stays out of the accounts" },
-  { key: "RETURN",   label: "Return deposit",  kind: "DEPOSIT_RETURNED", direction: "DEBIT"  as const, help: "Hand the deposit back" },
-  { key: "REFUND",   label: "Refund",          kind: "REFUND",           direction: "DEBIT"  as const, help: "Give room money back" },
-  { key: "CREDIT",   label: "Other credit",    kind: "ADJUSTMENT",       direction: "CREDIT" as const, help: "Anything else taken in" },
-  { key: "DEBIT",    label: "Other debit",     kind: "ADJUSTMENT",       direction: "DEBIT"  as const, help: "Anything else given out" },
+  { key: "TAKE",     label: "Take payment",    kind: "ROOM_PAYMENT",     direction: "CREDIT" as const, help: "Guest pays the bill" },
+  { key: "DEPOSIT",  label: "Take deposit",    kind: "DEPOSIT_TAKEN",    direction: "CREDIT" as const, help: "Refundable — not counted as income" },
+  { key: "RETURN",   label: "Return deposit",  kind: "DEPOSIT_RETURNED", direction: "DEBIT"  as const, help: "Give the deposit back" },
+  { key: "REFUND",   label: "Refund",          kind: "REFUND",           direction: "DEBIT"  as const, help: "Give bill money back" },
+  { key: "CREDIT",   label: "Other credit",    kind: "ADJUSTMENT",       direction: "CREDIT" as const, help: "Any other money in" },
+  { key: "DEBIT",    label: "Other debit",     kind: "ADJUSTMENT",       direction: "DEBIT"  as const, help: "Any other money out" },
 ];
 
 const inr = (n: number) => `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
@@ -171,7 +171,7 @@ export default function BookingAccountPanel({
       {/* The two reference figures, always in view */}
       <div className="grid grid-cols-2 gap-3 mb-4">
         <div className="bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3">
-          <p className="text-white/35 text-[10px] uppercase tracking-wider mb-1">Booking worth</p>
+          <p className="text-white/35 text-[10px] uppercase tracking-wider mb-1">Total bill</p>
           <p className="text-white font-bold text-lg">{inr(account.billed)}</p>
           {account.extrasOnTab > 0 && (
             <p className="text-white/25 text-[11px] mt-0.5">
@@ -185,7 +185,7 @@ export default function BookingAccountPanel({
           </p>
           <p className="text-green-300 font-bold text-lg">{inr(account.depositHeld)}</p>
           <p className="text-white/25 text-[11px] mt-0.5">
-            {depositExpected > 0 ? `${inr(depositExpected)} expected` : "none expected"}
+            {depositExpected > 0 ? `${inr(depositExpected)} to collect` : "none"}
             {account.depositUsed > 0 ? ` · ${inr(account.depositUsed)} used` : ""}
             {account.depositWithheld > 0 ? ` · ${inr(account.depositWithheld)} withheld` : ""}
             {account.depositReturned > 0 ? ` · ${inr(account.depositReturned)} returned` : ""}
@@ -199,7 +199,7 @@ export default function BookingAccountPanel({
           <div className="flex justify-between"><span className="text-white/45">Refunded</span><span className="text-red-300 font-semibold">−{inr(account.refunded)}</span></div>
         )}
         <div className="flex justify-between border-t border-white/8 pt-2 mt-1 font-bold">
-          <span className="text-white">{owes ? "Guest still owes" : inCredit ? "Hotel owes guest" : "Settled"}</span>
+          <span className="text-white">{owes ? "Pending" : inCredit ? "To return" : "Fully paid"}</span>
           <span className={owes ? "text-amber-300" : inCredit ? "text-red-300" : "text-green-400"}>
             {inr(Math.abs(account.balance))}
           </span>
@@ -209,7 +209,7 @@ export default function BookingAccountPanel({
       {/* Every movement, in the order it happened */}
       <div className="space-y-1.5">
         {entries.length === 0 ? (
-          <p className="text-white/25 text-xs py-3 text-center">No entries yet.</p>
+          <p className="text-white/25 text-xs py-3 text-center">Nothing here yet.</p>
         ) : entries.map(e => (
           <div key={e.id}
             className={`rounded-xl px-3 py-2.5 border ${e.flagged ? "bg-amber-500/8 border-amber-500/25" : "bg-white/[0.02] border-white/8"}`}>
@@ -224,7 +224,7 @@ export default function BookingAccountPanel({
                     {e.mode === "DEPOSIT" ? "from deposit" : e.mode === "CASH" ? "cash" : "UPI"}
                   </span>
                   {!e.affectsStatement && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded border border-white/10 text-white/25">not in accounts</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded border border-white/10 text-white/25">not income</span>
                   )}
                 </div>
                 <p className="text-white/30 text-[11px] mt-1">
@@ -309,8 +309,8 @@ export default function BookingAccountPanel({
               className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder:text-white/25 text-sm focus:outline-none focus:border-amber-400/40 mb-4" />
 
             <p className="text-[11px] text-white/30 mb-4 leading-relaxed">
-              Nothing is refused here. If this is unusual — refunding past the deposit, or taking
-              more than the booking is worth — it is recorded, flagged, and the owner is told.
+              Nothing is blocked here. If it is unusual — paying back more than the deposit, or
+              taking more than the bill — it is saved, marked, and the owner is told.
             </p>
 
             <div className="flex gap-2.5">

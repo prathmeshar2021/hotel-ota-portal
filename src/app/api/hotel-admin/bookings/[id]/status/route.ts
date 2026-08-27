@@ -4,6 +4,8 @@ import { prisma } from "@/lib/db/prisma";
 import { ensureRoomAssigned, isConsentConfirmed, CHECKIN_GATE_MESSAGES } from "@/lib/services/checkin-gate";
 import { recordTxn, roomPaymentNote, type RecordTxnInput } from "@/lib/services/booking-txn";
 import { returnDeposit } from "@/lib/services/booking-ledger";
+import { computeTotalsForPrice } from "@/lib/utils/booking-calc";
+import { recordStaffAction } from "@/lib/services/staff-action";
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
   PENDING_PAYMENT: ["CONFIRMED", "CANCELLED"],
@@ -34,7 +36,8 @@ export async function PATCH(
       id: true, status: true, roomId: true, checkInDate: true, checkOutDate: true,
       hotelId: true, roomCategory: true,
       depositCollected: true, additionalCharges: true, balanceDue: true,
-      depositMode: true, totalAmount: true,
+      depositMode: true, totalAmount: true, noOfNights: true, originalTotal: true,
+      bookingRef: true, primaryGuest: { select: { name: true } },
       cashPaid: true, onlinePaid: true,
       // Needed to push a deposit refund back to the card/UPI it came from.
       depositPaymentId: true,
@@ -77,6 +80,8 @@ export async function PATCH(
   // What actually goes back to the guest at checkout, recorded after the
   // booking update succeeds.
   let depositReturn = 0;
+  // Money handed back beyond the deposit, and what it did to the booking.
+  let overRefund: { from: number; to: number; amount: number } | null = null;
 
   // Confirming a booking the guest never paid for online. Staff say how it was
   // actually settled, because a confirmed booking with the full balance still
@@ -151,12 +156,34 @@ export async function PATCH(
     const refundable = Math.max(0, net);
     const rawDeduction = Number(settlement?.deduction) || 0;
     const deduction = Math.min(Math.max(0, +rawDeduction.toFixed(2)), refundable);
-    const refund = +(refundable - deduction).toFixed(2);
+
+    // Staff can hand back more than the deposit — an early departure is the
+    // usual reason, where part of the room money is owed back too. That excess
+    // is room money, not deposit, so it reduces what the stay is worth and is
+    // never allowed to exceed what the guest actually paid.
+    const paidSoFar = +(booking.cashPaid + booking.onlinePaid).toFixed(2);
+    const extraRefund = Math.min(
+      Math.max(0, +(Number(settlement?.extraRefund) || 0).toFixed(2)),
+      Math.max(0, paidSoFar)
+    );
+    const refund = +(refundable - deduction + extraRefund).toFixed(2);
 
     updateData.balanceDue = 0; // everything is settled at checkout
     updateData.depositDeducted = +(depositUsed + deduction).toFixed(2);
     updateData.depositRefunded = refund > 0;
-    depositReturn = refund;
+    depositReturn = +(refundable - deduction).toFixed(2);
+
+
+    if (extraRefund > 0) {
+      const reduced = +Math.max(0, booking.totalAmount - extraRefund).toFixed(2);
+      const t = computeTotalsForPrice({ inclusiveTotal: reduced, noOfNights: booking.noOfNights });
+      updateData.totalAmount = t.totalAmount;
+      updateData.taxableAmount = t.taxableAmount;
+      updateData.cgst = t.cgst;
+      updateData.sgst = t.sgst;
+      if (booking.originalTotal == null) updateData.originalTotal = booking.totalAmount;
+      overRefund = { from: booking.totalAmount, to: t.totalAmount, amount: extraRefund };
+    }
 
     // Record any amount collected now (excess beyond the deposit) as a payment.
     if (collect > 0) {
@@ -167,6 +194,17 @@ export async function PATCH(
         hotelId: booking.hotelId, bookingId: booking.id, kind: "ROOM_PAYMENT", mode,
         amount: collect, note: roomPaymentNote(mode, "balance settled at checkout"),
         occurredAt: now, recordedBy,
+      });
+    }
+
+    // The part given back beyond the deposit is a refund of room money, and is
+    // recorded as one — a deposit return is neutral in the accounts, this is not.
+    if (extraRefund > 0) {
+      ledger.push({
+        hotelId: booking.hotelId, bookingId: booking.id, kind: "REFUND",
+        mode: settlement?.refundMode === "ONLINE" || settlement?.refundMode === "RAZORPAY" ? "ONLINE" : "CASH",
+        amount: extraRefund, occurredAt: now, recordedBy,
+        note: `Refunded beyond the deposit${settlement?.notes ? ` — ${String(settlement.notes).trim()}` : ""}`,
       });
     }
 
@@ -292,6 +330,27 @@ export async function PATCH(
   // The deposit going back to the guest. Neutral in the hotel's accounts — it
   // was never income — but the booking's own account has to show it, or it
   // would look as though money is still being held.
+  if (overRefund) {
+    await recordStaffAction({
+      hotelId: booking.hotelId,
+      kind: "REFUND",
+      summary: `${booking.bookingRef}: ₹${overRefund.amount.toLocaleString("en-IN")} was refunded beyond the deposit at checkout.`,
+      amount: overRefund.amount,
+      refType: "booking",
+      refId: booking.id,
+      bookingRef: booking.bookingRef,
+      guestName: booking.primaryGuest.name,
+      reason: settlement?.notes ? String(settlement.notes).trim() : undefined,
+      actorId: session.user.id,
+      actorName: recordedBy,
+      actorRole: session.user.role ?? "HOTEL_STAFF",
+      details: overRefund,
+      notifyLines: [
+        `Booking reduced from ₹${overRefund.from.toLocaleString("en-IN")} to ₹${overRefund.to.toLocaleString("en-IN")}`,
+      ],
+    });
+  }
+
   if (newStatus === "CHECKED_OUT" && depositReturn > 0) {
     await returnDeposit({
       hotelId: booking.hotelId,

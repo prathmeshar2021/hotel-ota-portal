@@ -458,6 +458,14 @@ export default async function BookingDetailPage({
               </>
             )}
           </div>
+
+          {/* Account — the full money trail. Sits at the foot of this column so
+              the consent form stays near the top of the right-hand one, where
+              staff reach for it during check-in. */}
+          <BookingAccountPanel
+            bookingId={booking.id}
+            depositExpected={booking.refundableDeposit}
+          />
         </div>
 
         {/* Right: Booking summary */}
@@ -554,11 +562,6 @@ export default async function BookingDetailPage({
               </div>
             )}
           </div>
-
-          <BookingAccountPanel
-            bookingId={booking.id}
-            depositExpected={booking.refundableDeposit}
-          />
 
           {/* Payment */}
           <div className="bg-white/3 border border-white/8 rounded-2xl p-5">

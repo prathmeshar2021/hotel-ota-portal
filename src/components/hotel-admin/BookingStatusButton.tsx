@@ -13,7 +13,7 @@ interface Props {
   currentStatus: string;
   depositCollected?: number;  // refundable deposit actually held
   additionalCharges?: number; // extra charges accrued during the stay
-  balanceDue?: number;        // outstanding room balance owed by the guest
+  balanceDue?: number;        // outstanding bill owed by the guest
   totalAmount?: number;       // full price of the stay — what a pending booking still owes
   /** an online payment exists that a deposit refund can be pushed back to */
   canRefundToSource?: boolean;
@@ -107,6 +107,7 @@ export default function BookingStatusButton({ bookingId, currentStatus, depositC
           depositCollected={depositCollected}
           additionalCharges={additionalCharges}
           balanceDue={balanceDue}
+          totalBilled={totalAmount}
           canRefundToSource={canRefundToSource}
           onClose={() => setCheckoutModalOpen(false)}
           onSuccess={() => { setCheckoutModalOpen(false); router.refresh(); }}
@@ -188,7 +189,7 @@ function ConfirmBookingModal({
 
         <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-4 mb-4">
           <div className="flex justify-between text-sm">
-            <span className="text-white/50">Outstanding on this booking</span>
+            <span className="text-white/50">Still to pay</span>
             <span className="text-white/85 font-semibold">₹{outstanding.toLocaleString("en-IN")}</span>
           </div>
         </div>
@@ -235,7 +236,7 @@ function ConfirmBookingModal({
             />
             {stillDue > 0 && (
               <p className="text-[11px] text-amber-400/80 mt-2">
-                ₹{stillDue.toLocaleString("en-IN")} will remain due at the desk.
+                ₹{stillDue.toLocaleString("en-IN")} will still be pending.
               </p>
             )}
           </div>
@@ -244,8 +245,8 @@ function ConfirmBookingModal({
             <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
             <p className="text-amber-200/85 text-xs leading-relaxed">
               The room will be held and check-in unlocked, but{" "}
-              <strong>₹{outstanding.toLocaleString("en-IN")}</strong> stays outstanding —
-              collect it before the guest leaves.
+              <strong>₹{outstanding.toLocaleString("en-IN")}</strong> is still to pay —
+              take it before the guest leaves.
             </p>
           </div>
         )}
@@ -272,12 +273,21 @@ interface ModalProps {
   bookingId: string;
   depositCollected: number;   // refundable deposit actually held (0 if never taken)
   additionalCharges: number;  // extra charges accrued during the stay
-  balanceDue: number;         // unpaid room balance
+  balanceDue: number;         // unpaid bill
+  totalBilled: number;        // what the stay is worth, before any over-refund
   /** true when an online payment exists that a refund can be pushed back to */
   canRefundToSource: boolean;
   onClose: () => void;
   onSuccess: () => void;
 }
+
+/** Why a guest gets back more than their deposit — one tap instead of typing. */
+const EXTRA_REFUND_REASONS = [
+  "Left early",
+  "Room changed",
+  "Overcharged",
+  "Goodwill",
+];
 
 /** Common reasons to withhold part of a deposit — one tap instead of typing. */
 const DEDUCTION_PRESETS = [
@@ -288,7 +298,7 @@ const DEDUCTION_PRESETS = [
 ];
 
 function CheckoutDepositModal({
-  bookingId, depositCollected, additionalCharges, balanceDue,
+  bookingId, depositCollected, additionalCharges, balanceDue, totalBilled,
   canRefundToSource, onClose, onSuccess,
 }: ModalProps) {
   const [loading, setLoading] = useState(false);
@@ -300,24 +310,38 @@ function CheckoutDepositModal({
   // and a guest once walked out owing the whole stay because nothing made that
   // consequence visible at the desk.
   const [balanceAcknowledged, setBalanceAcknowledged] = useState(false);
+  // Money handed back on top of the deposit — reduces what the stay is worth.
+  const [extraRefund, setExtraRefund] = useState(0);
   // Default to sending it back the way it came, when that's possible.
   const [refundMode, setRefundMode] = useState<"RAZORPAY" | "CASH" | "ONLINE">(
     canRefundToSource ? "RAZORPAY" : "CASH"
   );
 
   // Net settlement: the deposit held offsets everything still owed
-  // (unpaid room balance + extra charges). Positive → refund; negative → collect.
+  // (unpaid bill + extra charges). Positive → refund; negative → collect.
   const owed = +(balanceDue + additionalCharges).toFixed(2);
   const net = +(depositCollected - owed).toFixed(2);
   const refundable = Math.max(0, net);
   const collect = Math.max(0, -net);
-  // What the guest actually gets back, after anything withheld at inspection.
-  const refund = +Math.max(0, refundable - deduction).toFixed(2);
+  // What the guest actually gets back. Normally the deposit less anything
+  // withheld, but staff can hand back more than the deposit — an early
+  // checkout is the usual reason, where part of the room money is owed back
+  // too. `extraRefund` is that part, and it comes off what the stay is worth.
+  const refund = +Math.max(0, refundable - deduction + extraRefund).toFixed(2);
 
-  /** Staff can type the final figure directly; the deduction follows from it. */
+  /**
+   * Staff type the final figure. Below the deposit it becomes a withholding;
+   * above it, the difference is room money going back.
+   */
   function setFinalRefund(value: number) {
-    const clamped = Math.min(Math.max(0, value), refundable);
-    setDeduction(+(refundable - clamped).toFixed(2));
+    const v = Math.max(0, value);
+    if (v > refundable) {
+      setDeduction(0);
+      setExtraRefund(+(v - refundable).toFixed(2));
+    } else {
+      setExtraRefund(0);
+      setDeduction(+(refundable - v).toFixed(2));
+    }
   }
 
   function togglePreset(amount: number) {
@@ -333,7 +357,7 @@ function CheckoutDepositModal({
         body: JSON.stringify({
           status: "CHECKED_OUT",
           settlement: {
-            refund, collect, collectMode, deduction,
+            refund, collect, collectMode, deduction, extraRefund,
             refundMode: refund > 0 ? refundMode : undefined,
             notes: notes || undefined,
           },
@@ -379,17 +403,17 @@ function CheckoutDepositModal({
           </button>
         </div>
 
-        {/* Unpaid room balance — the one thing that must not slip past the desk */}
+        {/* Unpaid bill — the one thing that must not slip past the desk */}
         {balanceDue > 0 && (
           <div className="flex items-start gap-2.5 bg-red-500/12 border border-red-500/30 rounded-2xl px-4 py-3 mb-4">
             <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
             <div>
               <p className="text-red-200 text-sm font-bold">
-                This guest still owes ₹{balanceDue.toLocaleString("en-IN")} for the room
+                Still to pay: ₹{balanceDue.toLocaleString("en-IN")}
               </p>
               <p className="text-red-200/70 text-xs mt-0.5 leading-relaxed">
-                They never paid online. Take it now — checking out records this balance as
-                collected, so it will show in the accounts either way.
+                Take it now. Checking out marks this as paid either way, so it will show as
+                income even if you do not collect it.
               </p>
             </div>
           </div>
@@ -397,36 +421,36 @@ function CheckoutDepositModal({
 
         {/* Settlement breakdown — deposit nets against everything owed */}
         <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-4 space-y-2 mb-4">
-          {balanceDue > 0 && <Row label="Room balance owed" value={balanceDue} />}
-          {additionalCharges > 0 && <Row label="Extra charges (tea, damage…)" value={additionalCharges} />}
-          <Row label="Refundable deposit held" value={depositCollected} />
+          {balanceDue > 0 && <Row label="Bill still to pay" value={balanceDue} />}
+          {additionalCharges > 0 && <Row label="Extra charges" value={additionalCharges} />}
+          <Row label="Deposit with us" value={depositCollected} />
           <div className="border-t border-white/10 pt-2.5 mt-1">
             {refundable > 0 && (
               <div className="flex justify-between items-center">
-                <span className="text-green-300 font-bold flex items-center gap-1.5"><ShieldCheck className="w-4 h-4" /> Refundable to guest</span>
+                <span className="text-green-300 font-bold flex items-center gap-1.5"><ShieldCheck className="w-4 h-4" /> To give back</span>
                 <span className="text-green-300 font-bold text-lg">₹{refundable.toLocaleString("en-IN")}</span>
               </div>
             )}
             {collect > 0 && (
               <div className="flex justify-between items-center">
-                <span className="text-red-300 font-bold flex items-center gap-1.5"><AlertTriangle className="w-4 h-4" /> Collect from guest</span>
+                <span className="text-red-300 font-bold flex items-center gap-1.5"><AlertTriangle className="w-4 h-4" /> To collect</span>
                 <span className="text-red-300 font-bold text-lg">₹{collect.toLocaleString("en-IN")}</span>
               </div>
             )}
             {refundable === 0 && collect === 0 && (
-              <p className="flex items-center gap-1.5 text-white/60 text-sm font-semibold"><CheckCircle2 className="w-4 h-4 text-green-400" /> Fully settled — nothing to collect or refund</p>
+              <p className="flex items-center gap-1.5 text-white/60 text-sm font-semibold"><CheckCircle2 className="w-4 h-4 text-green-400" /> All settled — nothing to pay or return</p>
             )}
           </div>
         </div>
         {additionalCharges > depositCollected && depositCollected >= 0 && collect > 0 && (
-          <p className="text-xs text-amber-400/70 mb-4 -mt-1">Extra charges exceed the deposit held — the difference is being collected.</p>
+          <p className="text-xs text-amber-400/70 mb-4 -mt-1">Extra charges are more than the deposit — collecting the difference.</p>
         )}
 
         {/* Deduct-and-confirm — only when money is going back to the guest */}
         {refundable > 0 && (
           <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-4 mb-4">
             <p className="text-xs text-white/40 uppercase tracking-wider font-semibold mb-2.5">
-              Deduct for dirt / damage
+              Keep back for damage or cleaning
             </p>
             <div className="flex flex-wrap gap-1.5 mb-3">
               {DEDUCTION_PRESETS.filter(p => p.amount <= refundable).map(p => (
@@ -449,7 +473,7 @@ function CheckoutDepositModal({
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-[10px] text-white/35 uppercase tracking-wider font-semibold mb-1.5">Withheld (₹)</label>
+                <label className="block text-[10px] text-white/35 uppercase tracking-wider font-semibold mb-1.5">Keep back (₹)</label>
                 <input type="number" min={0} max={refundable} value={deduction || ""}
                   onChange={e => setDeduction(Math.min(Math.max(0, Number(e.target.value) || 0), refundable))}
                   placeholder="0"
@@ -457,7 +481,7 @@ function CheckoutDepositModal({
               </div>
               <div>
                 <label className="block text-[10px] text-green-400/60 uppercase tracking-wider font-semibold mb-1.5">Refund to guest (₹)</label>
-                <input type="number" min={0} max={refundable} value={refund}
+                <input type="number" min={0} value={refund}
                   onChange={e => setFinalRefund(Number(e.target.value) || 0)}
                   className="w-full bg-green-500/8 border border-green-500/25 rounded-xl px-3 py-2.5 text-green-200 font-bold text-sm focus:outline-none focus:border-green-400/60 transition-all" />
               </div>
@@ -465,8 +489,32 @@ function CheckoutDepositModal({
 
             {deduction > 0 && (
               <p className="text-[11px] text-amber-400/70 mt-2">
-                ₹{deduction.toLocaleString("en-IN")} withheld from the ₹{refundable.toLocaleString("en-IN")} deposit — add the reason in the notes below.
+                ₹{deduction.toLocaleString("en-IN")} kept back from the ₹{refundable.toLocaleString("en-IN")} deposit — write the reason below.
               </p>
+            )}
+
+            {extraRefund > 0 && (
+              <div className="mt-3 bg-sky-500/10 border border-sky-500/25 rounded-xl px-3 py-2.5">
+                <p className="text-sky-200 text-[11px] font-semibold">
+                  ₹{extraRefund.toLocaleString("en-IN")} more than the deposit
+                </p>
+                <p className="text-sky-200/70 text-[11px] mt-0.5 leading-relaxed">
+                  This part comes out of the room money, so the booking drops to
+                  ₹{Math.max(0, totalBilled - extraRefund).toLocaleString("en-IN")}. The owner is told.
+                </p>
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {EXTRA_REFUND_REASONS.map(r => (
+                    <button key={r} type="button" onClick={() => setNotes(r)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all ${
+                        notes === r
+                          ? "bg-sky-500 text-white border-sky-400"
+                          : "bg-white/5 border-white/10 text-white/55 hover:text-white/85"
+                      }`}>
+                      {r}
+                    </button>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
         )}
@@ -474,12 +522,12 @@ function CheckoutDepositModal({
         {/* How the refund goes back */}
         {refund > 0 && (
           <div className="mb-4">
-            <p className="text-xs text-white/40 uppercase tracking-wider font-semibold mb-2">Refund via</p>
+            <p className="text-xs text-white/40 uppercase tracking-wider font-semibold mb-2">How to give it back</p>
             <div className="flex gap-2">
               {canRefundToSource && (
                 <button onClick={() => setRefundMode("RAZORPAY")}
                   className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border transition-all ${refundMode === "RAZORPAY" ? "bg-green-500/15 border-green-500/30 text-green-300" : "border-white/10 text-white/40 hover:text-white/70"}`}>
-                  Back to source
+                  Same account
                 </button>
               )}
               {(["CASH", "ONLINE"] as const).map(m => (
@@ -491,10 +539,10 @@ function CheckoutDepositModal({
             </div>
             <p className="text-[11px] text-white/30 mt-2">
               {refundMode === "RAZORPAY"
-                ? "Instant refund to the card / UPI the guest paid with — credited right away where their bank supports it, otherwise in the normal 5–7 day cycle."
+                ? "Goes back to the card or UPI the guest paid with. Usually instant; some banks take 5–7 days."
                 : canRefundToSource
-                  ? `Hand ₹${refund.toLocaleString("en-IN")} back at the desk — nothing is sent through the gateway.`
-                  : `Guest paid at the counter, so hand ₹${refund.toLocaleString("en-IN")} back at the desk.`}
+                  ? `Give ₹${refund.toLocaleString("en-IN")} back at the desk. Nothing is sent online.`
+                  : `Guest paid at the desk, so give ₹${refund.toLocaleString("en-IN")} back here.`}
             </p>
           </div>
         )}
@@ -519,7 +567,7 @@ function CheckoutDepositModal({
           rows={2}
           value={notes}
           onChange={e => setNotes(e.target.value)}
-          placeholder="Notes (e.g. damage details)…"
+          placeholder="Notes — reason for keeping back or giving extra…"
           className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder:text-white/25 text-sm focus:outline-none focus:border-amber-400/40 transition-all resize-none mb-4"
         />
 
@@ -533,8 +581,8 @@ function CheckoutDepositModal({
               className="mt-0.5 w-4 h-4 accent-amber-500 shrink-0"
             />
             <span className="text-white/70 text-xs leading-relaxed">
-              I have collected the ₹{balanceDue.toLocaleString("en-IN")} room balance
-              {collect > 0 ? " (included in the amount below)" : ""}, or the owner has agreed to write it off.
+              I have taken the ₹{balanceDue.toLocaleString("en-IN")} bill
+              {collect > 0 ? " (included in the amount below)" : ""}, or the owner has agreed to let it go.
             </span>
           </label>
         )}
@@ -551,7 +599,7 @@ function CheckoutDepositModal({
           <button
             onClick={doCheckout}
             disabled={loading || (balanceDue > 0 && !balanceAcknowledged)}
-            title={balanceDue > 0 && !balanceAcknowledged ? "Confirm the room balance has been collected first" : undefined}
+            title={balanceDue > 0 && !balanceAcknowledged ? "Confirm the bill has been collected first" : undefined}
             className="flex-1 py-3 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/25 text-amber-400 hover:text-amber-300 text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? (
@@ -559,11 +607,11 @@ function CheckoutDepositModal({
                 <Loader2 className="w-4 h-4 animate-spin" /> Checking out…
               </span>
             ) : collect > 0 ? (
-              `Collect ₹${collect.toLocaleString("en-IN")} & Check Out`
+              `Take ₹${collect.toLocaleString("en-IN")} & Check Out`
             ) : refund > 0 ? (
-              `Refund ₹${refund.toLocaleString("en-IN")} & Check Out`
+              `Give Back ₹${refund.toLocaleString("en-IN")} & Check Out`
             ) : (
-              "Confirm Checkout"
+              "Check Out"
             )}
           </button>
         </div>
