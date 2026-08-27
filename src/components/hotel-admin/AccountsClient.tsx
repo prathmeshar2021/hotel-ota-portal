@@ -52,6 +52,7 @@ function txTypeLabel(type: TransactionItem["type"]): string {
     case "CHARGE_MIXED":         return "Extra Charge";
     case "DEPOSIT_APPLIED":      return "From Deposit";
     case "REFUND":               return "Refund";
+    case "ADJUSTMENT":           return "Adjustment";
     case "CANCELLATION_FEE":     return "Cancellation";
     case "DAMAGE_CHARGE":        return "Damage";
     case "CASH_COLLECTION":      return "Withdrawn";
@@ -73,6 +74,8 @@ function txBadge(type: TransactionItem["type"], mode: TransactionItem["mode"]) {
     return { text: "From deposit", cls: "bg-amber-500/15 text-amber-400 border-amber-500/25" };
   if (type === "REFUND")
     return { text: "Refunded", cls: "bg-red-500/15 text-red-400 border-red-500/25" };
+  if (type === "ADJUSTMENT")
+    return { text: "Adjustment", cls: "bg-sky-500/15 text-sky-300 border-sky-500/25" };
   if (type === "BOOKING_PAY_AT_HOTEL")
     return { text: "Due", cls: "bg-orange-500/15 text-orange-400 border-orange-500/25" };
   if (type === "EXPENSE_DEBIT")

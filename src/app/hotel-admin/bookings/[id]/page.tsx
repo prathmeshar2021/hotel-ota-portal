@@ -40,6 +40,7 @@ import DeleteChargeButton from "@/components/hotel-admin/DeleteChargeButton";
 import AdminCancelBookingButton from "@/components/hotel-admin/CancelBookingButton";
 import DeleteBookingButton from "@/components/hotel-admin/DeleteBookingButton";
 import EditPricingButton from "@/components/hotel-admin/EditPricingButton";
+import BookingAccountPanel from "@/components/hotel-admin/BookingAccountPanel";
 import AssignRoomButton from "@/components/hotel-admin/AssignRoomButton";
 import GuestCountEditor from "@/components/hotel-admin/GuestCountEditor";
 import AddCompanionButton from "@/components/hotel-admin/AddCompanionButton";
@@ -553,6 +554,11 @@ export default async function BookingDetailPage({
               </div>
             )}
           </div>
+
+          <BookingAccountPanel
+            bookingId={booking.id}
+            depositExpected={booking.refundableDeposit}
+          />
 
           {/* Payment */}
           <div className="bg-white/3 border border-white/8 rounded-2xl p-5">

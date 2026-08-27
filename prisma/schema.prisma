@@ -518,10 +518,18 @@ model StaffActionLog {
 enum TxnKind {
   ROOM_PAYMENT     // paid towards the room bill
   EXTRA_CHARGE     // paid at the counter for an extra (water, food, …)
+  DEPOSIT_TAKEN    // refundable deposit collected — the guest's money, held
+  DEPOSIT_RETURNED // refundable deposit handed back at checkout
   DEPOSIT_APPLIED  // deposit money used to settle what the guest owed
   DEPOSIT_WITHHELD // deposit money kept back for dirt or damage
   CANCELLATION_FEE // retained when a booking was cancelled
   REFUND           // money returned to the guest
+  ADJUSTMENT       // free-form correction made at the desk
+}
+
+enum TxnDirection {
+  CREDIT // money in, or value gained by the hotel
+  DEBIT  // money out, or value given back
 }
 
 enum TxnMode {
@@ -531,12 +539,16 @@ enum TxnMode {
 }
 
 model BookingTxn {
-  id         String   @id @default(cuid())
-  hotelId    String
-  bookingId  String
-  kind       TxnKind
-  mode       TxnMode
-  amount     Float
+  id        String       @id @default(cuid())
+  hotelId   String
+  bookingId String
+  kind      TxnKind
+  /// Which way the money went. Derivable from `kind` for most entries, but
+  /// stored because a desk adjustment can go either way and the statement must
+  /// order credits and debits together without re-deriving each one.
+  direction TxnDirection @default(CREDIT)
+  mode      TxnMode
+  amount    Float
   /// Signed effect on the physical cash drawer. Cash taken is +, cash handed
   /// back is −, and anything online or on paper is 0. Deposit money only lands
   /// here when it stops being the guest's — i.e. when it is applied or withheld.
@@ -544,6 +556,22 @@ model BookingTxn {
   note       String?
   occurredAt DateTime
   recordedBy String?
+  /// Whether this belongs in the hotel's accounts statement. False for the
+  /// refundable deposit simply moving in and out — that is the guest's money
+  /// passing through, and the owner asked for it to stay out of the statement.
+  /// It still shows on the booking's own account, where staff need to see it.
+  affectsStatement Boolean @default(true)
+
+  /// Set on anything out of the ordinary — refunding more than the deposit
+  /// held, taking more than the booking is worth, a mode corrected after the
+  /// fact. Flagged entries notify the owner and are filterable in the panel.
+  flagged    Boolean  @default(false)
+  flagReason String?
+
+  /// Points at the entry this one corrects or reverses, so a correction can
+  /// always be read back to what it changed.
+  correctsId String?
+
   /// Stable key for events that could be replayed (webhook retries, a double
   /// submit at the desk), so the same rupee is never recorded twice.
   idemKey    String?  @unique
@@ -553,6 +581,7 @@ model BookingTxn {
 
   @@index([hotelId, occurredAt])
   @@index([bookingId, occurredAt])
+  @@index([hotelId, flagged])
 }
 
 // ─── BOOKING COMPANION ────────────────────────────────────────────────────────

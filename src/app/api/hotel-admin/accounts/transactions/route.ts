@@ -15,6 +15,7 @@ export type TxType =
   | "CHARGE_ONLINE"
   | "CHARGE_MIXED"
   | "DEPOSIT_APPLIED"
+  | "ADJUSTMENT"
   | "REFUND"
   | "CANCELLATION_FEE"
   | "DAMAGE_CHARGE"
@@ -49,10 +50,13 @@ export interface TransactionItem {
 function ledgerRowToItem(t: {
   id: string;
   kind: string;
+  direction: string;
   mode: string;
   amount: number;
   note: string | null;
   occurredAt: Date;
+  flagged: boolean;
+  flagReason: string | null;
   booking: {
     bookingRef: string;
     noOfNights: number;
@@ -88,10 +92,18 @@ function ledgerRowToItem(t: {
       type = "CANCELLATION_FEE";
       description = "Cancellation fee";
       break;
+    case "ADJUSTMENT":
+      type = "ADJUSTMENT";
+      description = t.note ?? (t.direction === "CREDIT" ? "Adjustment — taken" : "Adjustment — given back");
+      break;
     default:
       type = "REFUND";
       description = t.note ?? "Refunded to guest";
   }
+
+  // A flagged entry says so on the statement itself, so the unusual ones are
+  // visible where the money is read rather than only in the activity log.
+  if (t.flagged && t.flagReason) description = `${description} — ${t.flagReason}`;
 
   return {
     id: `txn-${t.id}`,
@@ -103,7 +115,8 @@ function ledgerRowToItem(t: {
     bookingRef: t.booking.bookingRef,
     mode: t.mode as TransactionItem["mode"],
     amount: t.amount,
-    isDebit: t.kind === "REFUND",
+    // Direction is stored, not inferred: a desk adjustment can go either way.
+    isDebit: t.direction === "DEBIT",
   };
 }
 
@@ -156,12 +169,17 @@ export async function GET(req: NextRequest) {
       where: {
         hotelId,
         occurredAt: { gte: fromDate, lte: toDate },
+        // The refundable deposit merely passing through is the guest's money,
+        // not the hotel's takings, so it is marked out of the statement at the
+        // point it is written. It still shows on the booking's own account.
+        affectsStatement: true,
         // OTA-prepaid bookings are paid to the channel, not the hotel — they
         // live in the GoMMT finance view, not the hotel's own statement.
         booking: { source: { notIn: OTA_PREPAID_SOURCES } },
       },
       select: {
-        id: true, kind: true, mode: true, amount: true, note: true, occurredAt: true,
+        id: true, kind: true, direction: true, mode: true, amount: true, note: true,
+        occurredAt: true, flagged: true, flagReason: true,
         booking: {
           select: {
             bookingRef: true, noOfNights: true, roomCategory: true,

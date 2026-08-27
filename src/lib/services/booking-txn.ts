@@ -20,6 +20,7 @@
 
 import { prisma } from "@/lib/db/prisma";
 import type { Prisma } from "@prisma/client";
+import { postEntry } from "@/lib/services/booking-ledger";
 
 export type TxnKind =
   | "ROOM_PAYMENT"
@@ -49,68 +50,37 @@ export interface RecordTxnInput {
    * cash at that moment, so the drawer figure has to pick it up.
    */
   depositMode?: "CASH" | "ONLINE" | null;
-  /** For REFUND: whether the notes left the drawer or the money went back online. */
+  /** Retained for callers that still pass it; `mode` already carries this. */
   refundVia?: "CASH" | "ONLINE" | null;
 }
 
-/** Signed effect on the physical cash drawer. See the note on the model. */
-function cashImpactOf(input: RecordTxnInput, amount: number): number {
-  switch (input.kind) {
-    case "ROOM_PAYMENT":
-    case "EXTRA_CHARGE":
-    case "CANCELLATION_FEE":
-      return input.mode === "CASH" ? amount : 0;
-
-    case "DEPOSIT_APPLIED":
-    case "DEPOSIT_WITHHELD":
-      // The deposit was excluded from the drawer while we merely held it. Now
-      // that it is ours, it counts — but only if it was taken as cash.
-      return input.depositMode === "CASH" ? amount : 0;
-
-    case "REFUND":
-      return input.refundVia === "CASH" ? -amount : 0;
-  }
-}
-
 /**
- * Append one entry. Zero and negative amounts are dropped rather than stored —
- * a settlement that nets to nothing is not a transaction.
+ * Append one entry.
  *
- * Pass `tx` to join an enclosing `prisma.$transaction`, so the ledger row and
- * the booking update either both land or neither does.
+ * Kept as the entry point the booking routes already call, but the rules — which
+ * way the money went, what it does to the cash drawer, whether it belongs in the
+ * hotel statement — now live in booking-ledger, so the desk's own account panel
+ * and these routes can never drift apart.
  */
 export async function recordTxn(
   input: RecordTxnInput,
   tx?: Prisma.TransactionClient
 ): Promise<void> {
-  const amount = +Number(input.amount ?? 0).toFixed(2);
-  if (!(amount > 0)) return;
-
-  const client = tx ?? prisma;
-  const data = {
-    hotelId: input.hotelId,
-    bookingId: input.bookingId,
-    kind: input.kind,
-    mode: input.mode,
-    amount,
-    cashImpact: +cashImpactOf(input, amount).toFixed(2),
-    note: input.note ?? null,
-    occurredAt: input.occurredAt ?? new Date(),
-    recordedBy: input.recordedBy ?? null,
-    idemKey: input.idemKey ?? null,
-  };
-
-  if (data.idemKey) {
-    // Replay-safe: a webhook Razorpay sends twice must not credit twice.
-    await client.bookingTxn.upsert({
-      where: { idemKey: data.idemKey },
-      create: data,
-      update: {},
-    });
-    return;
-  }
-
-  await client.bookingTxn.create({ data });
+  await postEntry(
+    {
+      hotelId: input.hotelId,
+      bookingId: input.bookingId,
+      kind: input.kind,
+      mode: input.mode,
+      amount: input.amount,
+      note: input.note,
+      occurredAt: input.occurredAt,
+      recordedBy: input.recordedBy,
+      idemKey: input.idemKey,
+      depositMode: input.depositMode,
+    },
+    tx
+  );
 }
 
 /**
