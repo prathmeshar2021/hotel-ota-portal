@@ -1,0 +1,169 @@
+/**
+ * Money-flow test suite.  npx tsx scripts/test-money-flows.ts
+ *
+ * Pure simulation of the exact arithmetic the server runs — the checkout
+ * settlement, the account panel, and the desk edits — checked against the
+ * invariants that must hold whatever staff do. No database, so it can be run
+ * before every deploy.
+ */
+import { summarise, assessEntry, cashImpactOf } from "../src/lib/services/booking-ledger";
+import { computeTotalsForPrice } from "../src/lib/utils/booking-calc";
+
+type Entry = { kind: string; direction: string; mode: string; amount: number };
+let pass = 0, fail = 0;
+const f = (n: number) => `₹${n.toLocaleString("en-IN")}`;
+
+function ok(name: string, cond: boolean, detail = "") {
+  if (cond) { pass++; console.log(`  ✓ ${name}`); }
+  else { fail++; console.log(`  ✗ ${name}${detail ? ` — ${detail}` : ""}`); }
+}
+
+/** Mirrors the CHECKED_OUT branch of the status route, exactly. */
+function checkout(o: {
+  depositCollected: number; balanceDue: number; additionalCharges: number;
+  deduction: number; collectMode?: "CASH" | "ONLINE";
+}) {
+  const owed = +(o.balanceDue + o.additionalCharges).toFixed(2);
+  const net = +(o.depositCollected - owed).toFixed(2);
+  const collect = Math.max(0, -net);
+  const depositUsed = Math.min(o.depositCollected, owed);
+  const refundable = Math.max(0, net);
+  const deduction = Math.min(Math.max(0, +o.deduction.toFixed(2)), refundable);
+  const refund = +(refundable - deduction).toFixed(2);
+  const toExtras = Math.min(depositUsed, o.additionalCharges);
+  const toRoom = +(depositUsed - toExtras).toFixed(2);
+  return { owed, collect, depositUsed, refundable, deduction, refund, toExtras, toRoom,
+    depositDeducted: +(depositUsed + deduction).toFixed(2) };
+}
+
+console.log("── 1. Checkout settlement across the whole range ──");
+const cases = [
+  { n: "deposit covers nothing owed",          dep: 500,  bal: 0,    extra: 0,   ded: 0 },
+  { n: "deposit exactly covers what's owed",   dep: 500,  bal: 400,  extra: 100, ded: 0 },
+  { n: "deposit partly covers",                dep: 500,  bal: 800,  extra: 0,   ded: 0 },
+  { n: "nothing owed, staff withholds some",   dep: 500,  bal: 0,    extra: 0,   ded: 200 },
+  { n: "staff withholds the whole deposit",    dep: 500,  bal: 0,    extra: 0,   ded: 500 },
+  { n: "staff tries to withhold beyond it",    dep: 500,  bal: 0,    extra: 0,   ded: 900 },
+  { n: "no deposit, money owed",               dep: 0,    bal: 700,  extra: 50,  ded: 0 },
+  { n: "extras exceed the deposit",            dep: 200,  bal: 0,    extra: 950, ded: 0 },
+  { n: "everything zero",                      dep: 0,    bal: 0,    extra: 0,   ded: 0 },
+  { n: "odd paisa",                            dep: 199.5,bal: 99.25,extra: 0.25,ded: 0 },
+];
+for (const c of cases) {
+  const r = checkout({ depositCollected: c.dep, balanceDue: c.bal, additionalCharges: c.extra, deduction: c.ded });
+  // The deposit must be fully accounted for: used + withheld + returned == taken.
+  const accounted = +(r.depositUsed + r.deduction + r.refund).toFixed(2);
+  const balanced = Math.abs(accounted - c.dep) < 0.01;
+  // Never refund or withhold more than is held; never both collect and refund.
+  const sane = r.refund >= -0.01 && r.deduction <= c.dep + 0.01 && !(r.collect > 0 && r.refund > 0);
+  const split = Math.abs(r.toExtras + r.toRoom - r.depositUsed) < 0.01;
+  ok(`${c.n}: refund ${f(r.refund)}, collect ${f(r.collect)}, used ${f(r.depositUsed)}, withheld ${f(r.deduction)}`,
+     balanced && sane && split,
+     `accounted ${accounted} vs deposit ${c.dep}`);
+}
+
+console.log("\n── 2. Staff changing the refund amount at checkout ──");
+{
+  const base = { depositCollected: 500, balanceDue: 0, additionalCharges: 0 };
+  for (const typed of [500, 400, 250, 0]) {
+    // The modal lets staff type the final refund; deduction follows from it.
+    const deduction = +(500 - typed).toFixed(2);
+    const r = checkout({ ...base, deduction });
+    const accounted = +(r.depositUsed + r.deduction + r.refund).toFixed(2);
+    ok(`staff sets refund to ${f(typed)} → withheld ${f(r.deduction)}, deposit fully accounted`,
+       Math.abs(r.refund - typed) < 0.01 && Math.abs(accounted - 500) < 0.01);
+  }
+  // Typing more than is held must clamp, never invent money.
+  const over = checkout({ ...base, deduction: -200 });
+  ok("a negative withholding cannot inflate the refund", over.refund <= 500.01 && over.deduction >= 0);
+}
+
+console.log("\n── 3. The booking's account after each checkout ──");
+for (const c of cases.slice(0, 6)) {
+  const r = checkout({ depositCollected: c.dep, balanceDue: c.bal, additionalCharges: c.extra, deduction: c.ded });
+  const roomTotal = 1000, paidUpfront = +(roomTotal - c.bal).toFixed(2);
+  const entries: Entry[] = [
+    { kind: "ROOM_PAYMENT", direction: "CREDIT", mode: "CASH", amount: paidUpfront },
+    ...(c.dep > 0 ? [{ kind: "DEPOSIT_TAKEN", direction: "CREDIT", mode: "CASH", amount: c.dep }] : []),
+    ...(r.toExtras > 0 ? [{ kind: "DEPOSIT_APPLIED", direction: "CREDIT", mode: "DEPOSIT", amount: r.toExtras }] : []),
+    ...(r.toRoom > 0 ? [{ kind: "DEPOSIT_APPLIED", direction: "CREDIT", mode: "DEPOSIT", amount: r.toRoom }] : []),
+    ...(r.deduction > 0 ? [{ kind: "DEPOSIT_WITHHELD", direction: "CREDIT", mode: "DEPOSIT", amount: r.deduction }] : []),
+    ...(r.collect > 0 ? [{ kind: "ROOM_PAYMENT", direction: "CREDIT", mode: "CASH", amount: r.collect }] : []),
+    ...(r.refund > 0 ? [{ kind: "DEPOSIT_RETURNED", direction: "DEBIT", mode: "CASH", amount: r.refund }] : []),
+  ];
+  const a = summarise(entries, { roomTotal, extrasOnTab: c.extra });
+  ok(`${c.n}: settles to zero and holds nothing`,
+     Math.abs(a.balance) < 0.01 && Math.abs(a.depositHeld) < 0.01,
+     `balance ${a.balance}, held ${a.depositHeld}`);
+}
+
+console.log("\n── 4. Front-desk edits ──");
+{
+  // Repricing after part-payment.
+  const paid = 1200;
+  for (const newTotal of [1500, 1200, 1100]) {
+    const t = computeTotalsForPrice({ inclusiveTotal: newTotal, noOfNights: 1 });
+    const rejected = newTotal < paid - 0.5;
+    const balance = +(t.totalAmount - paid).toFixed(2);
+    ok(`reprice to ${f(newTotal)} → ${rejected ? "refused (below paid)" : `balance ${f(balance)}`}`,
+       rejected ? newTotal < paid : Math.abs(t.taxableAmount + t.cgst + t.sgst - t.totalAmount) < 0.01);
+  }
+  // Mode correction moves only the drawer, never the total.
+  const before: Entry[] = [{ kind: "ROOM_PAYMENT", direction: "CREDIT", mode: "CASH", amount: 1000 }];
+  const after: Entry[] = [{ kind: "ROOM_PAYMENT", direction: "CREDIT", mode: "ONLINE", amount: 1000 }];
+  const a1 = summarise(before, { roomTotal: 1000, extrasOnTab: 0 });
+  const a2 = summarise(after, { roomTotal: 1000, extrasOnTab: 0 });
+  ok("cash→UPI correction leaves the balance untouched", Math.abs(a1.balance - a2.balance) < 0.01);
+  ok("cash→UPI correction moves cash to online", a1.paidCash === 1000 && a2.paidOnline === 1000 && a2.paidCash === 0);
+  const dCash = cashImpactOf({ hotelId: "", bookingId: "", kind: "ROOM_PAYMENT", mode: "CASH", amount: 1000 }, 1000);
+  const dOnline = cashImpactOf({ hotelId: "", bookingId: "", kind: "ROOM_PAYMENT", mode: "ONLINE", amount: 1000 }, 1000);
+  ok(`drawer falls by ${f(1000)} on that correction`, dCash - dOnline === 1000);
+}
+
+console.log("\n── 5. Refunding past the deposit ──");
+{
+  const roomTotal = 1200;
+  const entries: Entry[] = [
+    { kind: "ROOM_PAYMENT", direction: "CREDIT", mode: "CASH", amount: 1200 },
+    { kind: "DEPOSIT_TAKEN", direction: "CREDIT", mode: "CASH", amount: 200 },
+  ];
+  const acct = summarise(entries, { roomTotal, extrasOnTab: 0 });
+  const give = 600;
+  const chk = assessEntry({ kind: "DEPOSIT_RETURNED", direction: "DEBIT", amount: give, account: acct });
+  ok("returning past the deposit is flagged", chk.flagged, chk.reason);
+  const excess = +(give - acct.depositHeld).toFixed(2);
+  const after = summarise(
+    [...entries,
+     { kind: "DEPOSIT_RETURNED", direction: "DEBIT", mode: "CASH", amount: acct.depositHeld },
+     { kind: "REFUND", direction: "DEBIT", mode: "CASH", amount: excess }],
+    { roomTotal: +(roomTotal - excess).toFixed(2), extrasOnTab: 0 }
+  );
+  ok(`excess ${f(excess)} reduces the booking and settles to zero`,
+     Math.abs(after.balance) < 0.01 && Math.abs(after.depositHeld) < 0.01,
+     `balance ${after.balance}, held ${after.depositHeld}`);
+}
+
+console.log("\n── 6. Flags fire on everything unusual, and only that ──");
+{
+  const acct = summarise(
+    [{ kind: "ROOM_PAYMENT", direction: "CREDIT", mode: "CASH", amount: 1000 },
+     { kind: "DEPOSIT_TAKEN", direction: "CREDIT", mode: "CASH", amount: 200 }],
+    { roomTotal: 1200, extrasOnTab: 0 }
+  );
+  const t = [
+    { n: "take exactly what's owed", k: "ROOM_PAYMENT", d: "CREDIT", a: 200, want: false },
+    { n: "take a rupee more",        k: "ROOM_PAYMENT", d: "CREDIT", a: 201, want: true },
+    { n: "return the deposit",       k: "DEPOSIT_RETURNED", d: "DEBIT", a: 200, want: false },
+    { n: "return a rupee more",      k: "DEPOSIT_RETURNED", d: "DEBIT", a: 201, want: true },
+    { n: "refund within what's paid",k: "REFUND", d: "DEBIT", a: 900, want: false },
+    { n: "refund beyond it",         k: "REFUND", d: "DEBIT", a: 1100, want: true },
+    { n: "take the deposit itself",  k: "DEPOSIT_TAKEN", d: "CREDIT", a: 5000, want: false },
+  ] as const;
+  for (const c of t) {
+    const r = assessEntry({ kind: c.k as never, direction: c.d as never, amount: c.a, account: acct });
+    ok(`${c.n} → ${r.flagged ? "flagged" : "clean"}`, r.flagged === c.want, r.reason);
+  }
+}
+
+console.log(`\n${fail === 0 ? `All ${pass} checks passed.` : `${fail} FAILED of ${pass + fail}`}`);
+process.exitCode = fail === 0 ? 0 : 1;

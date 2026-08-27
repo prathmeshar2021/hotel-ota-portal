@@ -305,11 +305,18 @@ export async function PATCH(
 /**
  * Keep the booking's own running totals in step with its ledger. They are a
  * summary of the entries, never a second source of truth — everything that
- * reads a booking card, an invoice or a checkout screen uses them.
+ * reads a booking card, an invoice or the checkout screen uses them.
+ *
+ * depositCollected matters most here. Checkout works out the refund from it, so
+ * a deposit taken on this panel that never reached the booking row would leave
+ * checkout believing nothing is held — and quietly keep the guest's money.
  */
 async function syncBookingTotals(
   bookingId: string,
-  a: { paidCash: number; paidOnline: number; balance: number }
+  a: {
+    paidCash: number; paidOnline: number; balance: number;
+    depositTaken: number; depositReturned: number;
+  }
 ) {
   await prisma.booking.update({
     where: { id: bookingId },
@@ -317,6 +324,9 @@ async function syncBookingTotals(
       cashPaid: a.paidCash,
       onlinePaid: a.paidOnline,
       balanceDue: Math.max(0, a.balance),
+      // What the deposit is worth right now, before checkout settles it:
+      // everything taken, less anything already handed back.
+      depositCollected: +Math.max(0, a.depositTaken - a.depositReturned).toFixed(2),
     },
   });
 }

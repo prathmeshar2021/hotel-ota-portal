@@ -151,6 +151,8 @@ export interface BookingAccount {
   depositTaken: number;
   depositReturned: number;
   depositUsed: number;
+  /** Kept for damage or cleaning — a charge, settled from the deposit. */
+  depositWithheld: number;
 }
 
 /**
@@ -174,7 +176,17 @@ export function summarise(
   const depositReturned = sum(e => e.kind === "DEPOSIT_RETURNED");
   const depositUsed = fromDeposit;
 
-  const billed = +(opts.roomTotal + opts.extrasOnTab).toFixed(2);
+  // Withholding part of the deposit for damage is two things happening at once:
+  // a charge raised against the guest, and that charge settled out of the
+  // deposit. Counting only the settlement made the account read as though the
+  // hotel owed the guest the withheld amount — so the charge side belongs in
+  // what the stay is billed, exactly as an extra on the tab would.
+  const withheld = sum(e => e.kind === "DEPOSIT_WITHHELD");
+  // A cancellation fee is retained the same way: money kept becomes something
+  // the guest was billed for, not a windfall sitting against nothing.
+  const retained = sum(e => e.kind === "CANCELLATION_FEE");
+
+  const billed = +(opts.roomTotal + opts.extrasOnTab + withheld + retained).toFixed(2);
   const paid = +(paidCash + paidOnline + fromDeposit).toFixed(2);
 
   return {
@@ -190,6 +202,7 @@ export function summarise(
     depositTaken,
     depositReturned,
     depositUsed,
+    depositWithheld: withheld,
   };
 }
 

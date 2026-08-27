@@ -38,7 +38,7 @@ interface Account {
   billed: number; roomTotal: number; extrasOnTab: number;
   paid: number; paidCash: number; paidOnline: number; refunded: number;
   balance: number; depositHeld: number; depositTaken: number;
-  depositReturned: number; depositUsed: number;
+  depositReturned: number; depositUsed: number; depositWithheld: number;
 }
 
 const KIND_LABEL: Record<string, string> = {
@@ -187,6 +187,8 @@ export default function BookingAccountPanel({
           <p className="text-white/25 text-[11px] mt-0.5">
             {depositExpected > 0 ? `${inr(depositExpected)} expected` : "none expected"}
             {account.depositUsed > 0 ? ` · ${inr(account.depositUsed)} used` : ""}
+            {account.depositWithheld > 0 ? ` · ${inr(account.depositWithheld)} withheld` : ""}
+            {account.depositReturned > 0 ? ` · ${inr(account.depositReturned)} returned` : ""}
           </p>
         </div>
       </div>
