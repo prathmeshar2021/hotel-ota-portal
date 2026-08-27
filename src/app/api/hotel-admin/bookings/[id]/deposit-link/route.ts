@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
+import { syncDepositTaken } from "@/lib/services/booking-ledger";
 import { z } from "zod";
 import { createPaymentLink, fetchPaymentLink } from "@/lib/services/razorpay";
 import { gupshup } from "@/lib/services/gupshup";
@@ -179,6 +180,15 @@ export async function GET(
         depositMode: "ONLINE",
         depositPaymentId: link.paymentId ?? undefined,
       },
+    });
+
+    // Show it on the booking's account as money held on the guest's behalf.
+    await syncDepositTaken({
+      hotelId: session.user.hotelId,
+      bookingId: booking.id,
+      depositCollected: paidAmount,
+      depositMode: "ONLINE",
+      note: "Refundable deposit paid by link",
     });
     return NextResponse.json({
       paid: true,

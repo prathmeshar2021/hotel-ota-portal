@@ -7,6 +7,7 @@ import {
   REFUNDABLE_DEPOSIT, computeTotals, computeTotalsForPrice, computeTotalsWithStaffDiscount,
 } from "@/lib/utils/booking-calc";
 import { recordTxn, roomPaymentNote } from "@/lib/services/booking-txn";
+import { syncDepositTaken } from "@/lib/services/booking-ledger";
 import { gupshup } from "@/lib/services/gupshup";
 import { email } from "@/lib/services/email";
 import { format } from "date-fns";
@@ -276,6 +277,14 @@ export async function POST(req: NextRequest) {
   await recordTxn({
     hotelId, bookingId: booking.id, kind: "ROOM_PAYMENT", mode: "ONLINE",
     amount: d.onlinePaid, note: roomPaymentNote("ONLINE", stage), recordedBy,
+  });
+  // The deposit is the guest's money, held rather than earned — it shows on the
+  // booking's account but stays out of the hotel's statement until it is used.
+  await syncDepositTaken({
+    hotelId, bookingId: booking.id,
+    depositCollected: d.depositCollected,
+    depositMode: d.depositMode ?? "CASH",
+    recordedBy,
   });
 
   // If ID details provided, create online check-in record (pre-filled)

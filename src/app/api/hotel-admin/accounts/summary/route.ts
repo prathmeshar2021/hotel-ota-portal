@@ -26,6 +26,7 @@ export async function GET() {
 
   const [
     drawerAgg,            // all-time signed cash effect of guest money
+    heldDepositAgg,       // cash deposits sitting in the drawer that aren't ours
     onlineAgg,            // all-time online receipts
     refundOnlineAgg,      // all-time online refunds
     collectionAgg,
@@ -41,6 +42,18 @@ export async function GET() {
     monthExpenseAgg,
   ] = await Promise.all([
     prisma.bookingTxn.aggregate({ where: guestMoney, _sum: { cashImpact: true } }),
+    // Cash deposits still being held. Not the hotel's money, so it is outside
+    // Cash in Hand — but it IS physically in the drawer, so the owner needs it
+    // to reconcile a count against the panel.
+    prisma.booking.aggregate({
+      where: {
+        hotelId, source: { notIn: OTA_PREPAID_SOURCES },
+        depositMode: "CASH",
+        status: { in: ["CONFIRMED", "CHECKED_IN"] },
+        depositCollected: { gt: 0 },
+      },
+      _sum: { depositCollected: true, depositDeducted: true },
+    }),
     prisma.bookingTxn.aggregate({ where: { ...guestMoney, ...isCredit, mode: "ONLINE" }, _sum: { amount: true } }),
     prisma.bookingTxn.aggregate({ where: { ...guestMoney, kind: "REFUND", mode: "ONLINE" }, _sum: { amount: true } }),
     prisma.cashCollection.aggregate({ where: { hotelId }, _sum: { amount: true } }),
@@ -82,11 +95,17 @@ export async function GET() {
   const pendingDue = pendingAgg._sum.balanceDue ?? 0;
   const pendingCount = pendingAgg._count._all;
 
+  const depositsHeldInCash = +Math.max(
+    0,
+    (heldDepositAgg._sum.depositCollected ?? 0) - (heldDepositAgg._sum.depositDeducted ?? 0)
+  ).toFixed(2);
+
   const todayCash = todayDrawerAgg._sum.cashImpact ?? 0;
   const todayOnline = (todayOnlineAgg._sum.amount ?? 0) - (todayRefundOnlineAgg._sum.amount ?? 0);
 
   return NextResponse.json({
     cashInHand,
+    depositsHeldInCash,
     onlineTotal,
     totalRevenue,
     totalExpenses,

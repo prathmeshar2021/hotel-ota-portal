@@ -248,3 +248,77 @@ export function assessEntry(params: {
 
   return { flagged: false };
 }
+
+
+// ── Keeping the deposit in step ──────────────────────────────────────────────
+
+/**
+ * Make the ledger agree with what the booking says is being held.
+ *
+ * The deposit is written in several places — taken at the counter, taken at
+ * check-in, paid through a WhatsApp link, corrected afterwards — and each one
+ * sets `depositCollected` on the booking. Rather than remembering to post an
+ * entry at every one, they all call this, which posts whatever difference is
+ * needed and nothing at all when the two already agree.
+ *
+ * Taking and returning the same amount leaves no trace in the hotel's accounts:
+ * both sides are marked out of the statement, so they cancel. Only the part the
+ * hotel actually keeps — applied to a bill, or withheld — ever appears there.
+ */
+export async function syncDepositTaken(params: {
+  hotelId: string;
+  bookingId: string;
+  /** What the booking now says is held. */
+  depositCollected: number;
+  depositMode?: "CASH" | "ONLINE" | null;
+  occurredAt?: Date;
+  recordedBy?: string | null;
+  note?: string;
+}): Promise<void> {
+  const rows = await prisma.bookingTxn.findMany({
+    where: { bookingId: params.bookingId, kind: { in: ["DEPOSIT_TAKEN", "DEPOSIT_RETURNED"] } },
+    select: { kind: true, amount: true },
+  });
+  const taken = rows.filter(r => r.kind === "DEPOSIT_TAKEN").reduce((s, r) => s + r.amount, 0);
+  const returned = rows.filter(r => r.kind === "DEPOSIT_RETURNED").reduce((s, r) => s + r.amount, 0);
+  const onLedger = +(taken - returned).toFixed(2);
+  const delta = +(params.depositCollected - onLedger).toFixed(2);
+  if (Math.abs(delta) < 0.5) return;
+
+  const mode: TxnMode = params.depositMode === "ONLINE" ? "ONLINE" : "CASH";
+  await postEntry({
+    hotelId: params.hotelId,
+    bookingId: params.bookingId,
+    kind: delta > 0 ? "DEPOSIT_TAKEN" : "DEPOSIT_RETURNED",
+    mode,
+    amount: Math.abs(delta),
+    occurredAt: params.occurredAt,
+    recordedBy: params.recordedBy,
+    depositMode: mode,
+    note: params.note ?? (delta > 0 ? "Refundable deposit taken" : "Deposit holding corrected"),
+  });
+}
+
+/** Record the deposit going back to the guest at checkout. */
+export async function returnDeposit(params: {
+  hotelId: string;
+  bookingId: string;
+  amount: number;
+  depositMode?: "CASH" | "ONLINE" | null;
+  occurredAt?: Date;
+  recordedBy?: string | null;
+  note?: string;
+}): Promise<void> {
+  const mode: TxnMode = params.depositMode === "ONLINE" ? "ONLINE" : "CASH";
+  await postEntry({
+    hotelId: params.hotelId,
+    bookingId: params.bookingId,
+    kind: "DEPOSIT_RETURNED",
+    mode,
+    amount: params.amount,
+    occurredAt: params.occurredAt,
+    recordedBy: params.recordedBy,
+    depositMode: mode,
+    note: params.note ?? "Refundable deposit returned at checkout",
+  });
+}

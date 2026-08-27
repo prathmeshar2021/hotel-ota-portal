@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db/prisma";
 import { z } from "zod";
 import { computeTotalsForPrice } from "@/lib/utils/booking-calc";
 import { recordStaffAction } from "@/lib/services/staff-action";
+import { syncDepositTaken } from "@/lib/services/booking-ledger";
 
 /**
  * Edit what a booking costs, after it was made.
@@ -150,6 +151,19 @@ export async function PATCH(
     data: updateData,
     select: { totalAmount: true, taxableAmount: true, cgst: true, sgst: true, balanceDue: true, refundableDeposit: true, depositCollected: true },
   });
+
+  // A corrected holding has to move the booking's account as well, or the panel
+  // would keep showing the old figure as held.
+  if (depositCollected != null) {
+    await syncDepositTaken({
+      hotelId: session.user.hotelId,
+      bookingId: booking.id,
+      depositCollected: updated.depositCollected,
+      depositMode: booking.depositMode === "ONLINE" ? "ONLINE" : "CASH",
+      recordedBy: actorName,
+      note: "Deposit holding corrected at the desk",
+    });
+  }
 
   await recordStaffAction({
     hotelId: session.user.hotelId,

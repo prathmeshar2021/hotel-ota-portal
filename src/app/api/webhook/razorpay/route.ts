@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
+import { syncDepositTaken } from "@/lib/services/booking-ledger";
 import { verifyWebhookSignature } from "@/lib/services/razorpay";
 import { confirmPaidBooking } from "@/lib/services/booking-confirm";
 import { DEPOSIT_REF_PREFIX } from "@/lib/utils/booking-calc";
@@ -50,7 +51,7 @@ export async function POST(req: NextRequest) {
       const ref = reference.slice(DEPOSIT_REF_PREFIX.length);
       const paid = (payEntity?.amount ?? 0) / 100;
       if (ref && paid > 0) {
-        await prisma.booking.updateMany({
+        const updated = await prisma.booking.updateMany({
           where: { bookingRef: ref, depositCollected: 0 },
           data: {
             depositCollected: paid,
@@ -58,6 +59,23 @@ export async function POST(req: NextRequest) {
             depositPaymentId: payEntity?.id,
           },
         });
+        // Only the call that actually claimed the deposit posts the entry, so a
+        // webhook Razorpay delivers twice cannot record the money twice.
+        if (updated.count > 0) {
+          const b = await prisma.booking.findUnique({
+            where: { bookingRef: ref },
+            select: { id: true, hotelId: true },
+          });
+          if (b) {
+            await syncDepositTaken({
+              hotelId: b.hotelId,
+              bookingId: b.id,
+              depositCollected: paid,
+              depositMode: "ONLINE",
+              note: "Refundable deposit paid by link",
+            });
+          }
+        }
       }
       return NextResponse.json({ received: true });
     }

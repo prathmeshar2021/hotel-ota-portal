@@ -22,6 +22,7 @@ import type { TransactionItem } from "@/app/api/hotel-admin/accounts/transaction
 
 interface Summary {
   cashInHand: number;
+  depositsHeldInCash: number;
   onlineTotal: number;
   totalRevenue: number;
   totalExpenses: number;
@@ -312,9 +313,10 @@ function SummaryCard({
 // ─── Collect Cash Modal ───────────────────────────────────────────────────────
 
 function CollectCashModal({
-  cashInHand, onClose, onSuccess,
+  cashInHand, depositsHeldInCash, onClose, onSuccess,
 }: {
-  cashInHand: number; onClose: () => void; onSuccess: () => void;
+  cashInHand: number; depositsHeldInCash: number;
+  onClose: () => void; onSuccess: () => void;
 }) {
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
@@ -388,6 +390,14 @@ function CollectCashModal({
             <div className="bg-green-500/8 border border-green-500/20 rounded-2xl px-5 py-4 mb-5 text-center">
               <p className="text-white/40 text-xs uppercase tracking-wider mb-1">Cash Currently in Hand</p>
               <p className="text-3xl font-bold text-green-400">{fmt(cashInHand)}</p>
+              {depositsHeldInCash > 0 && (
+                // Guest deposits are physically in the same drawer but are not the
+                // hotel's money, so counting the till will read higher than this.
+                <p className="text-white/35 text-[11px] mt-2 leading-relaxed">
+                  Plus {fmt(depositsHeldInCash)} of guest deposits held in cash —
+                  the till should count {fmt(cashInHand + depositsHeldInCash)}.
+                </p>
+              )}
             </div>
 
             {/* Amount input */}
@@ -880,6 +890,7 @@ export default function AccountsClient() {
       {collectOpen && s && (
         <CollectCashModal
           cashInHand={s.cashInHand}
+          depositsHeldInCash={s.depositsHeldInCash ?? 0}
           onClose={() => setCollectOpen(false)}
           onSuccess={() => {
             setCollectOpen(false);

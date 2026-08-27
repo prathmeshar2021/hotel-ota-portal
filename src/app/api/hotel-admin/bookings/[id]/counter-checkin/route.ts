@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
+import { syncDepositTaken } from "@/lib/services/booking-ledger";
 import { z } from "zod";
 import { ensureRoomAssigned } from "@/lib/services/checkin-gate";
 import { ensureConsent } from "@/lib/services/consent";
@@ -205,6 +206,19 @@ export async function POST(
       ...(depositTaken ? { depositCollected: data.depositCollected, depositMode: data.depositMode ?? "CASH" } : {}),
     },
   });
+
+  // Put it on the booking's account too, so the desk can see what is being
+  // held. Taking and returning the same amount cancels out and never reaches
+  // the hotel's statement.
+  if (depositTaken) {
+    await syncDepositTaken({
+      hotelId: session.user.hotelId,
+      bookingId: booking.id,
+      depositCollected: data.depositCollected!,
+      depositMode: data.depositMode ?? "CASH",
+      recordedBy: session.user.name ?? session.user.email ?? "Staff",
+    });
+  }
 
   // 6. Assign a physical room now (auto-allot fallback) so it's ready for the
   //    consent form and the final check-in step.

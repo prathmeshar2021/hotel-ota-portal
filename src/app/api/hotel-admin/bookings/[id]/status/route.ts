@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
 import { ensureRoomAssigned, isConsentConfirmed, CHECKIN_GATE_MESSAGES } from "@/lib/services/checkin-gate";
 import { recordTxn, roomPaymentNote, type RecordTxnInput } from "@/lib/services/booking-txn";
+import { returnDeposit } from "@/lib/services/booking-ledger";
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
   PENDING_PAYMENT: ["CONFIRMED", "CANCELLED"],
@@ -73,6 +74,9 @@ export async function PATCH(
   // only once the booking update has succeeded, so a rejected checkout never
   // leaves phantom money behind.
   const ledger: RecordTxnInput[] = [];
+  // What actually goes back to the guest at checkout, recorded after the
+  // booking update succeeds.
+  let depositReturn = 0;
 
   // Confirming a booking the guest never paid for online. Staff say how it was
   // actually settled, because a confirmed booking with the full balance still
@@ -152,6 +156,7 @@ export async function PATCH(
     updateData.balanceDue = 0; // everything is settled at checkout
     updateData.depositDeducted = +(depositUsed + deduction).toFixed(2);
     updateData.depositRefunded = refund > 0;
+    depositReturn = refund;
 
     // Record any amount collected now (excess beyond the deposit) as a payment.
     if (collect > 0) {
@@ -283,6 +288,20 @@ export async function PATCH(
   });
 
   for (const entry of ledger) await recordTxn(entry);
+
+  // The deposit going back to the guest. Neutral in the hotel's accounts — it
+  // was never income — but the booking's own account has to show it, or it
+  // would look as though money is still being held.
+  if (newStatus === "CHECKED_OUT" && depositReturn > 0) {
+    await returnDeposit({
+      hotelId: booking.hotelId,
+      bookingId: booking.id,
+      amount: depositReturn,
+      depositMode: booking.depositMode === "ONLINE" ? "ONLINE" : "CASH",
+      occurredAt: now,
+      recordedBy,
+    });
+  }
 
   // Keep the Payment row in step when the desk settled a pending booking, so it
   // no longer reads "pending" against money that has actually been taken.
