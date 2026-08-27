@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { readJson } from "@/lib/utils/fetch-json";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Pencil, Loader2, X, AlertTriangle, Receipt } from "lucide-react";
@@ -86,7 +87,7 @@ export default function EditPricingButton({
           reason: reason.trim(),
         }),
       });
-      const data = await res.json();
+      const data = await readJson(res);
       if (res.ok) {
         toast.success(data.message ?? "Booking updated", { duration: 5000 });
         setOpen(false);

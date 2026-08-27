@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { readJson } from "@/lib/utils/fetch-json";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Trash2, Loader2, X, AlertTriangle } from "lucide-react";
@@ -55,7 +56,7 @@ export default function DeleteBookingButton({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reason: reason.trim() }),
       });
-      const data = await res.json();
+      const data = await readJson(res);
       if (res.ok) {
         // Offered right here, because the moment staff realise it was the wrong
         // booking is the moment the toast is still on screen.
@@ -66,7 +67,7 @@ export default function DeleteBookingButton({
                 label: "Undo",
                 onClick: async () => {
                   const r = await fetch(`/api/hotel-admin/activity/${data.actionId}/undo`, { method: "POST" });
-                  const d = await r.json();
+                  const d = await readJson(r);
                   if (r.ok) { toast.success(d.message ?? `${bookingRef} restored`); router.push(`/hotel-admin/bookings/${bookingId}`); }
                   else toast.error(d.error ?? "Could not undo");
                 },

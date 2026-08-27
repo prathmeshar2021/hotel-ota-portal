@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { readJson } from "@/lib/utils/fetch-json";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -101,7 +102,7 @@ export default function ActivityLogClient({ rows }: { rows: ActivityRow[] }) {
     setUndoing(r.id);
     try {
       const res = await fetch(`/api/hotel-admin/activity/${r.id}/undo`, { method: "POST" });
-      const d = await res.json();
+      const d = await readJson(res);
       if (res.ok) { toast.success(d.message ?? "Undone"); router.refresh(); }
       else toast.error(d.error ?? "Could not undo");
     } finally { setUndoing(null); }

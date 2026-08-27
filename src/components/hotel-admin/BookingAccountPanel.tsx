@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { readJson } from "@/lib/utils/fetch-json";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -89,7 +90,7 @@ export default function BookingAccountPanel({
   const load = useCallback(async () => {
     try {
       const res = await fetch(`/api/hotel-admin/bookings/${bookingId}/account`);
-      const d = await res.json();
+      const d = await readJson(res);
       if (res.ok) { setAccount(d.account); setEntries(d.entries); }
     } finally { setLoading(false); }
   }, [bookingId]);
@@ -112,7 +113,7 @@ export default function BookingAccountPanel({
           note: note.trim() || undefined,
         }),
       });
-      const d = await res.json();
+      const d = await readJson(res);
       if (!res.ok) { toast.error(d.error ?? "Failed"); return; }
       if (d.flagged) toast.warning(d.message, { duration: 8000 });
       else toast.success(d.message);
@@ -133,7 +134,7 @@ export default function BookingAccountPanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ txnId: e.id, mode: to }),
       });
-      const d = await res.json();
+      const d = await readJson(res);
       if (!res.ok) { toast.error(d.error ?? "Failed"); return; }
       toast.success(d.message);
       await load();

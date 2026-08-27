@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { readJson } from "@/lib/utils/fetch-json";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Undo2, Loader2 } from "lucide-react";
@@ -33,7 +34,7 @@ export default function RestoreBookingButton({
     setLoading(true);
     try {
       const res = await fetch(`/api/hotel-admin/bookings/${bookingId}/delete`, { method: "DELETE" });
-      const data = await res.json();
+      const data = await readJson(res);
       if (res.ok) {
         toast.success(data.message ?? `${bookingRef} restored`);
         router.refresh();

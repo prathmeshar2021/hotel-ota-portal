@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { readJson } from "@/lib/utils/fetch-json";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -41,7 +42,7 @@ export default function BookingStatusButton({ bookingId, currentStatus, depositC
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: "CHECKED_IN" }),
       });
-      const data = await res.json();
+      const data = await readJson(res);
       if (res.ok) {
         toast.success(data.message ?? "Guest checked in");
         router.refresh();
@@ -158,7 +159,7 @@ function ConfirmBookingModal({
           },
         }),
       });
-      const data = await res.json();
+      const data = await readJson(res);
       if (res.ok) {
         toast.success(
           collected > 0
@@ -382,7 +383,7 @@ function CheckoutDepositModal({
           },
         }),
       });
-      const data = await res.json();
+      const data = await readJson(res);
       if (res.ok) {
         toast.success(data.message ?? "Guest checked out. Room marked for cleaning.");
         onSuccess();

@@ -45,6 +45,20 @@ export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  try {
+    return await undo(params);
+  } catch (err) {
+    // Anything unexpected still has to come back as JSON — the desk sees a
+    // readable message instead of the browser choking on an empty body.
+    console.error("[activity/undo]", err);
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Could not undo that action" },
+      { status: 500 }
+    );
+  }
+}
+
+async function undo(params: Promise<{ id: string }>) {
   const session = await auth();
   if (!session?.user?.hotelId || !staffGuard(session.user.role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
