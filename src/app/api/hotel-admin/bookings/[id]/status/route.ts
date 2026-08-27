@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
 import { ensureRoomAssigned, isConsentConfirmed, CHECKIN_GATE_MESSAGES } from "@/lib/services/checkin-gate";
 import { recordTxn, roomPaymentNote, type RecordTxnInput } from "@/lib/services/booking-txn";
-import { returnDeposit } from "@/lib/services/booking-ledger";
+import { returnDeposit, depositCashShare } from "@/lib/services/booking-ledger";
 import { computeTotalsForPrice } from "@/lib/utils/booking-calc";
 import { recordStaffAction } from "@/lib/services/staff-action";
 
@@ -89,20 +89,31 @@ export async function PATCH(
   // guest once checked out owing the entire stay without anyone noticing.
   if (newStatus === "CONFIRMED" && booking.status === "PENDING_PAYMENT") {
     const raw = Number(settlement?.amount) || 0;
-    const collectMode = settlement?.collectMode === "ONLINE" ? "ONLINE" : "CASH";
+    const collectMode: string = settlement?.collectMode ?? "CASH";
     const outstanding = +(booking.totalAmount - booking.cashPaid - booking.onlinePaid).toFixed(2);
     // Never record more than is actually owed — the desk shouldn't be able to
     // over-credit a booking by fat-fingering the amount.
     const collected = Math.min(Math.max(0, +raw.toFixed(2)), Math.max(0, outstanding));
 
     if (collected > 0) {
-      if (collectMode === "ONLINE") updateData.onlinePaid = booking.onlinePaid + collected;
-      else updateData.cashPaid = booking.cashPaid + collected;
+      // A guest can settle part in notes and part by UPI; each side is recorded
+      // against the method it actually arrived by.
+      const cash = collectMode === "MIXED"
+        ? Math.min(Math.max(0, Number(settlement?.collectCash) || 0), collected)
+        : collectMode === "CASH" ? collected : 0;
+      const online = +(collected - cash).toFixed(2);
+      if (cash > 0) updateData.cashPaid = booking.cashPaid + cash;
+      if (online > 0) updateData.onlinePaid = booking.onlinePaid + online;
       updateData.balanceDue = +(outstanding - collected).toFixed(2);
-      ledger.push({
+      if (cash > 0) ledger.push({
         hotelId: booking.hotelId, bookingId: booking.id, kind: "ROOM_PAYMENT",
-        mode: collectMode, amount: collected, occurredAt: now, recordedBy,
-        note: roomPaymentNote(collectMode, "collected when the booking was confirmed at the desk"),
+        mode: "CASH", amount: cash, occurredAt: now, recordedBy,
+        note: roomPaymentNote("CASH", "collected when the booking was confirmed at the desk"),
+      });
+      if (online > 0) ledger.push({
+        hotelId: booking.hotelId, bookingId: booking.id, kind: "ROOM_PAYMENT",
+        mode: "ONLINE", amount: online, occurredAt: now, recordedBy,
+        note: roomPaymentNote("ONLINE", "collected when the booking was confirmed at the desk"),
       });
     } else {
       // Confirmed with nothing taken. Legitimate (the guest is on their way and
@@ -187,12 +198,21 @@ export async function PATCH(
 
     // Record any amount collected now (excess beyond the deposit) as a payment.
     if (collect > 0) {
-      const mode = settlement?.collectMode === "ONLINE" ? "ONLINE" : "CASH";
-      if (mode === "ONLINE") updateData.onlinePaid = booking.onlinePaid + collect;
-      else updateData.cashPaid = booking.cashPaid + collect;
-      ledger.push({
-        hotelId: booking.hotelId, bookingId: booking.id, kind: "ROOM_PAYMENT", mode,
-        amount: collect, note: roomPaymentNote(mode, "balance settled at checkout"),
+      const cm = settlement?.collectMode;
+      const cash = cm === "MIXED"
+        ? Math.min(Math.max(0, Number(settlement?.collectCash) || 0), collect)
+        : cm === "ONLINE" ? 0 : collect;
+      const online = +(collect - cash).toFixed(2);
+      if (cash > 0) updateData.cashPaid = booking.cashPaid + cash;
+      if (online > 0) updateData.onlinePaid = booking.onlinePaid + online;
+      if (cash > 0) ledger.push({
+        hotelId: booking.hotelId, bookingId: booking.id, kind: "ROOM_PAYMENT", mode: "CASH",
+        amount: cash, note: roomPaymentNote("CASH", "balance settled at checkout"),
+        occurredAt: now, recordedBy,
+      });
+      if (online > 0) ledger.push({
+        hotelId: booking.hotelId, bookingId: booking.id, kind: "ROOM_PAYMENT", mode: "ONLINE",
+        amount: online, note: roomPaymentNote("ONLINE", "balance settled at checkout"),
         occurredAt: now, recordedBy,
       });
     }
@@ -200,11 +220,22 @@ export async function PATCH(
     // The part given back beyond the deposit is a refund of room money, and is
     // recorded as one — a deposit return is neutral in the accounts, this is not.
     if (extraRefund > 0) {
-      ledger.push({
+      const rm = settlement?.refundMode;
+      // Split the excess the same way the money is actually going back.
+      const refundTotal = +(refundable - deduction + extraRefund).toFixed(2);
+      const cashShare = rm === "MIXED" && refundTotal > 0
+        ? Math.min(Math.max(0, Number(settlement?.refundCash) || 0), refundTotal) / refundTotal
+        : rm === "ONLINE" || rm === "RAZORPAY" ? 0 : 1;
+      const cashBack = +(extraRefund * cashShare).toFixed(2);
+      const onlineBack = +(extraRefund - cashBack).toFixed(2);
+      const note = `Refunded beyond the deposit${settlement?.notes ? ` — ${String(settlement.notes).trim()}` : ""}`;
+      if (cashBack > 0) ledger.push({
         hotelId: booking.hotelId, bookingId: booking.id, kind: "REFUND",
-        mode: settlement?.refundMode === "ONLINE" || settlement?.refundMode === "RAZORPAY" ? "ONLINE" : "CASH",
-        amount: extraRefund, occurredAt: now, recordedBy,
-        note: `Refunded beyond the deposit${settlement?.notes ? ` — ${String(settlement.notes).trim()}` : ""}`,
+        mode: "CASH", amount: cashBack, occurredAt: now, recordedBy, note,
+      });
+      if (onlineBack > 0) ledger.push({
+        hotelId: booking.hotelId, bookingId: booking.id, kind: "REFUND",
+        mode: "ONLINE", amount: onlineBack, occurredAt: now, recordedBy, note,
       });
     }
 
@@ -216,26 +247,28 @@ export async function PATCH(
     // guest's money moving, not the hotel's. It shows up here, at the moment it
     // stops being refundable and becomes income.
     const depositMode = booking.depositMode === "ONLINE" ? "ONLINE" : "CASH";
+    // A deposit taken part-cash reaches the till only by that proportion.
+    const depShare = await depositCashShare(booking.id);
     const toExtras = Math.min(depositUsed, booking.additionalCharges);
     const toRoom = +(depositUsed - toExtras).toFixed(2);
     if (toExtras > 0) {
       ledger.push({
         hotelId: booking.hotelId, bookingId: booking.id, kind: "DEPOSIT_APPLIED",
-        mode: "DEPOSIT", amount: toExtras, depositMode, occurredAt: now, recordedBy,
+        mode: "DEPOSIT", amount: toExtras, depositMode, depositCashShare: depShare, occurredAt: now, recordedBy,
         note: "Extras during the stay — deducted from deposit",
       });
     }
     if (toRoom > 0) {
       ledger.push({
         hotelId: booking.hotelId, bookingId: booking.id, kind: "DEPOSIT_APPLIED",
-        mode: "DEPOSIT", amount: toRoom, depositMode, occurredAt: now, recordedBy,
+        mode: "DEPOSIT", amount: toRoom, depositMode, depositCashShare: depShare, occurredAt: now, recordedBy,
         note: "Unpaid room balance — deducted from deposit",
       });
     }
     if (deduction > 0) {
       ledger.push({
         hotelId: booking.hotelId, bookingId: booking.id, kind: "DEPOSIT_WITHHELD",
-        mode: "DEPOSIT", amount: deduction, depositMode, occurredAt: now, recordedBy,
+        mode: "DEPOSIT", amount: deduction, depositMode, depositCashShare: depShare, occurredAt: now, recordedBy,
         note: settlement?.notes?.trim()
           ? `Withheld for damage or cleaning — ${String(settlement.notes).trim()}`
           : "Withheld for damage or cleaning",

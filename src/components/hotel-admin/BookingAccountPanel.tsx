@@ -8,6 +8,7 @@ import {
   Wallet, Plus, Loader2, X, AlertTriangle, ArrowDownLeft, ArrowUpRight,
   RefreshCw, Repeat, ShieldCheck,
 } from "lucide-react";
+import PayModePicker, { splitFor, type PayMode } from "@/components/hotel-admin/PayModePicker";
 
 /**
  * A booking's account, as the front desk needs it.
@@ -79,7 +80,8 @@ export default function BookingAccountPanel({
   const [open, setOpen] = useState(false);
   const [action, setAction] = useState(ACTIONS[0]);
   const [amount, setAmount] = useState("");
-  const [mode, setMode] = useState<"CASH" | "ONLINE">("CASH");
+  const [mode, setMode] = useState<PayMode>("CASH");
+  const [cashPart, setCashPart] = useState(0);
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [correcting, setCorrecting] = useState<string | null>(null);
@@ -105,7 +107,9 @@ export default function BookingAccountPanel({
         body: JSON.stringify({
           kind: action.kind, direction: action.direction,
           mode: action.kind === "DEPOSIT_APPLIED" ? "DEPOSIT" : mode,
-          amount: amt, note: note.trim() || undefined,
+          amount: amt,
+          cashAmount: mode === "MIXED" ? splitFor("MIXED", amt, cashPart).cashAmount : undefined,
+          note: note.trim() || undefined,
         }),
       });
       const d = await res.json();
@@ -160,7 +164,7 @@ export default function BookingAccountPanel({
             <RefreshCw className="w-3.5 h-3.5" />
           </button>
           <button
-            onClick={() => { setAction(ACTIONS[0]); setAmount(""); setNote(""); setOpen(true); }}
+            onClick={() => { setAction(ACTIONS[0]); setAmount(""); setNote(""); setMode("CASH"); setCashPart(0); setOpen(true); }}
             className="flex items-center gap-1.5 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/25 text-amber-300 text-xs font-bold px-3 py-1.5 rounded-lg transition-all"
           >
             <Plus className="w-3.5 h-3.5" /> Entry
@@ -293,16 +297,13 @@ export default function BookingAccountPanel({
             <input type="number" min={0} value={amount} onChange={e => setAmount(e.target.value)} autoFocus
               className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-lg font-bold focus:outline-none focus:border-amber-400/50 mb-3" />
 
-            <div className="flex gap-2 mb-3">
-              {(["CASH", "ONLINE"] as const).map(m => (
-                <button key={m} onClick={() => setMode(m)}
-                  className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border transition-all ${
-                    mode === m ? "bg-white/10 border-white/25 text-white" : "border-white/10 text-white/40 hover:text-white/70"
-                  }`}>
-                  {m === "CASH" ? "Cash" : "UPI / Card"}
-                </button>
-              ))}
-            </div>
+            <PayModePicker
+              mode={mode}
+              total={Number(amount) || 0}
+              cashAmount={cashPart}
+              label=""
+              onChange={sp => { setMode(sp.mode); setCashPart(sp.cashAmount); }}
+            />
 
             <input value={note} onChange={e => setNote(e.target.value)} maxLength={300}
               placeholder="Note (optional)"

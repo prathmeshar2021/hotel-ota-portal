@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
-import { syncDepositTaken } from "@/lib/services/booking-ledger";
+import { syncDepositTaken, postSplit } from "@/lib/services/booking-ledger";
 import { z } from "zod";
 import { ensureRoomAssigned } from "@/lib/services/checkin-gate";
 import { ensureConsent } from "@/lib/services/consent";
@@ -29,7 +29,9 @@ const CounterCheckinSchema = z.object({
   vehicleNo:  z.string().optional(),
   // Refundable deposit collected at check-in (editable, may be 0 / skipped).
   depositCollected: z.number().min(0).optional(),
-  depositMode:      z.enum(["CASH", "ONLINE"]).optional(),
+  /** For a mixed deposit: how much arrived as cash. The rest is UPI. */
+  depositCashAmount: z.number().min(0).optional(),
+  depositMode:      z.enum(["CASH", "ONLINE", "MIXED"]).optional(),
   companions: z.array(CompanionSchema).optional(),
 });
 
@@ -211,13 +213,26 @@ export async function POST(
   // held. Taking and returning the same amount cancels out and never reaches
   // the hotel's statement.
   if (depositTaken) {
-    await syncDepositTaken({
-      hotelId: session.user.hotelId,
-      bookingId: booking.id,
-      depositCollected: data.depositCollected!,
-      depositMode: data.depositMode ?? "CASH",
-      recordedBy: session.user.name ?? session.user.email ?? "Staff",
-    });
+    const total = data.depositCollected!;
+    const by = session.user.name ?? session.user.email ?? "Staff";
+    if (data.depositMode === "MIXED") {
+      // Two exact entries rather than one vague "mixed" row, so the till knows
+      // how many notes actually came in.
+      const cash = Math.min(Math.max(0, data.depositCashAmount ?? 0), total);
+      await postSplit({
+        hotelId: session.user.hotelId, bookingId: booking.id, kind: "DEPOSIT_TAKEN",
+        recordedBy: by, note: "Refundable deposit taken",
+        cashAmount: cash, onlineAmount: +(total - cash).toFixed(2),
+      });
+    } else {
+      await syncDepositTaken({
+        hotelId: session.user.hotelId,
+        bookingId: booking.id,
+        depositCollected: total,
+        depositMode: data.depositMode ?? "CASH",
+        recordedBy: by,
+      });
+    }
   }
 
   // 6. Assign a physical room now (auto-allot fallback) so it's ready for the

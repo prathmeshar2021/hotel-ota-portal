@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { X, Plus, Loader2, Receipt } from "lucide-react";
+import PayModePicker from "@/components/hotel-admin/PayModePicker";
 
 // Ordered by how often they're actually used. Water and tea were previously
 // typed into "Other" by hand on most charges, so they lead as one-tap options.
@@ -35,7 +36,9 @@ export default function AddChargeModal({ bookingId, disabled }: Props) {
   const [unitPrice, setUnitPrice] = useState("");
   // Most extras go on the tab and come off the deposit at checkout, so that's
   // the default; a guest who pays at the counter is the exception.
-  const [settlement, setSettlement] = useState<"DEPOSIT" | "CASH" | "ONLINE">("DEPOSIT");
+  const [settlement, setSettlement] = useState<"DEPOSIT" | "CASH" | "ONLINE" | "MIXED">("DEPOSIT");
+  // Cash side when the guest pays for an extra part in notes, part by UPI.
+  const [settleCash, setSettleCash] = useState(0);
 
   const qty = parseFloat(quantity) || 0;
   const price = parseFloat(unitPrice) || 0;
@@ -68,6 +71,7 @@ export default function AddChargeModal({ bookingId, disabled }: Props) {
           quantity: qty,
           unitPrice: price,
           settlement,
+          settleCash: settlement === "MIXED" ? Math.min(Math.max(0, settleCash), total) : undefined,
         }),
       });
       const data = await res.json();
@@ -129,7 +133,7 @@ export default function AddChargeModal({ bookingId, disabled }: Props) {
                 <label className="block text-xs font-semibold text-white/45 uppercase tracking-wider mb-3">
                   Charge Type
                 </label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   {CHARGE_TYPES.map(t => (
                     <button
                       key={t.value}
@@ -220,6 +224,7 @@ export default function AddChargeModal({ bookingId, disabled }: Props) {
                     { key: "DEPOSIT", label: "From deposit" },
                     { key: "CASH",    label: "Cash now" },
                     { key: "ONLINE",  label: "UPI now" },
+                    { key: "MIXED",   label: "Both now" },
                   ] as const).map(o => (
                     <button
                       key={o.key}
@@ -235,10 +240,23 @@ export default function AddChargeModal({ bookingId, disabled }: Props) {
                     </button>
                   ))}
                 </div>
+                {settlement === "MIXED" && (
+                  <div className="mt-2.5">
+                    <PayModePicker
+                      mode="MIXED"
+                      total={total}
+                      cashAmount={settleCash}
+                      label=""
+                      compact
+                      allowMixed={false}
+                      onChange={sp => setSettleCash(sp.cashAmount)}
+                    />
+                  </div>
+                )}
                 <p className="text-xs text-white/25 bg-white/3 rounded-xl px-4 py-2.5 leading-relaxed mt-2">
                   {settlement === "DEPOSIT"
                     ? "Goes on the guest's tab and is taken off the refundable deposit at checkout."
-                    : `Collected at the counter now — it won't touch the deposit or the room bill.`}
+                    : `Taken at the desk now — it won't touch the deposit or the room bill.`}
                 </p>
               </div>
 

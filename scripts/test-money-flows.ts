@@ -8,6 +8,7 @@
  */
 import { summarise, assessEntry, cashImpactOf } from "../src/lib/services/booking-ledger";
 import { computeTotalsForPrice } from "../src/lib/utils/booking-calc";
+import { splitFor } from "../src/components/hotel-admin/PayModePicker";
 
 type Entry = { kind: string; direction: string; mode: string; amount: number };
 let pass = 0, fail = 0;
@@ -208,6 +209,54 @@ console.log("\n── 7. Giving back more than the deposit at checkout ──");
   ok("account settles to zero and holds nothing after an over-refund",
      Math.abs(a.balance) < 0.01 && Math.abs(a.depositHeld) < 0.01,
      `balance ${a.balance}, held ${a.depositHeld}`);
+}
+
+console.log("\n── 8. Cash + UPI on the same payment ──");
+{
+  // A mixed payment becomes two exact entries; the split must never lose a rupee.
+  for (const [total, cash] of [[1000, 400], [1000, 0], [1000, 1000], [999.5, 300.25], [1200, 1500]] as const) {
+    const s = splitFor("MIXED", total, cash);
+    const sums = Math.abs(s.cashAmount + s.onlineAmount - total) < 0.01;
+    const capped = s.cashAmount <= total + 0.01 && s.onlineAmount >= -0.01;
+    ok(`${f(total)} split with ${f(cash)} cash → ${f(s.cashAmount)} + ${f(s.onlineAmount)}`, sums && capped);
+  }
+  ok("Cash mode puts everything in the till", splitFor("CASH", 800, 0).cashAmount === 800);
+  ok("UPI mode puts nothing in the till", splitFor("ONLINE", 800, 0).cashAmount === 0);
+
+  // The two entries must move the drawer by the cash side only.
+  const sp = splitFor("MIXED", 1000, 400);
+  const drawer =
+    cashImpactOf({ hotelId: "", bookingId: "", kind: "ROOM_PAYMENT", mode: "CASH", amount: sp.cashAmount }, sp.cashAmount) +
+    cashImpactOf({ hotelId: "", bookingId: "", kind: "ROOM_PAYMENT", mode: "ONLINE", amount: sp.onlineAmount }, sp.onlineAmount);
+  ok(`drawer moves by the cash side only (${f(drawer)})`, drawer === 400);
+
+  // A mixed payment still settles the booking exactly.
+  const a = summarise(
+    [{ kind: "ROOM_PAYMENT", direction: "CREDIT", mode: "CASH", amount: 400 },
+     { kind: "ROOM_PAYMENT", direction: "CREDIT", mode: "ONLINE", amount: 600 }],
+    { roomTotal: 1000, extrasOnTab: 0 }
+  );
+  ok("a ₹400 + ₹600 payment clears a ₹1,000 bill", Math.abs(a.balance) < 0.01 && a.paidCash === 400 && a.paidOnline === 600);
+
+  // A mixed DEPOSIT applied later hits the till only by its cash share.
+  for (const [share, want] of [[1, 200], [0, 0], [0.4, 80]] as const) {
+    const v = cashImpactOf(
+      { hotelId: "", bookingId: "", kind: "DEPOSIT_APPLIED", mode: "DEPOSIT", amount: 200, depositCashShare: share },
+      200
+    );
+    ok(`deposit ${Math.round(share * 100)}% cash → applying ₹200 moves the till by ${f(want)}`, Math.abs(v - want) < 0.01);
+  }
+
+  // Taking a mixed deposit and giving it all back leaves the accounts untouched.
+  const dep = summarise(
+    [{ kind: "DEPOSIT_TAKEN", direction: "CREDIT", mode: "CASH", amount: 300 },
+     { kind: "DEPOSIT_TAKEN", direction: "CREDIT", mode: "ONLINE", amount: 200 },
+     { kind: "DEPOSIT_RETURNED", direction: "DEBIT", mode: "CASH", amount: 300 },
+     { kind: "DEPOSIT_RETURNED", direction: "DEBIT", mode: "ONLINE", amount: 200 }],
+    { roomTotal: 0, extrasOnTab: 0 }
+  );
+  ok("a mixed deposit taken and returned in full nets to nothing",
+     Math.abs(dep.depositHeld) < 0.01 && Math.abs(dep.balance) < 0.01);
 }
 
 console.log(`\n${fail === 0 ? `All ${pass} checks passed.` : `${fail} FAILED of ${pass + fail}`}`);

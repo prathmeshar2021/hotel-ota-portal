@@ -52,6 +52,11 @@ export interface RecordTxnInput {
   depositMode?: "CASH" | "ONLINE" | null;
   /** Retained for callers that still pass it; `mode` already carries this. */
   refundVia?: "CASH" | "ONLINE" | null;
+  /**
+   * Fraction of the deposit that arrived as cash, when a mixed deposit is being
+   * applied or withheld — only that share reaches the till.
+   */
+  depositCashShare?: number | null;
 }
 
 /**
@@ -78,6 +83,7 @@ export async function recordTxn(
       recordedBy: input.recordedBy,
       idemKey: input.idemKey,
       depositMode: input.depositMode,
+      depositCashShare: input.depositCashShare,
     },
     tx
   );

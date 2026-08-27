@@ -9,6 +9,7 @@ import {
   ShieldCheck, Upload, Send,
 } from "lucide-react";
 import GuestSearch, { type GuestResult } from "./GuestSearch";
+import PayModePicker, { splitFor, type PayMode } from "@/components/hotel-admin/PayModePicker";
 import { REFUNDABLE_DEPOSIT } from "@/lib/utils/booking-calc";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -260,7 +261,9 @@ export default function CounterCheckinModal({
   // Refundable deposit — editable, may be skipped.
   const [collectDeposit, setCollectDeposit] = useState(true);
   const [depositAmount, setDepositAmount]   = useState(String(REFUNDABLE_DEPOSIT));
-  const [depositMode, setDepositMode]       = useState<"CASH" | "ONLINE">("CASH");
+  const [depositMode, setDepositMode]       = useState<PayMode>("CASH");
+  // Cash side when the deposit comes part in notes, part by UPI.
+  const [depositCash, setDepositCash]       = useState(0);
   // Sending a Razorpay link is a separate action from saving the form: the
   // guest pays on their phone and the webhook records it, which is what lets
   // checkout refund the deposit instantly to the same account.
@@ -484,6 +487,10 @@ export default function CounterCheckinModal({
           purpose, vehicleNo: vehicleNo.trim() || undefined,
           depositCollected: collectDeposit ? Number(depositAmount) || 0 : 0,
           depositMode,
+          depositCashAmount:
+            depositMode === "MIXED"
+              ? splitFor("MIXED", Number(depositAmount) || 0, depositCash).cashAmount
+              : undefined,
           companions: companions.filter(c => c.name.trim()),
         }),
       });
@@ -670,15 +677,15 @@ export default function CounterCheckinModal({
                   <input type="number" min={0} value={depositAmount} onChange={e => setDepositAmount(e.target.value)} className={inputCls} />
                 </div>
                 <div className="flex-1">
-                  <label className={labelCls}>Mode</label>
-                  <div className="flex gap-2">
-                    {(["CASH", "ONLINE"] as const).map(m => (
-                      <button type="button" key={m} onClick={() => setDepositMode(m)}
-                        className={`flex-1 h-11 rounded-xl text-sm font-semibold border transition-all ${depositMode === m ? "bg-white/10 border-white/25 text-white" : "border-white/10 text-white/40 hover:text-white/70"}`}>
-                        {m === "CASH" ? "Cash" : "UPI"}
-                      </button>
-                    ))}
-                  </div>
+                  <label className={labelCls}>Paid by</label>
+                  <PayModePicker
+                    mode={depositMode}
+                    total={Number(depositAmount) || 0}
+                    cashAmount={depositCash}
+                    label=""
+                    compact
+                    onChange={sp => { setDepositMode(sp.mode); setDepositCash(sp.cashAmount); }}
+                  />
                 </div>
               </div>
             ) : (

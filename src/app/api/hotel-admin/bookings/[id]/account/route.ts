@@ -3,8 +3,8 @@ import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
 import { z } from "zod";
 import {
-  postEntry, summarise, assessEntry, directionOf,
-  type TxnKind, type TxnMode, type TxnDirection,
+  postEntry, postSplit, summarise, assessEntry, directionOf, depositCashShare,
+  type TxnKind, type TxnDirection,
 } from "@/lib/services/booking-ledger";
 import { recordStaffAction } from "@/lib/services/staff-action";
 import { computeTotalsForPrice } from "@/lib/utils/booking-calc";
@@ -32,8 +32,10 @@ const KINDS = [
 
 const PostSchema = z.object({
   kind: z.enum(KINDS),
-  mode: z.enum(["CASH", "ONLINE", "DEPOSIT"]),
+  mode: z.enum(["CASH", "ONLINE", "DEPOSIT", "MIXED"]),
   amount: z.number().positive("Amount must be more than zero"),
+  /** For MIXED: how much of the amount came in as cash. The rest is UPI. */
+  cashAmount: z.number().min(0).optional(),
   direction: z.enum(["CREDIT", "DEBIT"]).optional(),
   note: z.string().trim().max(300).optional(),
   occurredAt: z.string().optional(),
@@ -114,7 +116,13 @@ export async function POST(
   const b = await loadBooking(id, session.user.hotelId);
   if (!b) return NextResponse.json({ error: "Booking not found" }, { status: 404 });
 
-  const { kind, mode, amount, note, occurredAt } = parsed.data;
+  const { kind, mode, amount, note, occurredAt, cashAmount } = parsed.data;
+  // A mixed payment is stored as two exact entries, never one vague "mixed" row
+  // — the till has to know how many notes actually changed hands.
+  const cashPart = mode === "MIXED"
+    ? +Math.min(Math.max(0, cashAmount ?? 0), amount).toFixed(2)
+    : mode === "CASH" ? amount : 0;
+  const onlinePart = +(amount - cashPart).toFixed(2);
   const direction = directionOf(kind as TxnKind, parsed.data.direction as TxnDirection | undefined);
   const before = accountOf(b);
   const recordedBy = session.user.name || session.user.email || "Staff";
@@ -136,34 +144,50 @@ export async function POST(
       ? +(amount - before.depositHeld).toFixed(2)
       : 0;
 
+  // Proportions the split across whatever entries this turns into.
+  const share = amount > 0 ? cashPart / amount : 0;
+  const splitOf = (part: number) => ({
+    cashAmount: +(part * share).toFixed(2),
+    onlineAmount: +(part * (1 - share)).toFixed(2),
+  });
+
   if (excess > 0) {
     if (before.depositHeld > 0) {
-      await postEntry({
+      await postSplit({
         hotelId: session.user.hotelId, bookingId: b.id, kind: "DEPOSIT_RETURNED",
-        mode: mode as TxnMode, amount: before.depositHeld, occurredAt: when, recordedBy,
-        depositMode, note: note || "Deposit returned",
+        occurredAt: when, recordedBy, depositMode, note: note || "Deposit returned",
+        ...splitOf(before.depositHeld),
       });
     }
-    await postEntry({
+    await postSplit({
       hotelId: session.user.hotelId, bookingId: b.id, kind: "REFUND",
-      mode: mode as TxnMode, amount: excess, occurredAt: when, recordedBy, depositMode,
+      occurredAt: when, recordedBy, depositMode,
       note: `${note ? `${note} · ` : ""}beyond the deposit — refunded from the room payment`,
       flagged: true, flagReason: check.reason ?? null,
+      ...splitOf(excess),
+    });
+  } else if (mode === "DEPOSIT") {
+    // Settled out of the deposit already held — no cash or UPI side at all.
+    await postEntry({
+      hotelId: session.user.hotelId, bookingId: b.id, kind: kind as TxnKind,
+      mode: "DEPOSIT", direction, amount, note: note || null, occurredAt: when,
+      recordedBy, depositCashShare: await depositCashShare(b.id),
+      flagged: check.flagged, flagReason: check.reason ?? null,
     });
   } else {
-    await postEntry({
+    await postSplit({
       hotelId: session.user.hotelId,
       bookingId: b.id,
       kind: kind as TxnKind,
-      mode: mode as TxnMode,
       direction,
-      amount,
       note: note || null,
       occurredAt: when,
       recordedBy,
       depositMode,
       flagged: check.flagged,
       flagReason: check.reason ?? null,
+      cashAmount: cashPart,
+      onlineAmount: onlinePart,
     });
   }
 

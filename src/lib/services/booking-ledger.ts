@@ -73,6 +73,11 @@ export interface LedgerEntryInput {
    * drawer figure at the moment it stops being refundable.
    */
   depositMode?: "CASH" | "ONLINE" | null;
+  /**
+   * Fraction of the deposit that came in as cash, for a mixed deposit being
+   * applied or withheld. Takes precedence over `depositMode`.
+   */
+  depositCashShare?: number | null;
   /** Overrides the default statement visibility for this kind. */
   affectsStatement?: boolean;
 }
@@ -87,6 +92,8 @@ export function cashImpactOf(input: LedgerEntryInput, amount: number): number {
   if (input.kind === "DEPOSIT_TAKEN" || input.kind === "DEPOSIT_RETURNED") return 0;
 
   if (input.kind === "DEPOSIT_APPLIED" || input.kind === "DEPOSIT_WITHHELD") {
+    // A deposit taken partly in cash only reaches the till by that proportion.
+    if (input.depositCashShare != null) return +(amount * input.depositCashShare).toFixed(2);
     return input.depositMode === "CASH" ? amount : 0;
   }
 
@@ -262,6 +269,56 @@ export function assessEntry(params: {
   return { flagged: false };
 }
 
+
+// ── Split payments ───────────────────────────────────────────────────────────
+
+/**
+ * A guest paying part in cash and part by UPI.
+ *
+ * Recorded as two entries, not one "mixed" entry. The cash drawer has to know
+ * exactly how many notes changed hands, and a single row saying "mixed ₹500"
+ * cannot answer that — it would either overstate the till by the UPI part or
+ * understate it by the cash. Two exact rows also read better on the statement,
+ * where each side shows against the method it actually arrived by.
+ */
+export async function postSplit(
+  input: Omit<LedgerEntryInput, "amount" | "mode"> & {
+    cashAmount: number;
+    onlineAmount: number;
+  },
+  tx?: Prisma.TransactionClient
+): Promise<void> {
+  const cash = +Number(input.cashAmount ?? 0).toFixed(2);
+  const online = +Number(input.onlineAmount ?? 0).toFixed(2);
+  const both = cash > 0 && online > 0;
+  const tag = both ? " (part of a cash + UPI payment)" : "";
+
+  if (cash > 0) {
+    await postEntry({ ...input, mode: "CASH", amount: cash, note: `${input.note ?? ""}${tag}`.trim() || null }, tx);
+  }
+  if (online > 0) {
+    await postEntry({ ...input, mode: "ONLINE", amount: online, note: `${input.note ?? ""}${tag}`.trim() || null }, tx);
+  }
+}
+
+/**
+ * How much of a booking's deposit came in as cash, as a fraction.
+ *
+ * When a mixed deposit is later applied to a bill or withheld, only the cash
+ * part belongs in the till figure. Deriving the share from the entries actually
+ * written is exact, and keeps working when a deposit was topped up later in a
+ * different way from the first instalment.
+ */
+export async function depositCashShare(bookingId: string): Promise<number> {
+  const rows = await prisma.bookingTxn.findMany({
+    where: { bookingId, kind: "DEPOSIT_TAKEN" },
+    select: { mode: true, amount: true },
+  });
+  const total = rows.reduce((s, r) => s + r.amount, 0);
+  if (total <= 0) return 1; // nothing recorded — assume cash, as the desk default
+  const cash = rows.filter(r => r.mode === "CASH").reduce((s, r) => s + r.amount, 0);
+  return +(cash / total).toFixed(6);
+}
 
 // ── Keeping the deposit in step ──────────────────────────────────────────────
 

@@ -7,6 +7,7 @@ import {
   Loader2, LogIn, LogOut, XCircle, ShieldCheck,
   AlertTriangle, X, CheckCircle2,
 } from "lucide-react";
+import PayModePicker, { splitFor, type PayMode } from "@/components/hotel-admin/PayModePicker";
 
 interface Props {
   bookingId: string;
@@ -134,7 +135,9 @@ function ConfirmBookingModal({
 }) {
   const [loading, setLoading] = useState(false);
   const [settledNow, setSettledNow] = useState(true);
-  const [collectMode, setCollectMode] = useState<"CASH" | "ONLINE">("CASH");
+  const [collectMode, setCollectMode] = useState<PayMode>("CASH");
+  const [collectCash, setCollectCash] = useState(0);
+  const [refundCash, setRefundCash] = useState(0);
   const [amount, setAmount] = useState(outstanding);
 
   const collected = settledNow ? Math.min(Math.max(0, amount), outstanding) : 0;
@@ -148,7 +151,11 @@ function ConfirmBookingModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           status: "CONFIRMED",
-          settlement: { amount: collected, collectMode },
+          settlement: {
+            amount: collected,
+            collectMode,
+            collectCash: collectMode === "MIXED" ? splitFor("MIXED", collected, collectCash).cashAmount : undefined,
+          },
         }),
       });
       const data = await res.json();
@@ -226,6 +233,13 @@ function ConfirmBookingModal({
 
         {settledNow ? (
           <div className="mb-4">
+            <PayModePicker
+              mode={collectMode}
+              total={collected}
+              cashAmount={collectCash}
+              label="Paid by"
+              onChange={sp => { setCollectMode(sp.mode); setCollectCash(sp.cashAmount); }}
+            />
             <label className="block text-[10px] text-white/35 uppercase tracking-wider font-semibold mb-1.5">
               Amount taken (₹)
             </label>
@@ -302,7 +316,9 @@ function CheckoutDepositModal({
   canRefundToSource, onClose, onSuccess,
 }: ModalProps) {
   const [loading, setLoading] = useState(false);
-  const [collectMode, setCollectMode] = useState<"CASH" | "ONLINE">("CASH");
+  const [collectMode, setCollectMode] = useState<PayMode>("CASH");
+  const [collectCash, setCollectCash] = useState(0);
+  const [refundCash, setRefundCash] = useState(0);
   const [notes, setNotes] = useState("");
   const [deduction, setDeduction] = useState(0);
   // Ticked by staff to say the outstanding balance really is being taken now.
@@ -313,7 +329,7 @@ function CheckoutDepositModal({
   // Money handed back on top of the deposit — reduces what the stay is worth.
   const [extraRefund, setExtraRefund] = useState(0);
   // Default to sending it back the way it came, when that's possible.
-  const [refundMode, setRefundMode] = useState<"RAZORPAY" | "CASH" | "ONLINE">(
+  const [refundMode, setRefundMode] = useState<"RAZORPAY" | PayMode>(
     canRefundToSource ? "RAZORPAY" : "CASH"
   );
 
@@ -359,6 +375,9 @@ function CheckoutDepositModal({
           settlement: {
             refund, collect, collectMode, deduction, extraRefund,
             refundMode: refund > 0 ? refundMode : undefined,
+            // Exact split when the money moves both ways at once.
+            collectCash: collectMode === "MIXED" ? splitFor("MIXED", collect, collectCash).cashAmount : undefined,
+            refundCash: refundMode === "MIXED" ? splitFor("MIXED", refund, refundCash).cashAmount : undefined,
             notes: notes || undefined,
           },
         }),
@@ -530,13 +549,26 @@ function CheckoutDepositModal({
                   Same account
                 </button>
               )}
-              {(["CASH", "ONLINE"] as const).map(m => (
-                <button key={m} onClick={() => setRefundMode(m)}
+              {(["CASH", "ONLINE", "MIXED"] as const).map(m => (
+                <button key={m} onClick={() => { setRefundMode(m); if (m === "MIXED") setRefundCash(Math.round(refund / 2)); }}
                   className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border transition-all ${refundMode === m ? "bg-white/10 border-white/25 text-white" : "border-white/10 text-white/40 hover:text-white/70"}`}>
-                  {m === "CASH" ? "Cash" : "UPI"}
+                  {m === "CASH" ? "Cash" : m === "ONLINE" ? "UPI" : "Both"}
                 </button>
               ))}
             </div>
+            {refundMode === "MIXED" && (
+              <div className="mt-2.5">
+                <PayModePicker
+                  mode="MIXED"
+                  total={refund}
+                  cashAmount={refundCash}
+                  label=""
+                  compact
+                  allowMixed={false}
+                  onChange={sp => setRefundCash(sp.cashAmount)}
+                />
+              </div>
+            )}
             <p className="text-[11px] text-white/30 mt-2">
               {refundMode === "RAZORPAY"
                 ? "Goes back to the card or UPI the guest paid with. Usually instant; some banks take 5–7 days."
@@ -550,15 +582,13 @@ function CheckoutDepositModal({
         {/* Collect mode (only when the guest owes money) */}
         {collect > 0 && (
           <div className="mb-4">
-            <p className="text-xs text-white/40 uppercase tracking-wider font-semibold mb-2">Collect via</p>
-            <div className="flex gap-2">
-              {(["CASH", "ONLINE"] as const).map((m) => (
-                <button key={m} onClick={() => setCollectMode(m)}
-                  className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border transition-all ${collectMode === m ? "bg-white/10 border-white/25 text-white" : "border-white/10 text-white/40 hover:text-white/70"}`}>
-                  {m === "CASH" ? "Cash" : "UPI / Online"}
-                </button>
-              ))}
-            </div>
+            <PayModePicker
+              mode={collectMode}
+              total={collect}
+              cashAmount={collectCash}
+              label="How is it being paid?"
+              onChange={sp => { setCollectMode(sp.mode); setCollectCash(sp.cashAmount); }}
+            />
           </div>
         )}
 

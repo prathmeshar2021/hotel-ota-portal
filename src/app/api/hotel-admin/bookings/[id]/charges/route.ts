@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
 import { z } from "zod";
-import { recordTxn } from "@/lib/services/booking-txn";
+import { postSplit } from "@/lib/services/booking-ledger";
 
 function staffGuard(role?: string) {
   return role === "HOTEL_ADMIN" || role === "HOTEL_STAFF" || role === "SUPER_ADMIN";
@@ -18,7 +18,9 @@ const AddChargeSchema = z.object({
   // How the guest is settling it. DEPOSIT leaves it on the tab to be offset
   // against the refundable deposit at checkout (the usual case); CASH/ONLINE
   // mean they paid at the counter there and then.
-  settlement: z.enum(["DEPOSIT", "CASH", "ONLINE"]).default("DEPOSIT"),
+  settlement: z.enum(["DEPOSIT", "CASH", "ONLINE", "MIXED"]).default("DEPOSIT"),
+  /** For MIXED: how much of the charge was paid in cash. */
+  settleCash: z.number().min(0).optional(),
 });
 
 interface Params { id: string }
@@ -55,7 +57,7 @@ export async function POST(
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { chargeType, description, quantity, unitPrice, settlement } = parsed.data;
+  const { chargeType, description, quantity, unitPrice, settlement, settleCash } = parsed.data;
   const amount = Math.round(quantity * unitPrice * 100) / 100; // round to 2 dp
   const paidNow = settlement !== "DEPOSIT";
 
@@ -69,7 +71,7 @@ export async function POST(
         quantity,
         unitPrice,
         amount,
-        mode: paidNow && settlement === "ONLINE" ? "ONLINE" : "CASH",
+        mode: paidNow && settlement === "ONLINE" ? "ONLINE" : paidNow && settlement === "MIXED" ? "MIXED" : "CASH",
         paidNow,
       },
     }),
@@ -90,14 +92,19 @@ export async function POST(
   // on the tab is not income yet; it becomes one at checkout, when the deposit
   // is applied to it and a DEPOSIT_APPLIED entry is written.
   if (paidNow) {
-    await recordTxn({
+    // Part cash, part UPI is stored as two exact entries so the till figure
+    // stays right — a single "mixed" row could not say how many notes came in.
+    const cash = settlement === "MIXED"
+      ? Math.min(Math.max(0, settleCash ?? 0), amount)
+      : settlement === "CASH" ? amount : 0;
+    await postSplit({
       hotelId: session.user.hotelId,
       bookingId: id,
       kind: "EXTRA_CHARGE",
-      mode: settlement === "ONLINE" ? "ONLINE" : "CASH",
-      amount,
       note: `${chargeType.toLowerCase().replace(/_/g, " ")} — paid at the counter`,
       recordedBy: session.user.name || session.user.email || "Staff",
+      cashAmount: cash,
+      onlineAmount: +(amount - cash).toFixed(2),
     });
   }
 
@@ -109,7 +116,7 @@ export async function POST(
         // but there is nothing to collect or deduct for it.
         ? `${chargeType.toLowerCase().replace(/_/g, " ")} added as complimentary — no charge`
         : paidNow
-          ? `₹${amount} collected in ${settlement === "ONLINE" ? "UPI" : "cash"}`
+          ? `₹${amount} collected in ${settlement === "ONLINE" ? "UPI" : settlement === "MIXED" ? "cash + UPI" : "cash"}`
           : `₹${amount} added — will come off the deposit at checkout`,
     },
     { status: 201 }
