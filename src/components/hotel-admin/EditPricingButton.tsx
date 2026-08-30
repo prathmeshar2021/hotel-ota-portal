@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Pencil, Loader2, X, AlertTriangle, Receipt } from "lucide-react";
 import { computeTotalsForPrice } from "@/lib/utils/booking-calc";
+import PayModePicker, { splitFor, type PayMode } from "@/components/hotel-admin/PayModePicker";
 
 /**
  * Change what a booking costs after it was made, and correct the deposit.
@@ -45,6 +46,9 @@ export default function EditPricingButton({
   const [deposit, setDeposit] = useState(String(currentDeposit));
   const [held, setHeld] = useState(String(depositCollected));
   const [reason, setReason] = useState("");
+  // How the held deposit actually came in — only asked when the figure changes.
+  const [depMode, setDepMode] = useState<PayMode>("CASH");
+  const [depCash, setDepCash] = useState(0);
 
   const typedTotal = Number(total) || 0;
   const typedDeposit = Number(deposit) || 0;
@@ -68,6 +72,8 @@ export default function EditPricingButton({
   const blocked = loading || !changed || belowPaid || !reason.trim();
 
   function reset() {
+    setDepMode("CASH");
+    setDepCash(0);
     setTotal(String(currentTotal));
     setDeposit(String(currentDeposit));
     setHeld(String(depositCollected));
@@ -84,6 +90,8 @@ export default function EditPricingButton({
           totalAmount: Math.abs(typedTotal - currentTotal) > 0.5 ? typedTotal : undefined,
           refundableDeposit: Math.abs(typedDeposit - currentDeposit) > 0.5 ? typedDeposit : undefined,
           depositCollected: Math.abs(typedHeld - depositCollected) > 0.5 ? typedHeld : undefined,
+          depositMode: Math.abs(typedHeld - depositCollected) > 0.5 ? depMode : undefined,
+          depositCash: depMode === "MIXED" ? splitFor("MIXED", typedHeld, depCash).cashAmount : undefined,
           reason: reason.trim(),
         }),
       });
@@ -212,6 +220,17 @@ export default function EditPricingButton({
                 />
               </div>
             </div>
+            {Math.abs(typedHeld - depositCollected) > 0.5 && typedHeld > 0 && (
+              <div className="mb-3">
+                <PayModePicker
+                  mode={depMode}
+                  total={typedHeld}
+                  cashAmount={depCash}
+                  label="Deposit came in by"
+                  onChange={sp => { setDepMode(sp.mode); setDepCash(sp.cashAmount); }}
+                />
+              </div>
+            )}
             <p className="text-[11px] text-white/25 mb-4 leading-relaxed">
               The deposit is separate from the bill. It is not counted as income unless it is used
               or kept back.

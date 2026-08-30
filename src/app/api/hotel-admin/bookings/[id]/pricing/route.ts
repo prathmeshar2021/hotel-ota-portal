@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db/prisma";
 import { z } from "zod";
 import { computeTotalsForPrice } from "@/lib/utils/booking-calc";
 import { recordStaffAction } from "@/lib/services/staff-action";
-import { syncDepositTaken } from "@/lib/services/booking-ledger";
+import { syncDepositTaken, postSplit } from "@/lib/services/booking-ledger";
 
 /**
  * Edit what a booking costs, after it was made.
@@ -30,6 +30,9 @@ const Schema = z.object({
   refundableDeposit: z.number().min(0).optional(),
   /** Correct the deposit actually held, when it was keyed in wrong. */
   depositCollected: z.number().min(0).optional(),
+  /** How a corrected deposit came in, and the cash side when it is both. */
+  depositMode: z.enum(["CASH", "ONLINE", "MIXED"]).optional(),
+  depositCash: z.number().min(0).optional(),
   reason: z.string().trim().max(300).optional(),
 });
 
@@ -69,6 +72,7 @@ export async function PATCH(
   }
 
   const { totalAmount, refundableDeposit, depositCollected, reason } = parsed.data;
+  const depMode = parsed.data.depositMode;
   const updateData: Record<string, unknown> = {};
   const changes: string[] = [];
   const notifyLines: string[] = [];
@@ -136,7 +140,7 @@ export async function PATCH(
   // ── Deposit actually held ──
   if (depositCollected != null && Math.abs(depositCollected - booking.depositCollected) > 0.5) {
     updateData.depositCollected = depositCollected;
-    if (depositCollected > 0 && !booking.depositMode) updateData.depositMode = "CASH";
+    if (depositCollected > 0) updateData.depositMode = depMode ?? booking.depositMode ?? "CASH";
     changes.push(
       `Deposit held corrected from ₹${booking.depositCollected.toLocaleString("en-IN")} to ₹${depositCollected.toLocaleString("en-IN")}`
     );
@@ -155,14 +159,29 @@ export async function PATCH(
   // A corrected holding has to move the booking's account as well, or the panel
   // would keep showing the old figure as held.
   if (depositCollected != null) {
-    await syncDepositTaken({
-      hotelId: session.user.hotelId,
-      bookingId: booking.id,
-      depositCollected: updated.depositCollected,
-      depositMode: booking.depositMode === "ONLINE" ? "ONLINE" : "CASH",
-      recordedBy: actorName,
-      note: "Deposit holding corrected at the desk",
-    });
+    if (depMode === "MIXED") {
+      // A part-cash deposit needs both sides recorded, so the till figure and
+      // any later application know how much of it was actually notes. The old
+      // entries go first — this is a correction of what is held, not a top-up.
+      const cash = Math.min(Math.max(0, parsed.data.depositCash ?? 0), updated.depositCollected);
+      await prisma.bookingTxn.deleteMany({
+        where: { bookingId: booking.id, kind: { in: ["DEPOSIT_TAKEN", "DEPOSIT_RETURNED"] } },
+      });
+      await postSplit({
+        hotelId: session.user.hotelId, bookingId: booking.id, kind: "DEPOSIT_TAKEN",
+        recordedBy: actorName, note: "Deposit holding corrected at the desk",
+        cashAmount: cash, onlineAmount: +(updated.depositCollected - cash).toFixed(2),
+      });
+    } else {
+      await syncDepositTaken({
+        hotelId: session.user.hotelId,
+        bookingId: booking.id,
+        depositCollected: updated.depositCollected,
+        depositMode: depMode === "ONLINE" ? "ONLINE" : "CASH",
+        recordedBy: actorName,
+        note: "Deposit holding corrected at the desk",
+      });
+    }
   }
 
   await recordStaffAction({

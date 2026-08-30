@@ -43,7 +43,9 @@ const PostSchema = z.object({
 
 const PatchSchema = z.object({
   txnId: z.string(),
-  mode: z.enum(["CASH", "ONLINE"]),
+  mode: z.enum(["CASH", "ONLINE", "MIXED"]),
+  /** For MIXED: how much of the entry was actually cash. The rest is UPI. */
+  cashAmount: z.number().min(0).optional(),
   reason: z.string().trim().max(300).optional(),
 });
 
@@ -276,28 +278,71 @@ export async function PATCH(
   if (entry.mode === "DEPOSIT") {
     return NextResponse.json({ error: "A deposit settlement has no cash or UPI side to correct" }, { status: 400 });
   }
-  if (entry.mode === parsed.data.mode) {
+  const recordedBy = session.user.name || session.user.email || "Staff";
+
+  // How the money really arrived. MIXED splits the same amount across both.
+  const cashPart = parsed.data.mode === "MIXED"
+    ? +Math.min(Math.max(0, parsed.data.cashAmount ?? 0), entry.amount).toFixed(2)
+    : parsed.data.mode === "CASH" ? entry.amount : 0;
+  const onlinePart = +(entry.amount - cashPart).toFixed(2);
+
+  if (parsed.data.mode !== "MIXED" && entry.mode === parsed.data.mode) {
     return NextResponse.json({ error: "Already recorded that way" }, { status: 400 });
   }
 
-  // The money moved once; only our record of how was wrong. Correcting the mode
-  // in place keeps the statement in true transaction order — posting a reversal
-  // and a replacement would imply the guest paid twice.
-  const recordedBy = session.user.name || session.user.email || "Staff";
-  const impact = entry.mode === "CASH" ? -entry.cashImpact : 0;
-  const newImpact =
-    parsed.data.mode === "CASH"
-      ? (entry.direction === "CREDIT" ? entry.amount : -entry.amount)
-      : 0;
+  // The money moved once; only our record of how was wrong. Correcting in place
+  // keeps the statement in true transaction order — posting a reversal and a
+  // replacement would imply the guest paid twice.
+  //
+  // A correction to part-cash needs two rows, because the till has to know how
+  // many notes there really were. The original becomes the cash side and a
+  // sibling carries the UPI side at the same instant, so they stay together in
+  // the list and the pair still sums to what was taken.
+  const sign = entry.direction === "CREDIT" ? 1 : -1;
+  const label = parsed.data.mode === "MIXED"
+    ? `cash ₹${cashPart} + UPI ₹${onlinePart}`
+    : parsed.data.mode === "CASH" ? "cash" : "UPI";
 
-  await prisma.bookingTxn.update({
-    where: { id: entry.id },
-    data: {
-      mode: parsed.data.mode,
-      cashImpact: newImpact,
-      note: `${entry.note ?? ""}${entry.note ? " · " : ""}mode corrected ${entry.mode.toLowerCase()} → ${parsed.data.mode.toLowerCase()} by ${recordedBy}`.slice(0, 300),
-    },
-  });
+  if (cashPart > 0) {
+    await prisma.bookingTxn.update({
+      where: { id: entry.id },
+      data: {
+        mode: "CASH",
+        amount: cashPart,
+        cashImpact: +(sign * cashPart).toFixed(2),
+        note: `${entry.note ?? ""}${entry.note ? " · " : ""}corrected to ${label} by ${recordedBy}`.slice(0, 300),
+      },
+    });
+  }
+
+  if (onlinePart > 0) {
+    if (cashPart > 0) {
+      // The UPI half of a split becomes its own row alongside the original.
+      await postEntry({
+        hotelId: session.user.hotelId,
+        bookingId: b.id,
+        kind: entry.kind as TxnKind,
+        direction: entry.direction as TxnDirection,
+        mode: "ONLINE",
+        amount: onlinePart,
+        occurredAt: entry.occurredAt,
+        recordedBy,
+        correctsId: entry.id,
+        affectsStatement: entry.affectsStatement,
+        note: `${entry.note ?? ""}${entry.note ? " · " : ""}corrected to ${label} by ${recordedBy}`.slice(0, 300),
+      });
+    } else {
+      await prisma.bookingTxn.update({
+        where: { id: entry.id },
+        data: {
+          mode: "ONLINE",
+          amount: onlinePart,
+          cashImpact: 0,
+          note: `${entry.note ?? ""}${entry.note ? " · " : ""}corrected to ${label} by ${recordedBy}`.slice(0, 300),
+        },
+      });
+    }
+  }
 
   const after = accountOf(await loadBooking(id, session.user.hotelId) as never);
   await syncBookingTotals(b.id, after);
@@ -305,7 +350,7 @@ export async function PATCH(
   await recordStaffAction({
     hotelId: session.user.hotelId,
     kind: "OTHER",
-    summary: `${b.bookingRef}: ₹${entry.amount.toLocaleString("en-IN")} was recorded as ${entry.mode.toLowerCase()} but actually came in by ${parsed.data.mode === "CASH" ? "cash" : "UPI"}.`,
+    summary: `${b.bookingRef}: ₹${entry.amount.toLocaleString("en-IN")} was recorded as ${entry.mode.toLowerCase()} but actually came in as ${label}.`,
     amount: entry.amount,
     refType: "booking",
     refId: b.id,
@@ -315,14 +360,14 @@ export async function PATCH(
     actorId: session.user.id,
     actorName: recordedBy,
     actorRole: session.user.role ?? "HOTEL_STAFF",
-    details: { txnId: entry.id, from: entry.mode, to: parsed.data.mode, cashImpact: { from: entry.cashImpact, to: newImpact } },
-    notifyLines: [`Cash in hand moves by ₹${(newImpact + impact).toLocaleString("en-IN")}`],
+    details: { txnId: entry.id, from: entry.mode, to: parsed.data.mode, cashPart, onlinePart },
+    notifyLines: [`Cash in hand moves by ₹${(+(sign * cashPart - entry.cashImpact)).toLocaleString("en-IN")}`],
   });
 
   return NextResponse.json({
     success: true,
     account: after,
-    message: `Corrected to ${parsed.data.mode === "CASH" ? "cash" : "UPI / card"}`,
+    message: `Corrected to ${label}`,
   });
 }
 

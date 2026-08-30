@@ -259,5 +259,53 @@ console.log("\n── 8. Cash + UPI on the same payment ──");
      Math.abs(dep.depositHeld) < 0.01 && Math.abs(dep.balance) < 0.01);
 }
 
+console.log("\n── 9. Correcting how a payment came in ──");
+{
+  // Mirrors the PATCH: one row becomes the cash side, a sibling carries the UPI.
+  function correct(entry: { amount: number; mode: string; direction: string; cashImpact: number },
+                   to: "CASH" | "ONLINE" | "MIXED", cash: number) {
+    const cashPart = to === "MIXED" ? Math.min(Math.max(0, cash), entry.amount) : to === "CASH" ? entry.amount : 0;
+    const onlinePart = +(entry.amount - cashPart).toFixed(2);
+    const sign = entry.direction === "CREDIT" ? 1 : -1;
+    const rows = [
+      ...(cashPart > 0 ? [{ mode: "CASH", amount: cashPart, cashImpact: +(sign * cashPart).toFixed(2) }] : []),
+      ...(onlinePart > 0 ? [{ mode: "ONLINE", amount: onlinePart, cashImpact: 0 }] : []),
+    ];
+    return { rows, drawerDelta: +(rows.reduce((s, r) => s + r.cashImpact, 0) - entry.cashImpact).toFixed(2) };
+  }
+
+  const cashEntry = { amount: 200, mode: "CASH", direction: "CREDIT", cashImpact: 200 };
+  const onlineEntry = { amount: 200, mode: "ONLINE", direction: "CREDIT", cashImpact: 0 };
+
+  const t = [
+    { n: "₹200 cash → ₹120 cash + ₹80 UPI", e: cashEntry,   to: "MIXED" as const, cash: 120, wantRows: 2, wantTotal: 200, wantDrawer: -80 },
+    { n: "₹200 UPI → ₹120 cash + ₹80 UPI",  e: onlineEntry, to: "MIXED" as const, cash: 120, wantRows: 2, wantTotal: 200, wantDrawer: 120 },
+    { n: "₹200 cash → all UPI",             e: cashEntry,   to: "ONLINE" as const, cash: 0,  wantRows: 1, wantTotal: 200, wantDrawer: -200 },
+    { n: "₹200 UPI → all cash",             e: onlineEntry, to: "CASH" as const,  cash: 200, wantRows: 1, wantTotal: 200, wantDrawer: 200 },
+    { n: "mixed with 0 cash collapses",     e: cashEntry,   to: "MIXED" as const, cash: 0,   wantRows: 1, wantTotal: 200, wantDrawer: -200 },
+    { n: "mixed with all cash collapses",   e: onlineEntry, to: "MIXED" as const, cash: 200, wantRows: 1, wantTotal: 200, wantDrawer: 200 },
+  ];
+  for (const c of t) {
+    const r = correct(c.e, c.to, c.cash);
+    const total = +r.rows.reduce((s, x) => s + x.amount, 0).toFixed(2);
+    ok(`${c.n} → ${r.rows.length} row(s), total ${f(total)}, drawer ${r.drawerDelta >= 0 ? "+" : ""}${r.drawerDelta}`,
+       r.rows.length === c.wantRows && total === c.wantTotal && r.drawerDelta === c.wantDrawer);
+  }
+
+  // A refund corrected to mixed must still take money OUT of the till.
+  const refundEntry = { amount: 200, mode: "CASH", direction: "DEBIT", cashImpact: -200 };
+  const rr = correct(refundEntry, "MIXED", 120);
+  ok(`a ₹200 cash refund split 120/80 leaves the till down ₹120`,
+     rr.rows.find(x => x.mode === "CASH")?.cashImpact === -120);
+
+  // The correction never changes what the guest paid.
+  const a = summarise(
+    [{ kind: "DEPOSIT_TAKEN", direction: "CREDIT", mode: "CASH", amount: 120 },
+     { kind: "DEPOSIT_TAKEN", direction: "CREDIT", mode: "ONLINE", amount: 80 }],
+    { roomTotal: 0, extrasOnTab: 0 }
+  );
+  ok("a ₹120 + ₹80 deposit still reads as ₹200 held", Math.abs(a.depositHeld - 200) < 0.01);
+}
+
 console.log(`\n${fail === 0 ? `All ${pass} checks passed.` : `${fail} FAILED of ${pass + fail}`}`);
 process.exitCode = fail === 0 ? 0 : 1;

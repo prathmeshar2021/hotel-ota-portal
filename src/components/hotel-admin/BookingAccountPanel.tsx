@@ -86,6 +86,10 @@ export default function BookingAccountPanel({
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [correcting, setCorrecting] = useState<string | null>(null);
+  // The entry whose payment method is being put right.
+  const [fixing, setFixing] = useState<Entry | null>(null);
+  const [fixMode, setFixMode] = useState<PayMode>("CASH");
+  const [fixCash, setFixCash] = useState(0);
 
   const load = useCallback(async () => {
     try {
@@ -123,20 +127,28 @@ export default function BookingAccountPanel({
     } finally { setSaving(false); }
   }
 
-  /** The guest said UPI and paid cash — the money moved once, we noted it wrong. */
-  async function correctMode(e: Entry) {
-    const to = e.mode === "CASH" ? "ONLINE" : "CASH";
-    if (!confirm(`This ${inr(e.amount)} was recorded as ${e.mode === "CASH" ? "cash" : "UPI"}. Change it to ${to === "CASH" ? "cash" : "UPI"}?\n\nCash in hand will move by ${inr(e.amount)}. The owner is notified.`)) return;
-    setCorrecting(e.id);
+  /**
+   * The guest said UPI and paid cash, or split it between the two. The money
+   * moved once — only our record of how was wrong — so this corrects the entry
+   * rather than adding a new one.
+   */
+  async function correctMode(mode: PayMode, cash: number) {
+    if (!fixing) return;
+    setCorrecting(fixing.id);
     try {
       const res = await fetch(`/api/hotel-admin/bookings/${bookingId}/account`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ txnId: e.id, mode: to }),
+        body: JSON.stringify({
+          txnId: fixing.id,
+          mode,
+          cashAmount: mode === "MIXED" ? splitFor("MIXED", fixing.amount, cash).cashAmount : undefined,
+        }),
       });
       const d = await readJson(res);
       if (!res.ok) { toast.error(d.error ?? "Failed"); return; }
       toast.success(d.message);
+      setFixing(null);
       await load();
       router.refresh();
     } finally { setCorrecting(null); }
@@ -249,15 +261,19 @@ export default function BookingAccountPanel({
                 </p>
                 {e.mode !== "DEPOSIT" && (
                   <button
-                    onClick={() => correctMode(e)}
+                    onClick={() => {
+                      setFixing(e);
+                      setFixMode(e.mode === "ONLINE" ? "ONLINE" : "CASH");
+                      setFixCash(Math.round(e.amount / 2));
+                    }}
                     disabled={correcting === e.id}
-                    title={`Recorded as ${e.mode === "CASH" ? "cash" : "UPI"} — switch`}
+                    title="Change how this was paid"
                     className="mt-1 inline-flex items-center gap-1 text-[10px] text-white/30 hover:text-white/70 transition-colors disabled:opacity-40"
                   >
                     {correcting === e.id
                       ? <Loader2 className="w-3 h-3 animate-spin" />
                       : <Repeat className="w-3 h-3" />}
-                    {e.mode === "CASH" ? "was UPI?" : "was cash?"}
+                    fix method
                   </button>
                 )}
               </div>
@@ -265,6 +281,53 @@ export default function BookingAccountPanel({
           </div>
         ))}
       </div>
+
+      {/* Put a payment method right */}
+      {fixing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => !correcting && setFixing(null)} />
+          <div className="relative bg-[#0d1a0e] border border-white/10 rounded-3xl p-6 w-full max-w-sm shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-bold text-white">How was this paid?</h2>
+              <button onClick={() => !correcting && setFixing(null)} className="text-white/30 hover:text-white/60 p-1">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-white/50 text-sm mb-4 leading-relaxed">
+              {inr(fixing.amount)} — {KIND_LABEL[fixing.kind] ?? fixing.kind}, recorded as{" "}
+              <strong className="text-white/80">
+                {fixing.mode === "CASH" ? "cash" : fixing.mode === "ONLINE" ? "UPI" : "from deposit"}
+              </strong>.
+            </p>
+
+            <PayModePicker
+              mode={fixMode}
+              total={fixing.amount}
+              cashAmount={fixCash}
+              label="Actually paid by"
+              onChange={sp => { setFixMode(sp.mode); setFixCash(sp.cashAmount); }}
+            />
+
+            <p className="text-[11px] text-white/30 mb-4 leading-relaxed">
+              The amount does not change — only how it came in. Cash in hand moves to match,
+              and the owner is told.
+            </p>
+
+            <div className="flex gap-2.5">
+              <button onClick={() => !correcting && setFixing(null)} disabled={!!correcting}
+                className="flex-1 px-4 py-3 rounded-xl border border-white/10 text-white/60 font-semibold text-sm hover:text-white/85">
+                Cancel
+              </button>
+              <button onClick={() => correctMode(fixMode, fixCash)} disabled={!!correcting}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-sm disabled:opacity-50">
+                {correcting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Repeat className="w-4 h-4" />}
+                {correcting ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add entry */}
       {open && (

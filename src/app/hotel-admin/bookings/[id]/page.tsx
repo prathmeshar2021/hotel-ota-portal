@@ -640,7 +640,9 @@ export default async function BookingDetailPage({
                     </span>
                   </div>
                   <p className="text-green-400/50 text-[10px] mt-1">
-                    Taken {booking.depositMode === "ONLINE" ? "online / UPI" : "in cash"}
+                    Taken {booking.depositMode === "ONLINE" ? "online / UPI"
+                      : booking.depositMode === "MIXED" ? "part cash, part UPI"
+                      : "in cash"}
                     {booking.depositPaymentId ? " · refundable to source" : ""}
                     {booking.status === "CHECKED_OUT" ? " · settled at checkout" : " · returned at checkout, less any charges"}
                   </p>
