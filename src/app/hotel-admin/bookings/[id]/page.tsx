@@ -427,7 +427,7 @@ export default async function BookingDetailPage({
                             {/* Whether this one still has to come off the deposit */}
                             {charge.paidNow ? (
                               <span className="text-green-400/70">
-                                paid {charge.mode === "ONLINE" ? "UPI" : "cash"}
+                                paid {charge.mode === "ONLINE" ? "UPI" : charge.mode === "MIXED" ? "cash + UPI" : "cash"}
                               </span>
                             ) : (
                               <span className="text-amber-400/70">from deposit</span>

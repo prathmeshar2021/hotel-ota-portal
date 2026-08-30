@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
 import { ensureRoomAssigned, isConsentConfirmed, CHECKIN_GATE_MESSAGES } from "@/lib/services/checkin-gate";
 import { recordTxn, roomPaymentNote, type RecordTxnInput } from "@/lib/services/booking-txn";
-import { returnDeposit, depositCashShare } from "@/lib/services/booking-ledger";
+import { depositCashShare, postSplit } from "@/lib/services/booking-ledger";
 import { computeTotalsForPrice } from "@/lib/utils/booking-calc";
 import { recordStaffAction } from "@/lib/services/staff-action";
 
@@ -385,13 +385,19 @@ export async function PATCH(
   }
 
   if (newStatus === "CHECKED_OUT" && depositReturn > 0) {
-    await returnDeposit({
+    // Hand it back the way it came: a deposit taken part-cash is returned in
+    // the same proportion, so each side's record matches reality.
+    const share = await depositCashShare(booking.id);
+    const cashBack = +(depositReturn * share).toFixed(2);
+    await postSplit({
       hotelId: booking.hotelId,
       bookingId: booking.id,
-      amount: depositReturn,
-      depositMode: booking.depositMode === "ONLINE" ? "ONLINE" : "CASH",
+      kind: "DEPOSIT_RETURNED",
+      note: "Refundable deposit returned at checkout",
       occurredAt: now,
       recordedBy,
+      cashAmount: cashBack,
+      onlineAmount: +(depositReturn - cashBack).toFixed(2),
     });
   }
 

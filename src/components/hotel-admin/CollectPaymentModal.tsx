@@ -4,8 +4,9 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  X, Banknote, Smartphone, Loader2, CheckCircle2, IndianRupee,
+  X, Banknote, Smartphone, Loader2, CheckCircle2, IndianRupee, Layers,
 } from "lucide-react";
+import PayModePicker, { splitFor, type PayMode } from "@/components/hotel-admin/PayModePicker";
 
 interface Props {
   bookingId: string;
@@ -23,7 +24,9 @@ export default function CollectPaymentModal({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState(balanceDue.toString());
-  const [mode, setMode] = useState<"CASH" | "ONLINE">("CASH");
+  const [mode, setMode] = useState<PayMode>("CASH");
+  // Cash side when the guest settles part in notes, part by UPI.
+  const [cashPart, setCashPart] = useState(0);
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
@@ -34,6 +37,7 @@ export default function CollectPaymentModal({
     if (open) {
       setAmount(balanceDue.toString());
       setMode("CASH");
+      setCashPart(0);
       setNotes("");
       setDone(false);
       setResult(null);
@@ -53,7 +57,12 @@ export default function CollectPaymentModal({
       const res = await fetch(`/api/hotel-admin/bookings/${bookingId}/payment`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: parsedAmount, mode, notes: notes.trim() || undefined }),
+        body: JSON.stringify({
+          amount: parsedAmount,
+          mode,
+          cashAmount: mode === "MIXED" ? splitFor("MIXED", parsedAmount, cashPart).cashAmount : undefined,
+          notes: notes.trim() || undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -202,10 +211,11 @@ export default function CollectPaymentModal({
                   <label className="block text-xs font-semibold text-white/45 uppercase tracking-wider mb-2">
                     Payment Mode
                   </label>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-3 gap-2">
                     {([
-                      { value: "CASH",   label: "Cash",        icon: Banknote,    desc: "Physical currency" },
-                      { value: "ONLINE", label: "UPI / Card",  icon: Smartphone,  desc: "Google Pay, PhonePe…" },
+                      { value: "CASH",   label: "Cash",       icon: Banknote,   desc: "Notes" },
+                      { value: "ONLINE", label: "UPI / Card", icon: Smartphone, desc: "GPay, PhonePe…" },
+                      { value: "MIXED",  label: "Both",       icon: Layers,     desc: "Cash + UPI" },
                     ] as const).map(opt => {
                       const Icon = opt.icon;
                       const selected = mode === opt.value;
@@ -229,6 +239,19 @@ export default function CollectPaymentModal({
                       );
                     })}
                   </div>
+                  {mode === "MIXED" && (
+                    <div className="mt-2.5">
+                      <PayModePicker
+                        mode="MIXED"
+                        total={parsedAmount}
+                        cashAmount={cashPart}
+                        label=""
+                        compact
+                        allowMixed={false}
+                        onChange={sp => setCashPart(sp.cashAmount)}
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* Optional notes */}

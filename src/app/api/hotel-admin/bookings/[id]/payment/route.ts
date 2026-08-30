@@ -2,11 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
 import { z } from "zod";
-import { recordTxn, roomPaymentNote } from "@/lib/services/booking-txn";
+import { postSplit } from "@/lib/services/booking-ledger";
 
 const CollectSchema = z.object({
   amount: z.number().positive("Amount must be greater than 0"),
-  mode: z.enum(["CASH", "ONLINE"]),
+  mode: z.enum(["CASH", "ONLINE", "MIXED"]),
+  /** For MIXED: how much of the amount came in as cash. The rest is UPI. */
+  cashAmount: z.number().min(0).optional(),
   notes: z.string().optional(),
 });
 
@@ -49,12 +51,18 @@ export async function PATCH(
   // Clamp: can't collect more than what's due
   const collected = Math.min(amount, booking.balanceDue);
   const newBalance = Math.max(0, booking.balanceDue - collected);
-  const newCashPaid   = mode === "CASH"   ? booking.cashPaid   + collected : booking.cashPaid;
-  const newOnlinePaid = mode === "ONLINE" ? booking.onlinePaid + collected : booking.onlinePaid;
 
-  // Determine updated payment mode for the record
-  const totalCash   = mode === "CASH"   ? booking.cashPaid   + collected : booking.cashPaid;
-  const totalOnline = mode === "ONLINE" ? booking.onlinePaid + collected : booking.onlinePaid;
+  // A guest can settle part in notes and part by UPI. Each side is tracked
+  // against the method it actually arrived by, so the till stays exact.
+  const cashIn = mode === "MIXED"
+    ? Math.min(Math.max(0, parsed.data.cashAmount ?? 0), collected)
+    : mode === "CASH" ? collected : 0;
+  const onlineIn = +(collected - cashIn).toFixed(2);
+
+  const newCashPaid   = +(booking.cashPaid + cashIn).toFixed(2);
+  const newOnlinePaid = +(booking.onlinePaid + onlineIn).toFixed(2);
+  const totalCash = newCashPaid;
+  const totalOnline = newOnlinePaid;
   let updatedMode: "CASH" | "ONLINE" | "MIXED" = "CASH";
   if (totalCash > 0 && totalOnline > 0) updatedMode = "MIXED";
   else if (totalOnline > 0) updatedMode = "ONLINE";
@@ -63,7 +71,10 @@ export async function PATCH(
   const isFullyPaid = newBalance === 0;
   const collectedBy = session.user.name ?? session.user.email ?? "Staff";
   const timestamp   = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
-  const noteEntry   = `[${timestamp}] ₹${collected.toLocaleString("en-IN")} collected ${mode === "CASH" ? "in cash" : "via UPI/Card"} by ${collectedBy}${notes ? ` — ${notes}` : ""}`;
+  const how = mode === "MIXED"
+    ? `₹${cashIn.toLocaleString("en-IN")} in cash and ₹${onlineIn.toLocaleString("en-IN")} via UPI/Card`
+    : mode === "CASH" ? "in cash" : "via UPI/Card";
+  const noteEntry   = `[${timestamp}] ₹${collected.toLocaleString("en-IN")} collected ${how} by ${collectedBy}${notes ? ` — ${notes}` : ""}`;
 
   // Collecting payment at the counter confirms a still-pending booking,
   // so it holds inventory and front-desk actions (assign room / check-in) unlock.
@@ -82,14 +93,14 @@ export async function PATCH(
 
   // Ledger entry — this instalment on its own date, so the accounts statement
   // shows it as its own line rather than folding it into the booking total.
-  await recordTxn({
+  await postSplit({
     hotelId: session.user.hotelId,
     bookingId: id,
     kind: "ROOM_PAYMENT",
-    mode,
-    amount: collected,
-    note: roomPaymentNote(mode, isFullyPaid ? "balance settled at the counter" : "part payment at the counter"),
+    note: isFullyPaid ? "Balance settled at the counter" : "Part payment at the counter",
     recordedBy: collectedBy,
+    cashAmount: cashIn,
+    onlineAmount: onlineIn,
   });
 
   // Upsert payment record

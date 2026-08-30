@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
-import { recordTxn } from "@/lib/services/booking-txn";
+import { postSplit } from "@/lib/services/booking-ledger";
 
 function staffGuard(role?: string) {
   return role === "HOTEL_ADMIN" || role === "HOTEL_STAFF" || role === "SUPER_ADMIN";
@@ -55,16 +55,26 @@ export async function DELETE(
   // counter. The ledger is append-only, so the reversal is its own entry rather
   // than a deletion — the day's takings then still reconcile against the drawer.
   if (charge.paidNow) {
-    const via = charge.mode === "ONLINE" ? "ONLINE" : "CASH";
-    await recordTxn({
+    // Give it back the way it came in. A charge paid part-cash has two ledger
+    // entries behind it, so the reversal is split in the same proportion —
+    // returning it all as notes would leave the till short.
+    const paid = await prisma.bookingTxn.findMany({
+      where: { bookingId, kind: "EXTRA_CHARGE" },
+      select: { mode: true, amount: true },
+    });
+    const total = paid.reduce((s, p) => s + p.amount, 0);
+    const cashShare = total > 0
+      ? paid.filter(p => p.mode === "CASH").reduce((s, p) => s + p.amount, 0) / total
+      : charge.mode === "ONLINE" ? 0 : 1;
+    const cashBack = +(charge.amount * cashShare).toFixed(2);
+    await postSplit({
       hotelId: session.user.hotelId,
       bookingId,
       kind: "REFUND",
-      mode: via,
-      amount: charge.amount,
-      refundVia: via,
       note: `${(charge.chargeTypes[0] ?? "extra").toLowerCase().replace(/_/g, " ")} — charge removed, returned to guest`,
       recordedBy: session.user.name || session.user.email || "Staff",
+      cashAmount: cashBack,
+      onlineAmount: +(charge.amount - cashBack).toFixed(2),
     });
   }
 
