@@ -11,6 +11,7 @@ import {
   MapPin, X, ArrowRight, UserPlus, UserCheck, Tag, ShieldCheck, XCircle, Percent,
 } from "lucide-react";
 import { computeTotals, computeTotalsForPrice, REFUNDABLE_DEPOSIT } from "@/lib/utils/booking-calc";
+import { istDateInput, shiftDateInput } from "@/lib/utils/datetime";
 import IdPhotoUpload from "@/components/hotel-admin/IdPhotoUpload";
 import { getCategoryMeta } from "@/lib/utils/room-categories";
 
@@ -61,8 +62,10 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
   const [submitting, setSubmitting] = useState(false);
 
   // Step 1
-  const [checkIn, setCheckIn] = useState("");
-  const [checkOut, setCheckOut] = useState("");
+  // Nearly every counter booking is tonight for one night, so the form opens on
+  // that. Staff change it for anything else; back-dated stays are still allowed.
+  const [checkIn, setCheckIn] = useState(istDateInput());
+  const [checkOut, setCheckOut] = useState(istDateInput(1));
   const [noOfPersons, setNoOfPersons] = useState(2);
   const [rooms, setRooms] = useState<AvailableRoom[]>([]);
   const [loadingRooms, setLoadingRooms] = useState(false);
@@ -339,7 +342,15 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
               <div>
                 <label className={labelCls}>Check-in Date</label>
                 <input type="date" value={checkIn}
-                  onChange={e => { setCheckIn(e.target.value); setRooms([]); setSelectedRoom(null); }}
+                  onChange={e => {
+                    const v = e.target.value;
+                    setCheckIn(v);
+                    // Keep the stay valid: moving check-in past check-out would
+                    // otherwise leave an impossible range on screen. Falls back
+                    // to one night, which is what nearly every booking is.
+                    if (v && (!checkOut || checkOut <= v)) setCheckOut(shiftDateInput(v, 1));
+                    setRooms([]); setSelectedRoom(null);
+                  }}
                   className={inputCls} />
               </div>
               <div>
