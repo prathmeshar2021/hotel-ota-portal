@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { istDateInput } from "@/lib/utils/datetime";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -74,7 +75,9 @@ export default function BookingForm({
   const [skipLogin, setSkipLogin] = useState(false);
 
   // ── Dates (editable in form) ───────────────────────────────────────────────
-  const today = new Date().toISOString().split("T")[0];
+  // India's date: the UTC day is still yesterday until 5:30am IST, which
+  // would let a guest pick a night that has already gone.
+  const today = istDateInput();
   const [localCheckIn, setLocalCheckIn] = useState(checkIn);
   const [localCheckOut, setLocalCheckOut] = useState(checkOut);
 

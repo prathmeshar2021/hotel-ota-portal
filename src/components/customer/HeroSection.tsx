@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { istDateInput } from "@/lib/utils/datetime";
 import { motion, useScroll, useTransform, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import Image from "next/image";
@@ -79,7 +80,9 @@ export default function HeroSection({ heroImage, galleryImages, avgRating, revie
 
   // Inline booking widget
   const router = useRouter();
-  const today = new Date().toISOString().split("T")[0];
+  // India's date: the UTC day is still yesterday until 5:30am IST, which
+  // would let a guest pick a night that has already gone.
+  const today = istDateInput();
   const [checkIn, setCheckIn] = useState("");
   const [checkOut, setCheckOut] = useState("");
   const [guests, setGuests] = useState(2);

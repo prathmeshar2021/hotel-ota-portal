@@ -294,7 +294,9 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
-  const today = new Date().toISOString().split("T")[0];
+  // Compared in IST, like the default above — between midnight and 5:30am
+  // the UTC day is still yesterday, which would miss the late-entry tag.
+  const today = istDateInput();
   // Recording a stay that already started — allowed, but called out so it's a
   // deliberate catch-up entry rather than a mistyped year.
   const isBackdated = !!checkIn && checkIn < today;

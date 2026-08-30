@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { istDateInput } from "@/lib/utils/datetime";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import {
@@ -79,7 +80,9 @@ function nightsBetween(checkIn: string, checkOut: string): number {
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function DatePickerWidget({ onSubmit }: { onSubmit: (ci: string, co: string) => void }) {
-  const today = new Date().toISOString().split("T")[0];
+  // India's date: the UTC day is still yesterday until 5:30am IST, which
+  // would let a guest pick a night that has already gone.
+  const today = istDateInput();
   const [checkIn, setCheckIn] = useState("");
   const [checkOut, setCheckOut] = useState("");
   const nights = checkIn && checkOut ? nightsBetween(checkIn, checkOut) : 0;

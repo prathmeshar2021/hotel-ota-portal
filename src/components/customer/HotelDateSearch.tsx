@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { istDateInput } from "@/lib/utils/datetime";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Calendar, Users, Search, Loader2 } from "lucide-react";
 
@@ -32,7 +33,9 @@ export default function HotelDateSearch({
     setLoading(false);
   }, [searchParams]);
 
-  const today = new Date().toISOString().split("T")[0];
+  // India's date: the UTC day is still yesterday until 5:30am IST, which
+  // would let a guest pick a night that has already gone.
+  const today = istDateInput();
   const hasFilter = !!(checkIn && checkOut);
 
   function handleSearch() {

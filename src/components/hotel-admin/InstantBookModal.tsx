@@ -7,6 +7,7 @@ import { useEffect } from "react";
 import { Zap, Loader2, X, User, Phone, IndianRupee, StickyNote, BedDouble } from "lucide-react";
 import { getCategoryMeta } from "@/lib/utils/room-categories";
 import GuestSearch, { type GuestResult } from "./GuestSearch";
+import { istDateInput, shiftDateInput } from "@/lib/utils/datetime";
 
 interface Props {
   /** Pre-selected when opened from a room card. Omit to pick a room in-modal
@@ -29,12 +30,6 @@ const inputCls =
   "w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder:text-white/25 text-sm focus:outline-none focus:border-blue-400/50 focus:bg-white/8 transition-all";
 const labelCls = "block text-[11px] font-semibold text-white/45 uppercase tracking-wider mb-1.5";
 
-function isoDate(offsetDays = 0) {
-  const d = new Date();
-  d.setDate(d.getDate() + offsetDays);
-  return d.toISOString().split("T")[0];
-}
-
 /**
  * One-screen booking for a call the owner is already on. Everything about the
  * guest is optional — the point is to block the room now and capture the rest
@@ -48,8 +43,11 @@ export default function InstantBookModal({ roomId, roomNumber, basePrice, onClos
   const [rooms, setRooms] = useState<AvailableRoom[]>([]);
   const [loadingRooms, setLoadingRooms] = useState(false);
   const [pickedRoom, setPickedRoom] = useState<AvailableRoom | null>(null);
-  const [checkIn, setCheckIn] = useState(isoDate(0));
-  const [checkOut, setCheckOut] = useState(isoDate(1));
+  // India's date, not the server's. toISOString() gives the UTC day, which is
+  // yesterday for the whole IST evening — and these calls come in at night, so
+  // the room would have been blocked for the wrong date.
+  const [checkIn, setCheckIn] = useState(istDateInput());
+  const [checkOut, setCheckOut] = useState(istDateInput(1));
   const [guestName, setGuestName] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
   // Set when a returning guest is picked from search, so the booking links to
@@ -145,7 +143,14 @@ export default function InstantBookModal({ roomId, roomNumber, basePrice, onClos
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div>
             <label className={labelCls}>Check-in</label>
-            <input type="date" value={checkIn} onChange={e => setCheckIn(e.target.value)} className={inputCls} />
+            <input type="date" value={checkIn}
+              onChange={e => {
+                const v = e.target.value;
+                setCheckIn(v);
+                // Carry check-out along so the range can never run backwards.
+                if (v && (!checkOut || checkOut <= v)) setCheckOut(shiftDateInput(v, 1));
+              }}
+              className={inputCls} />
           </div>
           <div>
             <label className={labelCls}>Check-out</label>
