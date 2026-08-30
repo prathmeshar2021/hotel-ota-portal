@@ -244,7 +244,11 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
     if (!guestName || phone.length !== 10) { toast.error("Guest details incomplete"); return; }
     if (!selectedRoom || !checkIn || !checkOut || nights < 1) { toast.error("Room/dates missing"); return; }
 
-    if (paymentMode === "CASH" && !cashPaid) { toast.error("Enter cash amount paid"); return; }
+    if (paymentMode === "CASH" && !cashPaid) { toast.error("Enter the cash amount taken"); return; }
+    if (paymentMode === "ONLINE" && !onlinePaid) { toast.error("Enter the UPI amount taken"); return; }
+    if (paymentMode === "MIXED" && totalPaid <= 0) {
+      toast.error("Enter the cash and UPI amounts"); return;
+    }
 
     setSubmitting(true);
     try {
@@ -738,12 +742,16 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
               <div>
                 <label className={labelCls}>{t("nb.paymentMode")}</label>
                 <div className="flex gap-2">
-                  {(["CASH", "ONLINE", "MIXED"] as const).map(m => (
-                    <button key={m} onClick={() => setPaymentMode(m)}
+                  {([
+                    { key: "CASH",   label: "Cash" },
+                    { key: "ONLINE", label: "UPI / Card" },
+                    { key: "MIXED",  label: "Both" },
+                  ] as const).map(m => (
+                    <button key={m.key} onClick={() => setPaymentMode(m.key)}
                       className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-all ${
-                        paymentMode === m ? "bg-blue-500/20 text-blue-300 border-blue-500/30" : "bg-white/3 text-white/35 border-white/8 hover:bg-white/6"
+                        paymentMode === m.key ? "bg-blue-500/20 text-blue-300 border-blue-500/30" : "bg-white/3 text-white/35 border-white/8 hover:bg-white/6"
                       }`}>
-                      {m}
+                      {m.label}
                     </button>
                   ))}
                 </div>
@@ -762,6 +770,23 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
                   <input type="number" value={onlinePaid} onChange={e => setOnlinePaid(e.target.value)}
                     placeholder="0" className={inputCls} />
                 </div>
+              )}
+              {paymentMode === "MIXED" && (
+                // Two free boxes are easy to mistype, so the total and what is
+                // left are shown as they are filled in.
+                <p className="text-[11px] text-white/35 -mt-1">
+                  ₹{(Number(cashPaid) || 0).toLocaleString("en-IN")} cash + ₹{(Number(onlinePaid) || 0).toLocaleString("en-IN")} UPI
+                  {" = "}<span className="text-white/70 font-semibold">₹{totalPaid.toLocaleString("en-IN")}</span>
+                  {/* Totals are null until a room and dates are chosen, and the
+                      payment section is reachable before that. */}
+                  {(totals?.totalAmount ?? 0) > 0 && (
+                    totalPaid > totals!.totalAmount + 0.5
+                      ? <span className="text-amber-400/80"> · ₹{(totalPaid - totals!.totalAmount).toLocaleString("en-IN")} more than the bill</span>
+                      : totalPaid < totals!.totalAmount - 0.5
+                        ? <span className="text-white/40"> · ₹{(totals!.totalAmount - totalPaid).toLocaleString("en-IN")} still to pay</span>
+                        : <span className="text-green-400/80"> · settles the bill</span>
+                  )}
+                </p>
               )}
               {/* Coupon code */}
               <div>
