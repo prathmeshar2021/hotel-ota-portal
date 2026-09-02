@@ -112,6 +112,13 @@ export default async function BookingDetailPage({
   const gstRate = booking.taxableAmount > 0
     ? Math.round((booking.cgst / booking.taxableAmount) * 1000) / 10
     : 0;
+  // Money taken beyond what the room was billed at. Kept as its own figure
+  // rather than folded into the total: the bill is what the guest was charged,
+  // and the extra is a separate fact the desk needs to see.
+  const overpaid = +Math.max(
+    0,
+    booking.cashPaid + booking.onlinePaid - booking.totalAmount - booking.additionalCharges
+  ).toFixed(2);
   // True once the price charged differs from the room's standard tariff.
   const priceEdited =
     booking.originalTotal != null &&
@@ -621,6 +628,19 @@ export default async function BookingDetailPage({
                 <span>Room Total</span>
                 <span style={{ color: accent }}>₹{booking.totalAmount.toLocaleString("en-IN")}</span>
               </div>
+              {/* More was taken than the room was billed at — usually the price
+                  was discounted after the payment figure was typed. Shown right
+                  here, beside the total, so the two figures are never read
+                  apart and left looking like an error in the accounts. */}
+              {overpaid > 0 && (
+                <div className="flex justify-between text-sky-300/90 text-xs">
+                  <span>Taken from guest</span>
+                  <span className="font-semibold">
+                    ₹{(booking.cashPaid + booking.onlinePaid).toLocaleString("en-IN")}
+                    <span className="text-sky-300/60"> · ₹{overpaid.toLocaleString("en-IN")} extra</span>
+                  </span>
+                </div>
+              )}
               {booking.additionalCharges > 0 && (
                 <div className="flex justify-between text-amber-300/80 text-xs">
                   <span>Extra charges (tea, damage…)</span>

@@ -8,6 +8,7 @@ import {
 } from "@/lib/utils/booking-calc";
 import { recordTxn, roomPaymentNote } from "@/lib/services/booking-txn";
 import { syncDepositTaken } from "@/lib/services/booking-ledger";
+import { recordStaffAction } from "@/lib/services/staff-action";
 import { gupshup } from "@/lib/services/gupshup";
 import { email } from "@/lib/services/email";
 import { format } from "date-fns";
@@ -278,6 +279,30 @@ export async function POST(req: NextRequest) {
     hotelId, bookingId: booking.id, kind: "ROOM_PAYMENT", mode: "ONLINE",
     amount: d.onlinePaid, note: roomPaymentNote("ONLINE", stage), recordedBy,
   });
+  // Taking more than the booking is billed at is legitimate — the price is
+  // often discounted after the payment figure has been typed — but it is the
+  // kind of thing that later looks like an accounting error, so it is recorded
+  // as unusual and the owner is told the same day.
+  const overpaid = +(totalPaid - totals.totalAmount).toFixed(2);
+  if (overpaid > 0.5) {
+    await recordStaffAction({
+      hotelId,
+      kind: "OTHER",
+      summary: `${bookingRef}: ₹${totalPaid.toLocaleString("en-IN")} taken on a booking billed at ₹${totals.totalAmount.toLocaleString("en-IN")}.`,
+      amount: overpaid,
+      refType: "booking",
+      refId: booking.id,
+      bookingRef,
+      guestName: d.guestName,
+      reason: d.discountReason?.trim() || undefined,
+      actorId: session.user.id,
+      actorName: recordedBy,
+      actorRole: session.user.role ?? "HOTEL_STAFF",
+      details: { billed: totals.totalAmount, taken: totalPaid, extra: overpaid },
+      notifyLines: [`₹${overpaid.toLocaleString("en-IN")} more than the bill — check the price or refund the difference`],
+    });
+  }
+
   // The deposit is the guest's money, held rather than earned — it shows on the
   // booking's account but stays out of the hotel's statement until it is used.
   await syncDepositTaken({

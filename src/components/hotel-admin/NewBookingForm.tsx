@@ -784,21 +784,25 @@ export default function NewBookingForm({ hotelId }: { hotelId: string }) {
                     placeholder="0" className={inputCls} />
                 </div>
               )}
-              {paymentMode === "MIXED" && (
-                // Two free boxes are easy to mistype, so the total and what is
-                // left are shown as they are filled in.
-                <p className="text-[11px] text-white/35 -mt-1">
-                  ₹{(Number(cashPaid) || 0).toLocaleString("en-IN")} cash + ₹{(Number(onlinePaid) || 0).toLocaleString("en-IN")} UPI
-                  {" = "}<span className="text-white/70 font-semibold">₹{totalPaid.toLocaleString("en-IN")}</span>
-                  {/* Totals are null until a room and dates are chosen, and the
-                      payment section is reachable before that. */}
-                  {(totals?.totalAmount ?? 0) > 0 && (
-                    totalPaid > totals!.totalAmount + 0.5
-                      ? <span className="text-amber-400/80"> · ₹{(totalPaid - totals!.totalAmount).toLocaleString("en-IN")} more than the bill</span>
-                      : totalPaid < totals!.totalAmount - 0.5
-                        ? <span className="text-white/40"> · ₹{(totals!.totalAmount - totalPaid).toLocaleString("en-IN")} still to pay</span>
-                        : <span className="text-green-400/80"> · settles the bill</span>
+              {/* How the amount typed compares with the bill. Shown for every
+                  mode, not just Both: taking more than the room was priced at
+                  is just as easy in a single box, and it is the mistake that
+                  later reads as an error in the accounts.
+                  Totals are null until a room and dates are chosen, and this
+                  section is reachable before that. */}
+              {totalPaid > 0 && (totals?.totalAmount ?? 0) > 0 && (
+                <p className="text-[11px] -mt-1">
+                  {paymentMode === "MIXED" && (
+                    <span className="text-white/35">
+                      ₹{(Number(cashPaid) || 0).toLocaleString("en-IN")} cash + ₹{(Number(onlinePaid) || 0).toLocaleString("en-IN")} UPI
+                      {" = "}<span className="text-white/70 font-semibold">₹{totalPaid.toLocaleString("en-IN")}</span>{" · "}
+                    </span>
                   )}
+                  {totalPaid > totals!.totalAmount + 0.5
+                    ? <span className="text-amber-400">Taking ₹{(totalPaid - totals!.totalAmount).toLocaleString("en-IN")} more than the ₹{totals!.totalAmount.toLocaleString("en-IN")} bill — check the price</span>
+                    : totalPaid < totals!.totalAmount - 0.5
+                      ? <span className="text-white/40">₹{(totals!.totalAmount - totalPaid).toLocaleString("en-IN")} still to pay</span>
+                      : <span className="text-green-400/80">Settles the bill</span>}
                 </p>
               )}
               {/* Coupon code */}
