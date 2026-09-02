@@ -391,11 +391,12 @@ function CollectCashModal({
               <p className="text-white/40 text-xs uppercase tracking-wider mb-1">Cash Currently in Hand</p>
               <p className="text-3xl font-bold text-green-400">{fmt(cashInHand)}</p>
               {depositsHeldInCash > 0 && (
-                // Guest deposits are physically in the same drawer but are not the
-                // hotel's money, so counting the till will read higher than this.
+                // The deposits are inside this figure now, because the notes are
+                // inside the drawer. Saying which part is not the hotel's keeps
+                // the count honest without making it disagree with the till.
                 <p className="text-white/35 text-[11px] mt-2 leading-relaxed">
-                  Plus {fmt(depositsHeldInCash)} of guest deposits held in cash —
-                  the till should count {fmt(cashInHand + depositsHeldInCash)}.
+                  Count the till against this. {fmt(depositsHeldInCash)} of it is
+                  guest deposits you are holding, not earnings.
                 </p>
               )}
             </div>

@@ -33,7 +33,8 @@ export async function GET() {
 
   const [
     drawerAgg,            // all-time signed cash effect of guest money
-    heldDepositAgg,       // cash deposits sitting in the drawer that aren't ours
+    depositCashInAgg,     // cash deposits taken
+    depositCashOutAgg,    // cash deposits handed back
     onlineAgg,            // all-time online receipts
     refundOnlineAgg,      // all-time online refunds
     collectionAgg,
@@ -49,17 +50,26 @@ export async function GET() {
     monthExpenseAgg,
   ] = await Promise.all([
     prisma.bookingTxn.aggregate({ where: guestMoney, _sum: { cashImpact: true } }),
-    // Cash deposits still being held. Not the hotel's money, so it is outside
-    // Cash in Hand — but it IS physically in the drawer, so the owner needs it
-    // to reconcile a count against the panel.
-    prisma.booking.aggregate({
+    // Guest deposits still sitting in the drawer as notes. These are now INSIDE
+    // Cash in Hand, because they are physically there — this figure says how
+    // much of the till is money being held rather than money earned. Taken from
+    // the ledger, so it follows the notes rather than the booking's own field.
+    prisma.bookingTxn.aggregate({
       where: {
-        hotelId, source: { notIn: OTA_PREPAID_SOURCES },
-        depositMode: "CASH",
-        status: { in: ["CONFIRMED", "CHECKED_IN"] },
-        depositCollected: { gt: 0 },
+        ...guestMoney, kind: "DEPOSIT_TAKEN", mode: "CASH",
+        // Only stays that still hold a deposit. Counting settled ones as well
+        // would net in the payouts of deposits that arrived by UPI and left as
+        // notes, and report a negative amount of cash being held.
+        booking: { source: { notIn: OTA_PREPAID_SOURCES }, status: { in: ["CONFIRMED", "CHECKED_IN"] } },
       },
-      _sum: { depositCollected: true, depositDeducted: true },
+      _sum: { amount: true },
+    }),
+    prisma.bookingTxn.aggregate({
+      where: {
+        ...guestMoney, kind: "DEPOSIT_RETURNED", mode: "CASH",
+        booking: { source: { notIn: OTA_PREPAID_SOURCES }, status: { in: ["CONFIRMED", "CHECKED_IN"] } },
+      },
+      _sum: { amount: true },
     }),
     prisma.bookingTxn.aggregate({ where: { ...moneyIn, mode: "ONLINE" }, _sum: { amount: true } }),
     prisma.bookingTxn.aggregate({ where: { ...moneyOut, mode: "ONLINE" }, _sum: { amount: true } }),
@@ -102,9 +112,10 @@ export async function GET() {
   const pendingDue = pendingAgg._sum.balanceDue ?? 0;
   const pendingCount = pendingAgg._count._all;
 
+  // How much of the till is guest money being held rather than the hotel's.
   const depositsHeldInCash = +Math.max(
     0,
-    (heldDepositAgg._sum.depositCollected ?? 0) - (heldDepositAgg._sum.depositDeducted ?? 0)
+    (depositCashInAgg._sum.amount ?? 0) - (depositCashOutAgg._sum.amount ?? 0)
   ).toFixed(2);
 
   const todayCash = todayDrawerAgg._sum.cashImpact ?? 0;

@@ -45,7 +45,13 @@ async function main() {
   console.log("\n2. The deposit passing through is invisible to the accounts");
   const depRows = bookings.flatMap(b => b.txns.filter(t => t.kind === "DEPOSIT_TAKEN" || t.kind === "DEPOSIT_RETURNED"));
   check("no deposit-movement row is in the statement", depRows.every(t => !t.affectsStatement), `${depRows.filter(t => t.affectsStatement).length} leaked`);
-  check("no deposit-movement row touches the cash drawer", depRows.every(t => t.cashImpact === 0), `${depRows.filter(t => t.cashImpact !== 0).length} leaked`);
+  // A cash deposit IS in the drawer, so it must move the till — what must not
+  // happen is it reaching income. Cash rows move it; UPI rows do not.
+  const depCashWrong = depRows.filter(t => {
+    const want = t.mode !== "CASH" ? 0 : (t.kind === "DEPOSIT_TAKEN" ? t.amount : -t.amount);
+    return Math.abs(t.cashImpact - want) > 0.01;
+  });
+  check("deposit rows move the till only when notes moved", depCashWrong.length === 0, `${depCashWrong.length} wrong`);
   const equalPairs = bookings.filter(b => {
     const tk = b.txns.filter(t => t.kind === "DEPOSIT_TAKEN").reduce((s, t) => s + t.amount, 0);
     const rt = b.txns.filter(t => t.kind === "DEPOSIT_RETURNED").reduce((s, t) => s + t.amount, 0);
@@ -100,8 +106,8 @@ async function main() {
     // Deposit money is deliberately outside the drawer figure on both sides —
     // it is the guest's while held, so taking and returning it must net to
     // nothing. Only the moment it becomes the hotel's counts.
-    if (t.kind === "DEPOSIT_TAKEN" || t.kind === "DEPOSIT_RETURNED") return t.cashImpact !== 0;
-    if (t.kind === "DEPOSIT_APPLIED" || t.kind === "DEPOSIT_WITHHELD") return false;
+    // Applying or withholding moves no notes — they were counted when taken.
+    if (t.kind === "DEPOSIT_APPLIED" || t.kind === "DEPOSIT_WITHHELD") return t.cashImpact !== 0;
     if (t.mode !== "CASH") return t.cashImpact !== 0;
     const want = t.direction === "CREDIT" ? t.amount : -t.amount;
     return Math.abs(t.cashImpact - want) > 0.5;
@@ -112,14 +118,15 @@ async function main() {
 
   // The physical drawer also holds cash deposits that are not the hotel's. The
   // owner needs that figure to reconcile a count against the panel.
+  // Only stays that are still holding one — a settled booking whose deposit came
+  // in by UPI and went out as notes would otherwise push this negative.
   const heldCash = bookings.reduce((s, b) => {
-    if (b.depositMode === "ONLINE") return s;
-    const tk = b.txns.filter(t => t.kind === "DEPOSIT_TAKEN").reduce((x, t) => x + t.amount, 0);
-    const rt = b.txns.filter(t => t.kind === "DEPOSIT_RETURNED").reduce((x, t) => x + t.amount, 0);
-    const used = b.txns.filter(t => t.kind === "DEPOSIT_APPLIED" || t.kind === "DEPOSIT_WITHHELD").reduce((x, t) => x + t.amount, 0);
-    return s + Math.max(0, tk - rt - used);
+    if (!["CONFIRMED", "CHECKED_IN"].includes(b.status)) return s;
+    const tk = b.txns.filter(t => t.kind === "DEPOSIT_TAKEN" && t.mode === "CASH").reduce((x, t) => x + t.amount, 0);
+    const rt = b.txns.filter(t => t.kind === "DEPOSIT_RETURNED" && t.mode === "CASH").reduce((x, t) => x + t.amount, 0);
+    return s + Math.max(0, tk - rt);
   }, 0);
-  console.log(`     cash deposits still held (in the drawer, not the hotel's): ${f(heldCash)}`);
+  console.log(`     of which guest deposits held as notes: ${f(heldCash)}`);
 
   // 8 — no double counting
   console.log("\n8. No entry counted twice");

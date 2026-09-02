@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
 import { ensureRoomAssigned, isConsentConfirmed, CHECKIN_GATE_MESSAGES } from "@/lib/services/checkin-gate";
 import { recordTxn, roomPaymentNote, type RecordTxnInput } from "@/lib/services/booking-txn";
-import { depositCashShare, postSplit } from "@/lib/services/booking-ledger";
+import { postSplit } from "@/lib/services/booking-ledger";
 import { computeTotalsForPrice } from "@/lib/utils/booking-calc";
 import { recordStaffAction } from "@/lib/services/staff-action";
 
@@ -248,27 +248,26 @@ export async function PATCH(
     // stops being refundable and becomes income.
     const depositMode = booking.depositMode === "ONLINE" ? "ONLINE" : "CASH";
     // A deposit taken part-cash reaches the till only by that proportion.
-    const depShare = await depositCashShare(booking.id);
     const toExtras = Math.min(depositUsed, booking.additionalCharges);
     const toRoom = +(depositUsed - toExtras).toFixed(2);
     if (toExtras > 0) {
       ledger.push({
         hotelId: booking.hotelId, bookingId: booking.id, kind: "DEPOSIT_APPLIED",
-        mode: "DEPOSIT", amount: toExtras, depositMode, depositCashShare: depShare, occurredAt: now, recordedBy,
+        mode: "DEPOSIT", amount: toExtras, depositMode, occurredAt: now, recordedBy,
         note: "Extras during the stay — deducted from deposit",
       });
     }
     if (toRoom > 0) {
       ledger.push({
         hotelId: booking.hotelId, bookingId: booking.id, kind: "DEPOSIT_APPLIED",
-        mode: "DEPOSIT", amount: toRoom, depositMode, depositCashShare: depShare, occurredAt: now, recordedBy,
+        mode: "DEPOSIT", amount: toRoom, depositMode, occurredAt: now, recordedBy,
         note: "Unpaid room balance — deducted from deposit",
       });
     }
     if (deduction > 0) {
       ledger.push({
         hotelId: booking.hotelId, bookingId: booking.id, kind: "DEPOSIT_WITHHELD",
-        mode: "DEPOSIT", amount: deduction, depositMode, depositCashShare: depShare, occurredAt: now, recordedBy,
+        mode: "DEPOSIT", amount: deduction, depositMode, occurredAt: now, recordedBy,
         note: settlement?.notes?.trim()
           ? `Withheld for damage or cleaning — ${String(settlement.notes).trim()}`
           : "Withheld for damage or cleaning",
@@ -385,15 +384,24 @@ export async function PATCH(
   }
 
   if (newStatus === "CHECKED_OUT" && depositReturn > 0) {
-    // Hand it back the way it came: a deposit taken part-cash is returned in
-    // the same proportion, so each side's record matches reality.
-    const share = await depositCashShare(booking.id);
-    const cashBack = +(depositReturn * share).toFixed(2);
+    // Record it by how it is actually being handed back, not by how it arrived.
+    // A ₹500 cash deposit refunded by UPI leaves those notes in the drawer, and
+    // the till figure has to say so — writing it down as cash returned was the
+    // reason a count never matched the panel.
+    const rm = settlement?.refundMode;
+    const cashBack =
+      rm === "MIXED"
+        ? Math.min(Math.max(0, Number(settlement?.refundCash) || 0), depositReturn)
+        : rm === "ONLINE" || rm === "RAZORPAY"
+          ? 0
+          : depositReturn;
     await postSplit({
       hotelId: booking.hotelId,
       bookingId: booking.id,
       kind: "DEPOSIT_RETURNED",
-      note: "Refundable deposit returned at checkout",
+      note: `Refundable deposit returned at checkout${
+        rm === "RAZORPAY" ? " to the original payment" : rm === "ONLINE" ? " by UPI" : rm === "MIXED" ? " part cash, part UPI" : " in cash"
+      }`,
       occurredAt: now,
       recordedBy,
       cashAmount: cashBack,

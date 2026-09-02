@@ -238,13 +238,15 @@ console.log("\n── 8. Cash + UPI on the same payment ──");
   );
   ok("a ₹400 + ₹600 payment clears a ₹1,000 bill", Math.abs(a.balance) < 0.01 && a.paidCash === 400 && a.paidOnline === 600);
 
-  // A mixed DEPOSIT applied later hits the till only by its cash share.
-  for (const [share, want] of [[1, 200], [0, 0], [0.4, 80]] as const) {
+  // Applying a deposit never moves the till, whatever it was taken in: the
+  // notes were counted when the deposit arrived, so counting again would
+  // double them. Only the statement changes at this point.
+  for (const share of [1, 0, 0.4]) {
     const v = cashImpactOf(
       { hotelId: "", bookingId: "", kind: "DEPOSIT_APPLIED", mode: "DEPOSIT", amount: 200, depositCashShare: share },
       200
     );
-    ok(`deposit ${Math.round(share * 100)}% cash → applying ₹200 moves the till by ${f(want)}`, Math.abs(v - want) < 0.01);
+    ok(`deposit ${Math.round(share * 100)}% cash → applying ₹200 moves the till by ${f(0)}`, v === 0);
   }
 
   // Taking a mixed deposit and giving it all back leaves the accounts untouched.
@@ -305,6 +307,51 @@ console.log("\n── 9. Correcting how a payment came in ──");
     { roomTotal: 0, extrasOnTab: 0 }
   );
   ok("a ₹120 + ₹80 deposit still reads as ₹200 held", Math.abs(a.depositHeld - 200) < 0.01);
+}
+
+console.log("\n── 10. The cash drawer follows the notes ──");
+{
+  const till = (entries: Entry[]) =>
+    +entries.reduce((s, e) =>
+      s + cashImpactOf({ hotelId: "", bookingId: "", kind: e.kind as never, mode: e.mode as never,
+        direction: e.direction as never, amount: e.amount }, e.amount), 0).toFixed(2);
+
+  const take = (mode: string, amt: number): Entry => ({ kind: "DEPOSIT_TAKEN", direction: "CREDIT", mode, amount: amt });
+  const give = (mode: string, amt: number): Entry => ({ kind: "DEPOSIT_RETURNED", direction: "DEBIT", mode, amount: amt });
+  const apply = (amt: number): Entry => ({ kind: "DEPOSIT_APPLIED", direction: "CREDIT", mode: "DEPOSIT", amount: amt });
+
+  const cases = [
+    { n: "cash in → cash out",              e: [take("CASH", 500), give("CASH", 500)],   want: 0 },
+    { n: "cash in → UPI out (notes stay)",  e: [take("CASH", 500), give("ONLINE", 500)], want: 500 },
+    { n: "UPI in → cash out (notes leave)", e: [take("ONLINE", 500), give("CASH", 500)], want: -500 },
+    { n: "UPI in → UPI out",                e: [take("ONLINE", 500), give("ONLINE", 500)], want: 0 },
+    { n: "cash in, ₹200 used, ₹300 back",   e: [take("CASH", 500), apply(200), give("CASH", 300)], want: 200 },
+    { n: "cash in, whole thing used",       e: [take("CASH", 500), apply(500)],          want: 500 },
+    { n: "mixed in, same split out",        e: [take("CASH", 120), take("ONLINE", 80), give("CASH", 120), give("ONLINE", 80)], want: 0 },
+    { n: "mixed in, all returned by UPI",   e: [take("CASH", 120), take("ONLINE", 80), give("ONLINE", 200)], want: 120 },
+  ];
+  for (const c of cases)
+    ok(`${c.n} → till ${c.want >= 0 ? "+" : ""}${f(c.want)}`, till(c.e) === c.want, `got ${till(c.e)}`);
+
+  // Applying a deposit must never add to the till a second time.
+  ok("applying a deposit moves no notes",
+     till([apply(500)]) === 0 && till([{ kind: "DEPOSIT_WITHHELD", direction: "CREDIT", mode: "DEPOSIT", amount: 500 }]) === 0);
+
+  // Room money is unaffected by all this.
+  ok("a ₹1,000 cash room payment still adds ₹1,000",
+     till([{ kind: "ROOM_PAYMENT", direction: "CREDIT", mode: "CASH", amount: 1000 }]) === 1000);
+  ok("a ₹400 cash refund still takes ₹400 out",
+     till([{ kind: "REFUND", direction: "DEBIT", mode: "CASH", amount: 400 }]) === -400);
+  ok("a UPI room payment still adds nothing to the till",
+     till([{ kind: "ROOM_PAYMENT", direction: "CREDIT", mode: "ONLINE", amount: 1000 }]) === 0);
+
+  // A full stay, end to end: the till holds exactly the notes taken.
+  const stay: Entry[] = [
+    { kind: "ROOM_PAYMENT", direction: "CREDIT", mode: "CASH", amount: 1200 },
+    take("CASH", 500), apply(200), give("ONLINE", 300),
+  ];
+  ok(`full stay: ₹1,200 room cash + ₹500 deposit cash, ₹200 used, ₹300 back by UPI → till ${f(1700)}`,
+     till(stay) === 1700);
 }
 
 console.log(`\n${fail === 0 ? `All ${pass} checks passed.` : `${fail} FAILED of ${pass + fail}`}`);

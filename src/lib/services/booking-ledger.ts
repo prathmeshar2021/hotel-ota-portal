@@ -82,20 +82,28 @@ export interface LedgerEntryInput {
   affectsStatement?: boolean;
 }
 
-/** Signed effect on the physical cash drawer. */
+/**
+ * Signed effect on the physical cash drawer.
+ *
+ * The rule is only: did notes move, and which way? That makes the figure
+ * countable against the till, which is what it is for.
+ *
+ * It used to recognise deposit money when it became the hotel's instead —
+ * excluded on the way in and out, then added when applied to a bill. That
+ * balances only while a deposit leaves the same way it arrived. Take ₹500 in
+ * notes and refund it by UPI and the notes are still in the drawer, but the
+ * figure never moved, so the till and the panel drifted apart every time.
+ *
+ * A deposit still is not income: `affectsStatement` keeps both sides out of
+ * revenue and the statement. It is simply cash that is present, reported
+ * separately as money held on a guest's behalf.
+ */
 export function cashImpactOf(input: LedgerEntryInput, amount: number): number {
   const dir = directionOf(input.kind, input.direction);
 
-  // Deposit taken in cash is physically in the drawer, but it is not the
-  // hotel's — it is excluded on the way in and on the way out, so the two
-  // cancel and the drawer figure only ever reflects money the hotel owns.
-  if (input.kind === "DEPOSIT_TAKEN" || input.kind === "DEPOSIT_RETURNED") return 0;
-
-  if (input.kind === "DEPOSIT_APPLIED" || input.kind === "DEPOSIT_WITHHELD") {
-    // A deposit taken partly in cash only reaches the till by that proportion.
-    if (input.depositCashShare != null) return +(amount * input.depositCashShare).toFixed(2);
-    return input.depositMode === "CASH" ? amount : 0;
-  }
+  // Applying or withholding a deposit moves no notes — they were counted when
+  // the deposit was taken. Counting again would double the drawer.
+  if (input.kind === "DEPOSIT_APPLIED" || input.kind === "DEPOSIT_WITHHELD") return 0;
 
   if (input.mode !== "CASH") return 0;
   return dir === "CREDIT" ? amount : -amount;
