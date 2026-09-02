@@ -22,7 +22,14 @@ export async function GET() {
   // guest's money until it is applied to a bill or withheld for damage, and
   // only then does it show up (as DEPOSIT_APPLIED / DEPOSIT_WITHHELD).
   const guestMoney = { hotelId, booking: { source: { notIn: OTA_PREPAID_SOURCES } } };
-  const isCredit = { kind: { not: "REFUND" as const } };
+
+  // Money in and money out, judged by the direction stored on the entry rather
+  // than by its kind. Kind was the old test, from before entries carried a
+  // direction, and it counted the refundable deposit as income — it is neither
+  // a receipt on the way in nor a loss on the way out, so `affectsStatement`
+  // keeps both sides of it away from these figures entirely.
+  const moneyIn  = { ...guestMoney, affectsStatement: true, direction: "CREDIT" as const };
+  const moneyOut = { ...guestMoney, affectsStatement: true, direction: "DEBIT" as const };
 
   const [
     drawerAgg,            // all-time signed cash effect of guest money
@@ -54,23 +61,23 @@ export async function GET() {
       },
       _sum: { depositCollected: true, depositDeducted: true },
     }),
-    prisma.bookingTxn.aggregate({ where: { ...guestMoney, ...isCredit, mode: "ONLINE" }, _sum: { amount: true } }),
-    prisma.bookingTxn.aggregate({ where: { ...guestMoney, kind: "REFUND", mode: "ONLINE" }, _sum: { amount: true } }),
+    prisma.bookingTxn.aggregate({ where: { ...moneyIn, mode: "ONLINE" }, _sum: { amount: true } }),
+    prisma.bookingTxn.aggregate({ where: { ...moneyOut, mode: "ONLINE" }, _sum: { amount: true } }),
     prisma.cashCollection.aggregate({ where: { hotelId }, _sum: { amount: true } }),
     prisma.booking.aggregate({
       where: { hotelId, status: { in: ["CONFIRMED", "CHECKED_IN"] }, source: { notIn: OTA_PREPAID_SOURCES } },
       _sum: { balanceDue: true }, _count: { _all: true },
     }),
     prisma.bookingTxn.aggregate({ where: { ...guestMoney, occurredAt: { gte: todayStart } }, _sum: { cashImpact: true } }),
-    prisma.bookingTxn.aggregate({ where: { ...guestMoney, ...isCredit, mode: "ONLINE", occurredAt: { gte: todayStart } }, _sum: { amount: true } }),
-    prisma.bookingTxn.aggregate({ where: { ...guestMoney, kind: "REFUND", mode: "ONLINE", occurredAt: { gte: todayStart } }, _sum: { amount: true } }),
+    prisma.bookingTxn.aggregate({ where: { ...moneyIn, mode: "ONLINE", occurredAt: { gte: todayStart } }, _sum: { amount: true } }),
+    prisma.bookingTxn.aggregate({ where: { ...moneyOut, mode: "ONLINE", occurredAt: { gte: todayStart } }, _sum: { amount: true } }),
     prisma.cashCollection.findFirst({ where: { hotelId }, orderBy: { createdAt: "desc" } }),
     // All-time cash expenses (debits paid in cash) — used for Cash in Hand
     prisma.hotelExpense.aggregate({ where: { hotelId, entryType: "DEBIT", mode: "CASH" }, _sum: { amount: true } }),
     // All-time cash credits — used for Cash in Hand
     prisma.hotelExpense.aggregate({ where: { hotelId, entryType: "CREDIT", mode: "CASH" }, _sum: { amount: true } }),
-    prisma.bookingTxn.aggregate({ where: { ...guestMoney, ...isCredit, occurredAt: { gte: monthStart } }, _sum: { amount: true } }),
-    prisma.bookingTxn.aggregate({ where: { ...guestMoney, kind: "REFUND", occurredAt: { gte: monthStart } }, _sum: { amount: true } }),
+    prisma.bookingTxn.aggregate({ where: { ...moneyIn, occurredAt: { gte: monthStart } }, _sum: { amount: true } }),
+    prisma.bookingTxn.aggregate({ where: { ...moneyOut, occurredAt: { gte: monthStart } }, _sum: { amount: true } }),
     // This month's ledger expenses (any mode)
     prisma.hotelExpense.aggregate({ where: { hotelId, entryType: "DEBIT", expenseDate: { gte: monthStart } }, _sum: { amount: true } }),
   ]);
