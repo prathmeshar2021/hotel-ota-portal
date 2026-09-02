@@ -307,59 +307,5 @@ console.log("\n── 9. Correcting how a payment came in ──");
   ok("a ₹120 + ₹80 deposit still reads as ₹200 held", Math.abs(a.depositHeld - 200) < 0.01);
 }
 
-console.log("\n── 10. Matching the bill to what was taken ──");
-{
-  // The button only offers itself when MORE was taken than billed; a part-paid
-  // booking must never be "corrected" into looking settled.
-  // Offered only when it would actually move the bill: more was taken than
-  // billed, AND that amount is reachable as a legal whole-rupee total above the
-  // current one.
-  const shows = (billed: number, taken: number, extras = 0) => {
-    const net = +(taken - extras).toFixed(2);
-    if (net - billed <= 0.5) return false;
-    return computeTotalsForPrice({ inclusiveTotal: net, noOfNights: 1 }).totalAmount > billed + 0.5;
-  };
-
-  const t = [
-    { n: "part-paid ₹500 of ₹2,000",        billed: 2000, taken: 500,  want: false },
-    { n: "paid exactly ₹2,000",             billed: 2000, taken: 2000, want: false },
-    { n: "paid ₹1,800 on a ₹1,600 bill",    billed: 1600, taken: 1800, want: true  },
-    { n: "nothing paid yet",                billed: 2000, taken: 0,    want: false },
-    { n: "₹1 over on a reachable price",    billed: 2000, taken: 2001, want: true  },
-    { n: "₹20 over but the slab rounds it back", billed: 1000, taken: 1020, want: false },
-    { n: "₹200 over with ₹200 on the tab",  billed: 1600, taken: 1800, extras: 200, want: false },
-  ];
-  for (const c of t)
-    ok(`${c.n} → ${shows(c.billed, c.taken, c.extras ?? 0) ? "offers to match" : "no button"}`,
-       shows(c.billed, c.taken, c.extras ?? 0) === c.want);
-
-  // Matching must leave the booking settled, with GST recomputed at the new price.
-  for (const [billed, taken] of [[1600, 1800], [900, 1000], [1400, 2800], [2500, 5400]] as const) {
-    const t2 = computeTotalsForPrice({ inclusiveTotal: taken, noOfNights: 1 });
-    const balance = +(t2.totalAmount - taken).toFixed(2);
-    const adds = Math.abs(t2.taxableAmount + t2.cgst + t2.sgst - t2.totalAmount) < 0.01;
-    ok(`${f(billed)} → ${f(t2.totalAmount)}: GST ${t2.cgstRate + t2.sgstRate}%, balance ${f(balance)}`,
-       Math.abs(balance) < 0.01 && adds);
-  }
-
-  // A price the slabs cannot express snaps down, so matching can leave a rupee
-  // or two still over — it must never overshoot and invent a debt.
-  for (const taken of [1020, 8000, 1049]) {
-    const t3 = computeTotalsForPrice({ inclusiveTotal: taken, noOfNights: 1 });
-    ok(`taking ${f(taken)} sets a bill of ${f(t3.totalAmount)} — never above what was paid`,
-       t3.totalAmount <= taken + 0.01);
-  }
-
-  // What the automatic version would have done to real part-paid bookings.
-  const derived = [
-    { n: "₹3,000 billed, ₹0 paid",     billed: 3000, taken: 0 },
-    { n: "₹6,920 billed, ₹0 paid",     billed: 6920, taken: 0 },
-    { n: "₹3,000 billed, ₹2,800 paid", billed: 3000, taken: 2800 },
-  ];
-  for (const c of derived)
-    ok(`auto-derive would wipe ${f(c.billed - c.taken)} owed on "${c.n}" — kept as a debt instead`,
-       c.billed - c.taken > 0 && !shows(c.billed, c.taken));
-}
-
 console.log(`\n${fail === 0 ? `All ${pass} checks passed.` : `${fail} FAILED of ${pass + fail}`}`);
 process.exitCode = fail === 0 ? 0 : 1;

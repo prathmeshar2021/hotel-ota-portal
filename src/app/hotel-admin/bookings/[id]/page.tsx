@@ -40,7 +40,6 @@ import DeleteChargeButton from "@/components/hotel-admin/DeleteChargeButton";
 import AdminCancelBookingButton from "@/components/hotel-admin/CancelBookingButton";
 import DeleteBookingButton from "@/components/hotel-admin/DeleteBookingButton";
 import EditPricingButton from "@/components/hotel-admin/EditPricingButton";
-import MatchBillButton from "@/components/hotel-admin/MatchBillButton";
 import BookingAccountPanel from "@/components/hotel-admin/BookingAccountPanel";
 import AssignRoomButton from "@/components/hotel-admin/AssignRoomButton";
 import GuestCountEditor from "@/components/hotel-admin/GuestCountEditor";
@@ -634,25 +633,13 @@ export default async function BookingDetailPage({
                   here, beside the total, so the two figures are never read
                   apart and left looking like an error in the accounts. */}
               {overpaid > 0 && (
-                <>
-                  <div className="flex justify-between text-sky-300/90 text-xs">
-                    <span>Taken from guest</span>
-                    <span className="font-semibold">
-                      ₹{(booking.cashPaid + booking.onlinePaid).toLocaleString("en-IN")}
-                      <span className="text-sky-300/60"> · ₹{overpaid.toLocaleString("en-IN")} extra</span>
-                    </span>
-                  </div>
-                  {/* One tap to make the bill agree with the money, instead of
-                      retyping the price and keeping two figures in step by hand. */}
-                  {booking.status !== "CANCELLED" && (
-                    <MatchBillButton
-                      bookingId={booking.id}
-                      billed={booking.totalAmount}
-                      taken={booking.cashPaid + booking.onlinePaid - booking.additionalCharges}
-                      noOfNights={booking.noOfNights}
-                    />
-                  )}
-                </>
+                <div className="flex justify-between text-sky-300/90 text-xs">
+                  <span>Taken from guest</span>
+                  <span className="font-semibold">
+                    ₹{(booking.cashPaid + booking.onlinePaid).toLocaleString("en-IN")}
+                    <span className="text-sky-300/60"> · ₹{overpaid.toLocaleString("en-IN")} extra</span>
+                  </span>
+                </div>
               )}
               {booking.additionalCharges > 0 && (
                 <div className="flex justify-between text-amber-300/80 text-xs">
