@@ -37,7 +37,7 @@ export default function GstReportClient({ gstin, legalName }: { gstin: string; l
   // The advocate's sales report: a serial that runs across months, and a live
   // preview so the owner can sanity-check the totals before sending it on.
   const [startSerial, setStartSerial] = useState("1");
-  const [salesBusy, setSalesBusy] = useState(false);
+  const [salesBusy, setSalesBusy] = useState<"xlsx" | "pdf" | null>(null);
   const [preview, setPreview] = useState<{ count: number; totalRent: number; totalGst: number; lastSerial: number } | null>(null);
 
   async function download() {
@@ -78,10 +78,11 @@ export default function GstReportClient({ gstin, legalName }: { gstin: string; l
     return () => { cancelled = true; };
   }, [month, startSerial]);
 
-  async function downloadSales() {
-    setSalesBusy(true);
+  async function downloadSales(format: "xlsx" | "pdf") {
+    setSalesBusy(format);
     try {
-      const res = await fetch(`/api/admin/sales-report?month=${month}&start=${Number(startSerial) || 1}`);
+      const q = format === "pdf" ? "&format=pdf" : "";
+      const res = await fetch(`/api/admin/sales-report?month=${month}&start=${Number(startSerial) || 1}${q}`);
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || "Failed to generate the report");
@@ -90,7 +91,7 @@ export default function GstReportClient({ gstin, legalName }: { gstin: string; l
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `Sales_Report_${month}.pdf`;
+      a.download = `Sales_Report_${month}.${format}`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -99,7 +100,7 @@ export default function GstReportClient({ gstin, legalName }: { gstin: string; l
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to generate the report");
     } finally {
-      setSalesBusy(false);
+      setSalesBusy(null);
     }
   }
 
@@ -127,7 +128,8 @@ export default function GstReportClient({ gstin, legalName }: { gstin: string; l
         </h2>
         <p className="text-white/40 text-sm mb-4">
           Every stay in the month except cancellations and no-shows, one line each, with the
-          totals at the foot — as a PDF, in the same layout you send today.
+          totals at the foot — in the same layout you send today. The Excel version calculates
+          the GST and totals itself, so a correction to any rent flows through.
         </p>
 
         <div className="flex flex-col sm:flex-row gap-3 mb-3">
@@ -141,14 +143,23 @@ export default function GstReportClient({ gstin, legalName }: { gstin: string; l
               className="w-40 bg-white/5 border border-white/12 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-sky-400/50"
             />
           </div>
-          <div className="flex-1 flex items-end">
+          <div className="flex-1 flex items-end gap-2">
             <button
-              onClick={downloadSales}
-              disabled={salesBusy || !month}
-              className="w-full sm:w-auto flex items-center justify-center gap-2 bg-sky-500 hover:bg-sky-400 disabled:opacity-60 text-white font-bold px-5 py-2.5 rounded-xl transition-all"
+              onClick={() => downloadSales("xlsx")}
+              disabled={!!salesBusy || !month}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-sky-500 hover:bg-sky-400 disabled:opacity-60 text-white font-bold px-5 py-2.5 rounded-xl transition-all"
             >
-              {salesBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-              Download PDF
+              {salesBusy === "xlsx" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              Download Excel
+            </button>
+            <button
+              onClick={() => downloadSales("pdf")}
+              disabled={!!salesBusy || !month}
+              title="Send as-is, without editing"
+              className="flex items-center justify-center gap-2 border border-white/15 text-white/60 hover:text-white/90 hover:border-white/30 disabled:opacity-60 font-semibold px-4 py-2.5 rounded-xl transition-all"
+            >
+              {salesBusy === "pdf" ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+              PDF
             </button>
           </div>
         </div>

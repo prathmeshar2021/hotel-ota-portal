@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSuperAdmin } from "@/lib/auth/superAdmin";
-import { buildSalesReport, renderSalesReportPdf } from "@/lib/services/sales-report";
+import { buildSalesReport, renderSalesReportPdf, renderSalesReportXlsx } from "@/lib/services/sales-report";
 
 // GET /api/admin/sales-report?month=YYYY-MM&start=1650
-//   → the monthly sales report for the GST advocate (.pdf)
-//   Add &format=json to read the figures without downloading the file.
+//   → the monthly sales report for the GST advocate, as .xlsx by default so it
+//     can be corrected before it is sent on.
+//   &format=pdf   to send it as-is
+//   &format=json  to read the figures without downloading anything
 export async function GET(req: NextRequest) {
   const ctx = await requireSuperAdmin();
   if (!ctx) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -33,12 +35,26 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    const pdf = renderSalesReportPdf(report);
-    return new NextResponse(new Uint8Array(pdf), {
+    const name = `Sales_Report_${m[1]}-${m[2]}`;
+
+    if (req.nextUrl.searchParams.get("format") === "pdf") {
+      const pdf = renderSalesReportPdf(report);
+      return new NextResponse(new Uint8Array(pdf), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": `attachment; filename="${name}.pdf"`,
+          "Cache-Control": "no-store",
+        },
+      });
+    }
+
+    const xlsx = await renderSalesReportXlsx(report);
+    return new NextResponse(new Uint8Array(xlsx), {
       status: 200,
       headers: {
-        "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="Sales_Report_${m[1]}-${m[2]}.pdf"`,
+        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition": `attachment; filename="${name}.xlsx"`,
         "Cache-Control": "no-store",
       },
     });

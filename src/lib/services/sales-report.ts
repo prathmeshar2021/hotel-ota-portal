@@ -1,3 +1,4 @@
+import ExcelJS from "exceljs";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { prisma } from "@/lib/db/prisma";
@@ -167,4 +168,92 @@ export function renderSalesReportPdf(report: SalesReport): ArrayBuffer {
   });
 
   return doc.output("arraybuffer");
+}
+
+
+/**
+ * The same report as a workbook, so the owner can correct a name or a rent
+ * before it goes on.
+ *
+ * The GST column and both totals are formulas rather than fixed numbers: edit a
+ * rent and the tax and the totals follow. That matters here — the whole point
+ * of sending Excel is that the sheet gets adjusted, and a hand-edited rent
+ * sitting beside a stale tax figure is how a wrong return gets filed.
+ */
+export async function renderSalesReportXlsx(report: SalesReport): Promise<ArrayBuffer> {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = BUSINESS.legalName;
+  wb.created = new Date();
+  const ws = wb.addWorksheet(report.monthLabel, {
+    views: [{ state: "frozen", ySplit: 4 }],
+    pageSetup: { paperSize: 9, orientation: "portrait", fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
+  });
+
+  ws.columns = [
+    { key: "serial", width: 12 },
+    { key: "date", width: 13 },
+    { key: "name", width: 38 },
+    { key: "rent", width: 14 },
+    { key: "rate", width: 10 },
+    { key: "gst", width: 14 },
+  ];
+
+  const title = ws.addRow([`SALES REPORT - ${report.monthLabel}`]);
+  title.font = { bold: true, size: 13 };
+  ws.mergeCells("A1:F1");
+
+  const sub = ws.addRow([`${BUSINESS.legalName}  ·  GSTIN ${BUSINESS.gstin}`]);
+  sub.font = { size: 9, color: { argb: "FF666666" } };
+  ws.mergeCells("A2:F2");
+
+  ws.addRow([]);
+
+  const head = ws.addRow(["Booking NO", "Checkin DT", "name", "Final rent", "GST (%)", "GST(Rs)"]);
+  head.font = { bold: true, size: 10 };
+  head.eachCell(c => {
+    c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEBEBEB" } };
+    c.border = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
+  });
+
+  const firstDataRow = head.number + 1;
+  for (const r of report.rows) {
+    const row = ws.addRow([
+      r.serial,
+      // A real date, so the column sorts and filters as one; displayed the way
+      // the hand-made sheet shows it.
+      new Date(Date.UTC(r.checkIn.getUTCFullYear(), r.checkIn.getUTCMonth(), r.checkIn.getUTCDate())),
+      r.guest,
+      r.rent,
+      r.ratePct / 100,
+      { formula: `D${ws.rowCount + 1}*E${ws.rowCount + 1}`, result: r.gst },
+    ]);
+    row.eachCell(c => {
+      c.border = { top: { style: "hair" }, left: { style: "hair" }, bottom: { style: "hair" }, right: { style: "hair" } };
+    });
+  }
+  const lastDataRow = ws.rowCount;
+
+  const total = ws.addRow([
+    null, null, "TOTAL(Rs) :",
+    { formula: `SUM(D${firstDataRow}:D${lastDataRow})`, result: report.totalRent },
+    null,
+    { formula: `SUM(F${firstDataRow}:F${lastDataRow})`, result: report.totalGst },
+  ]);
+  total.font = { bold: true };
+  total.eachCell(c => {
+    c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEBEBEB" } };
+    c.border = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
+  });
+
+  ws.getColumn("date").numFmt = "dd/mm/yy";
+  ws.getColumn("rent").numFmt = "#,##0.00";
+  ws.getColumn("gst").numFmt = "#,##0.00";
+  ws.getColumn("rate").numFmt = "0%";
+  ws.getColumn("rate").alignment = { horizontal: "center" };
+  ws.getCell(`C${total.number}`).alignment = { horizontal: "right" };
+
+  // Filters over the data so the owner can pull out one date or guest quickly.
+  ws.autoFilter = { from: `A${head.number}`, to: `F${lastDataRow}` };
+
+  return wb.xlsx.writeBuffer() as Promise<ArrayBuffer>;
 }
