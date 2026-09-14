@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { FileSpreadsheet, Download, Loader2, Info } from "lucide-react";
+import { FileSpreadsheet, FileText, Download, Loader2, Info } from "lucide-react";
 
 function currentMonth(): string {
   const d = new Date();
@@ -34,6 +34,11 @@ export default function GstReportClient({ gstin, legalName }: { gstin: string; l
   const thisMonth = currentMonth();
   const [month, setMonth] = useState<string>(prevMonth(thisMonth)); // default: last completed month
   const [downloading, setDownloading] = useState(false);
+  // The advocate's sales report: a serial that runs across months, and a live
+  // preview so the owner can sanity-check the totals before sending it on.
+  const [startSerial, setStartSerial] = useState("1");
+  const [salesBusy, setSalesBusy] = useState(false);
+  const [preview, setPreview] = useState<{ count: number; totalRent: number; totalGst: number; lastSerial: number } | null>(null);
 
   async function download() {
     setDownloading(true);
@@ -60,6 +65,46 @@ export default function GstReportClient({ gstin, legalName }: { gstin: string; l
     }
   }
 
+  // Show what the report will contain before it is downloaded — a month with
+  // fewer bookings than expected is worth noticing before the advocate sees it.
+  useEffect(() => {
+    let cancelled = false;
+    setPreview(null);
+    if (!month) return;
+    fetch(`/api/admin/sales-report?month=${month}&start=${Number(startSerial) || 1}&format=json`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (!cancelled && d) setPreview(d); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [month, startSerial]);
+
+  async function downloadSales() {
+    setSalesBusy(true);
+    try {
+      const res = await fetch(`/api/admin/sales-report?month=${month}&start=${Number(startSerial) || 1}`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to generate the report");
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Sales_Report_${month}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success(`Sales report for ${label(month)} downloaded`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to generate the report");
+    } finally {
+      setSalesBusy(false);
+    }
+  }
+
+  const inr = (n: number) => `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+
   const quick = [prevMonth(thisMonth), prevMonth(prevMonth(thisMonth)), prevMonth(prevMonth(prevMonth(thisMonth)))];
 
   return (
@@ -71,6 +116,62 @@ export default function GstReportClient({ gstin, legalName }: { gstin: string; l
         </h1>
         <p className="text-white/40 text-sm mt-1">
           Generate the monthly sales report for GST filing — exported as an editable Excel file.
+        </p>
+      </div>
+
+      {/* The sheet the advocate actually receives — same columns and totals as
+          the one the owner has been filling in by hand. */}
+      <div className="rounded-2xl border border-sky-500/20 bg-sky-500/[0.04] p-5 lg:p-6 mb-6">
+        <h2 className="font-bold text-white flex items-center gap-2 mb-1">
+          <FileText className="w-5 h-5 text-sky-400" /> Sales Report for the advocate
+        </h2>
+        <p className="text-white/40 text-sm mb-4">
+          Every stay in the month except cancellations and no-shows, one line each, with the
+          totals at the foot — as a PDF, in the same layout you send today.
+        </p>
+
+        <div className="flex flex-col sm:flex-row gap-3 mb-3">
+          <div>
+            <label className="block text-[11px] font-semibold text-white/50 uppercase tracking-wider mb-1.5">
+              Start the numbering at
+            </label>
+            <input
+              type="number" min={1} value={startSerial}
+              onChange={e => setStartSerial(e.target.value)}
+              className="w-40 bg-white/5 border border-white/12 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-sky-400/50"
+            />
+          </div>
+          <div className="flex-1 flex items-end">
+            <button
+              onClick={downloadSales}
+              disabled={salesBusy || !month}
+              className="w-full sm:w-auto flex items-center justify-center gap-2 bg-sky-500 hover:bg-sky-400 disabled:opacity-60 text-white font-bold px-5 py-2.5 rounded-xl transition-all"
+            >
+              {salesBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              Download PDF
+            </button>
+          </div>
+        </div>
+
+        {preview && (
+          <div className="bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-xs">
+            {preview.count === 0 ? (
+              <p className="text-amber-300/80">No stays in {label(month)} — nothing to report.</p>
+            ) : (
+              <p className="text-white/60 leading-relaxed">
+                <strong className="text-white/85">{preview.count} stays</strong> ·
+                rent <strong className="text-white/85">{inr(preview.totalRent)}</strong> ·
+                GST <strong className="text-white/85">{inr(preview.totalGst)}</strong> ·
+                numbered {startSerial}&ndash;{preview.lastSerial}
+              </p>
+            )}
+          </div>
+        )}
+
+        <p className="text-white/30 text-[11px] mt-3 leading-relaxed">
+          GST is shown at the slab rate on the rent, as on your current sheet. A tax invoice from
+          this system treats the rent as already including GST, so the two state tax differently
+          for the same stay — worth confirming with your advocate which they want.
         </p>
       </div>
 
