@@ -383,15 +383,17 @@ export async function PATCH(
 async function syncBookingTotals(
   bookingId: string,
   a: {
-    paidCash: number; paidOnline: number; balance: number;
+    roomPaidCash: number; roomPaidOnline: number; balance: number;
     depositTaken: number; depositReturned: number;
   }
 ) {
   await prisma.booking.update({
     where: { id: bookingId },
     data: {
-      cashPaid: a.paidCash,
-      onlinePaid: a.paidOnline,
+      // Room money only — an extra paid at the counter is income, but it is not
+      // payment towards the stay, and checkout nets the stay against these.
+      cashPaid: a.roomPaidCash,
+      onlinePaid: a.roomPaidOnline,
       balanceDue: Math.max(0, a.balance),
       // What the deposit is worth right now, before checkout settles it:
       // everything taken, less anything already handed back.

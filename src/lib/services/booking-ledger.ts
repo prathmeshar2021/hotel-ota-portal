@@ -158,6 +158,9 @@ export interface BookingAccount {
   paid: number;
   paidCash: number;
   paidOnline: number;
+  /** Payment towards the stay only, excluding extras bought at the counter. */
+  roomPaidCash: number;
+  roomPaidOnline: number;
   refunded: number;
   /** billed − paid + refunded. Positive → guest owes; negative → hotel owes. */
   balance: number;
@@ -182,10 +185,22 @@ export function summarise(
   const sum = (pred: (e: (typeof entries)[number]) => boolean) =>
     +entries.filter(pred).reduce((s, e) => s + e.amount, 0).toFixed(2);
 
-  const paidCash = sum(e => e.mode === "CASH" && e.direction === "CREDIT" && e.kind !== "DEPOSIT_TAKEN");
-  const paidOnline = sum(e => e.mode === "ONLINE" && e.direction === "CREDIT" && e.kind !== "DEPOSIT_TAKEN");
+  // Removing a counter-paid extra is the charge being taken back, not room
+  // money refunded — so it cancels its own entry rather than counting as a
+  // refund on top of it.
+  const extraBack = (mode: string) =>
+    sum(e => e.kind === "EXTRA_CHARGE" && e.direction === "DEBIT" && e.mode === mode);
+
+  const paidCash = sum(e => e.mode === "CASH" && e.direction === "CREDIT" && e.kind !== "DEPOSIT_TAKEN") - extraBack("CASH");
+  const paidOnline = sum(e => e.mode === "ONLINE" && e.direction === "CREDIT" && e.kind !== "DEPOSIT_TAKEN") - extraBack("ONLINE");
+  // Room money alone. Booking.cashPaid / onlinePaid have always meant payment
+  // towards the stay, and checkout and the tax invoice read them that way, so
+  // an extra bought at the counter must not inflate them.
+  const roomPaidCash = sum(e => e.kind === "ROOM_PAYMENT" && e.mode === "CASH" && e.direction === "CREDIT");
+  const roomPaidOnline = sum(e => e.kind === "ROOM_PAYMENT" && e.mode === "ONLINE" && e.direction === "CREDIT");
   const fromDeposit = sum(e => e.kind === "DEPOSIT_APPLIED" || e.kind === "DEPOSIT_WITHHELD");
-  const refunded = sum(e => e.direction === "DEBIT" && e.kind !== "DEPOSIT_RETURNED");
+  const refunded = sum(e =>
+    e.direction === "DEBIT" && e.kind !== "DEPOSIT_RETURNED" && e.kind !== "EXTRA_CHARGE");
 
   const depositTaken = sum(e => e.kind === "DEPOSIT_TAKEN");
   const depositReturned = sum(e => e.kind === "DEPOSIT_RETURNED");
@@ -197,11 +212,18 @@ export function summarise(
   // hotel owed the guest the withheld amount — so the charge side belongs in
   // what the stay is billed, exactly as an extra on the tab would.
   const withheld = sum(e => e.kind === "DEPOSIT_WITHHELD");
+  // A water bottle paid for at the counter is the same shape: the guest was
+  // charged for it and settled it in the same breath. Counting only the payment
+  // made a settled stay read as though the hotel owed the guest the price of
+  // the bottle.
+  const extrasPaidNow =
+    sum(e => e.kind === "EXTRA_CHARGE" && e.direction === "CREDIT")
+    - sum(e => e.kind === "EXTRA_CHARGE" && e.direction === "DEBIT");
   // A cancellation fee is retained the same way: money kept becomes something
   // the guest was billed for, not a windfall sitting against nothing.
   const retained = sum(e => e.kind === "CANCELLATION_FEE");
 
-  const billed = +(opts.roomTotal + opts.extrasOnTab + withheld + retained).toFixed(2);
+  const billed = +(opts.roomTotal + opts.extrasOnTab + withheld + retained + extrasPaidNow).toFixed(2);
   const paid = +(paidCash + paidOnline + fromDeposit).toFixed(2);
 
   return {
@@ -211,6 +233,8 @@ export function summarise(
     paid,
     paidCash,
     paidOnline,
+    roomPaidCash,
+    roomPaidOnline,
     refunded,
     balance: +(billed - paid + refunded).toFixed(2),
     depositHeld: +Math.max(0, depositTaken - depositReturned - depositUsed).toFixed(2),

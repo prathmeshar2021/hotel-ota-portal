@@ -70,7 +70,11 @@ export async function DELETE(
     await postSplit({
       hotelId: session.user.hotelId,
       bookingId,
-      kind: "REFUND",
+      // The charge itself is being taken back, so it cancels the entry that
+      // raised it. Booking it as a REFUND would leave the charge standing on
+      // the bill with a refund beside it, and the balance out by its value.
+      kind: "EXTRA_CHARGE",
+      direction: "DEBIT",
       note: `${(charge.chargeTypes[0] ?? "extra").toLowerCase().replace(/_/g, " ")} — charge removed, returned to guest`,
       recordedBy: session.user.name || session.user.email || "Staff",
       cashAmount: cashBack,

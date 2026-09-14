@@ -354,5 +354,47 @@ console.log("\n── 10. The cash drawer follows the notes ──");
      till(stay) === 1700);
 }
 
+console.log("\n── 11. An extra bought at the counter ──");
+{
+  // Charging for a water bottle and taking the money is one event, not two.
+  // Counting only the payment made a settled stay read as a debt to the guest.
+  const stay: Entry[] = [
+    { kind: "ROOM_PAYMENT", direction: "CREDIT", mode: "ONLINE", amount: 2500 },
+    { kind: "EXTRA_CHARGE", direction: "CREDIT", mode: "ONLINE", amount: 60 },
+  ];
+  const a = summarise(stay, { roomTotal: 2500, extrasOnTab: 0 });
+  ok(`₹2,500 room + ₹60 water at the counter → billed ${f(a.billed)}, paid ${f(a.paid)}, balance ${f(a.balance)}`,
+     a.billed === 2560 && a.paid === 2560 && Math.abs(a.balance) < 0.01);
+  ok(`the booking's own totals stay room-only (${f(a.roomPaidOnline)})`,
+     a.roomPaidOnline === 2500 && a.roomPaidCash === 0);
+
+  // Cash side of the same thing.
+  const b = summarise(
+    [{ kind: "ROOM_PAYMENT", direction: "CREDIT", mode: "CASH", amount: 1800 },
+     { kind: "EXTRA_CHARGE", direction: "CREDIT", mode: "CASH", amount: 40 }],
+    { roomTotal: 1800, extrasOnTab: 0 }
+  );
+  ok(`₹1,800 room + ₹40 water in cash → balance ${f(b.balance)}, room cash ${f(b.roomPaidCash)}`,
+     Math.abs(b.balance) < 0.01 && b.roomPaidCash === 1800);
+
+  // An extra left on the tab still has to be owed until the deposit covers it.
+  const c = summarise(
+    [{ kind: "ROOM_PAYMENT", direction: "CREDIT", mode: "CASH", amount: 1800 }],
+    { roomTotal: 1800, extrasOnTab: 40 }
+  );
+  ok(`₹40 left on the tab stays owed (balance ${f(c.balance)})`, Math.abs(c.balance - 40) < 0.01);
+
+  // A charge added and then removed nets to nothing.
+  const d = summarise(
+    [{ kind: "ROOM_PAYMENT", direction: "CREDIT", mode: "ONLINE", amount: 1400 },
+     { kind: "EXTRA_CHARGE", direction: "CREDIT", mode: "ONLINE", amount: 200 },
+     // Removing it cancels the charge rather than refunding room money.
+     { kind: "EXTRA_CHARGE", direction: "DEBIT", mode: "ONLINE", amount: 200 }],
+    { roomTotal: 1400, extrasOnTab: 0 }
+  );
+  ok(`a ₹200 charge added then removed leaves balance ${f(d.balance)} and no refund on the bill`,
+     Math.abs(d.balance) < 0.01 && d.refunded === 0);
+}
+
 console.log(`\n${fail === 0 ? `All ${pass} checks passed.` : `${fail} FAILED of ${pass + fail}`}`);
 process.exitCode = fail === 0 ? 0 : 1;

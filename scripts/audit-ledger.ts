@@ -26,7 +26,7 @@ async function main() {
       charges: { select: { amount: true, paidNow: true } },
       txns: {
         select: { id: true, kind: true, direction: true, mode: true, amount: true,
-          cashImpact: true, affectsStatement: true, flagged: true },
+          cashImpact: true, affectsStatement: true, flagged: true, note: true },
         orderBy: { occurredAt: "asc" },
       },
     },
@@ -37,7 +37,9 @@ async function main() {
   console.log("1. Direction is consistent with kind");
   const CREDITS = ["ROOM_PAYMENT", "EXTRA_CHARGE", "DEPOSIT_TAKEN", "DEPOSIT_APPLIED", "DEPOSIT_WITHHELD", "CANCELLATION_FEE"];
   const wrongDir = bookings.flatMap(b => b.txns.filter(t =>
-    t.kind !== "ADJUSTMENT" &&
+    // An adjustment goes either way by definition, and an extra charge can be
+    // taken back off the bill, which is a debit of the same kind.
+    t.kind !== "ADJUSTMENT" && t.kind !== "EXTRA_CHARGE" &&
     (CREDITS.includes(t.kind) ? t.direction !== "CREDIT" : t.direction !== "DEBIT")));
   check("every entry's direction matches its kind", wrongDir.length === 0, `${wrongDir.length} wrong`);
 
@@ -95,7 +97,10 @@ async function main() {
   let ex = 0;
   for (const b of bookings) {
     const paidNow = b.charges.filter(c => c.paidNow).reduce((s, c) => s + c.amount, 0);
-    const led = b.txns.filter(t => t.kind === "EXTRA_CHARGE").reduce((s, t) => s + t.amount, 0);
+    // A charge added then removed leaves the entry and its reversal behind, so
+    // the pair has to be netted — otherwise a corrected mistake reads as a gap.
+    const led = b.txns.filter(t => t.kind === "EXTRA_CHARGE" && t.direction === "CREDIT").reduce((s, t) => s + t.amount, 0)
+      - b.txns.filter(t => t.kind === "EXTRA_CHARGE" && t.direction === "DEBIT").reduce((s, t) => s + t.amount, 0);
     if (Math.abs(paidNow - led) > 0.5) ex++;
   }
   check("counter-paid charges each have one entry", ex === 0, `${ex} bookings differ`);
