@@ -128,8 +128,8 @@ export default function GstReportClient({ gstin, legalName }: { gstin: string; l
         </h2>
         <p className="text-white/40 text-sm mb-4">
           Every stay in the month except cancellations and no-shows, one line each, with the
-          totals at the foot — in the same layout you send today. The Excel version calculates
-          the GST and totals itself, so a correction to any rent flows through.
+          totals at the foot. The Excel version works out the taxable value, the GST and the
+          totals itself, so a correction to any rent flows through.
         </p>
 
         <div className="flex flex-col sm:flex-row gap-3 mb-3">
@@ -180,9 +180,9 @@ export default function GstReportClient({ gstin, legalName }: { gstin: string; l
         )}
 
         <p className="text-white/30 text-[11px] mt-3 leading-relaxed">
-          GST is shown at the slab rate on the rent, as on your current sheet. A tax invoice from
-          this system treats the rent as already including GST, so the two state tax differently
-          for the same stay — worth confirming with your advocate which they want.
+          The rent is what the guest paid, with GST inside it — the same figure they see on the
+          booking and on their invoice. The taxable value and tax are taken from that booking's own
+          invoice, so the two documents can never disagree.
         </p>
       </div>
 

@@ -14,11 +14,11 @@ import { MONTHS } from "@/lib/services/gst-report";
  *
  * Two things follow that sheet rather than the rest of this codebase:
  *
- *  • GST is charged ON the rent, not extracted from it. ₹2,500 at 5% is ₹125
- *    here, where a tax invoice from this system would read ₹119.05 on a taxable
- *    value of ₹2,380.95. That is the filing practice the hotel has used, so
- *    changing it would put a break in their return history — but it does mean
- *    the two documents state different tax on the same stay.
+ *  • The rent is the figure the guest was quoted and paid, and GST is inside
+ *    it — ₹2,500 is ₹2,380.95 plus ₹119.05 of tax, not ₹2,500 plus ₹125. The
+ *    tax is taken from the booking's own stored split wherever there is one, so
+ *    this report and the guest's tax invoice can never state different tax for
+ *    the same stay.
  *
  *  • The serial in the first column is the advocate's running number, not this
  *    system's booking reference. It continues across months, so the caller says
@@ -32,12 +32,40 @@ function rateFor(rentPerNight: number): number {
   return 18;
 }
 
+/**
+ * What the stay is actually taxed at.
+ *
+ * Prefers the split already stored on the booking, which is what its invoice
+ * prints — so the two documents agree by construction rather than by both
+ * happening to recompute the same way. OTA bookings arrive without a split
+ * (the channel's mail carries only a gross figure), so those are derived from
+ * the same slab logic instead of being reported as tax-free.
+ */
+function taxOf(b: { totalAmount: number; taxableAmount: number; cgst: number; sgst: number; noOfNights: number }) {
+  const stored = +(b.taxableAmount + b.cgst + b.sgst).toFixed(2);
+  if (Math.abs(stored - b.totalAmount) <= 0.02 && b.taxableAmount > 0) {
+    const gst = +(b.cgst + b.sgst).toFixed(2);
+    return { taxable: +b.taxableAmount.toFixed(2), gst, ratePct: rateFor(b.totalAmount / Math.max(1, b.noOfNights)) };
+  }
+  // Split the gross directly rather than through the price helper: that one
+  // snaps to the nearest legal whole-rupee total, which is right when quoting a
+  // price but drops the paise off one that already exists — an OTA booking of
+  // ₹1,529.10 would report a split adding up to ₹1,529. Dividing the tax back
+  // out always reconciles, and matches the formula the workbook carries.
+  const ratePct = rateFor(b.totalAmount / Math.max(1, b.noOfNights));
+  const taxable = +(b.totalAmount / (1 + ratePct / 100)).toFixed(2);
+  return { taxable, gst: +(b.totalAmount - taxable).toFixed(2), ratePct };
+}
+
 export interface SalesRow {
   serial: number;
   bookingRef: string;
   checkIn: Date;
   guest: string;
+  /** What the guest paid for the room — GST included. */
   rent: number;
+  /** The rent less the tax inside it. */
+  taxable: number;
   ratePct: number;
   gst: number;
 }
@@ -45,6 +73,7 @@ export interface SalesRow {
 export interface SalesReport {
   rows: SalesRow[];
   totalRent: number;
+  totalTaxable: number;
   totalGst: number;
   monthLabel: string;
 }
@@ -68,6 +97,7 @@ export async function buildSalesReport(params: {
     },
     select: {
       bookingRef: true, checkInDate: true, totalAmount: true, noOfNights: true,
+      taxableAmount: true, cgst: true, sgst: true,
       primaryGuest: { select: { name: true } },
     },
     // The advocate reads it as a diary, so it runs in stay order. The reference
@@ -76,15 +106,13 @@ export async function buildSalesReport(params: {
   });
 
   let totalRent = 0;
+  let totalTaxable = 0;
   let totalGst = 0;
   const rows = bookings.map((b, i) => {
     const rent = +b.totalAmount.toFixed(2);
-    // The slab is set by the nightly rate, but the tax is charged on the whole
-    // stay — a two-night booking at ₹900 a night is exempt, not taxed at 5%
-    // because the total crossed ₹1,000.
-    const ratePct = rateFor(rent / Math.max(1, b.noOfNights));
-    const gst = +(rent * ratePct / 100).toFixed(2);
+    const { taxable, gst, ratePct } = taxOf(b);
     totalRent += rent;
+    totalTaxable += taxable;
     totalGst += gst;
     return {
       serial: params.startSerial + i,
@@ -92,6 +120,7 @@ export async function buildSalesReport(params: {
       checkIn: b.checkInDate,
       guest: b.primaryGuest.name,
       rent,
+      taxable,
       ratePct,
       gst,
     };
@@ -100,6 +129,7 @@ export async function buildSalesReport(params: {
   return {
     rows,
     totalRent: +totalRent.toFixed(2),
+    totalTaxable: +totalTaxable.toFixed(2),
     totalGst: +totalGst.toFixed(2),
     monthLabel: `${MONTHS[params.month - 1].toUpperCase()} ${params.year}`,
   };
@@ -130,34 +160,38 @@ export function renderSalesReportPdf(report: SalesReport): ArrayBuffer {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   doc.setTextColor(110);
-  doc.text(`${BUSINESS.legalName}  ·  GSTIN ${BUSINESS.gstin}`, 14, 21);
+  doc.text(`${BUSINESS.legalName}  ·  GSTIN ${BUSINESS.gstin}  ·  rent shown is inclusive of GST`, 14, 21);
   doc.setTextColor(0);
 
   autoTable(doc, {
     startY: 25,
-    head: [["Booking NO", "Checkin DT", "name", "Final rent", "GST (%)", "GST(Rs)"]],
+    // Taxable sits beside the rent because the tax is inside it now — without
+    // that column the advocate would have to back it out of every line.
+    head: [["Booking NO", "Checkin DT", "name", "Final rent", "Taxable", "GST (%)", "GST(Rs)"]],
     body: report.rows.map(r => [
       String(r.serial),
       ddmmyy(r.checkIn),
       r.guest,
       inr(r.rent),
+      inr(r.taxable),
       `${r.ratePct}%`,
       r.gst === 0 ? "0" : inr(r.gst),
     ]),
-    foot: [["", "", "TOTAL(Rs) :", inrTotal(report.totalRent), "", inrTotal(report.totalGst)]],
+    foot: [["", "", "TOTAL(Rs) :", inrTotal(report.totalRent), inrTotal(report.totalTaxable), "", inrTotal(report.totalGst)]],
     theme: "grid",
     styles: { fontSize: 8, cellPadding: 1.4, textColor: 20, lineColor: [200, 200, 200] },
     headStyles: { fillColor: [235, 235, 235], textColor: 20, fontStyle: "bold", fontSize: 8 },
     footStyles: { fillColor: [235, 235, 235], textColor: 20, fontStyle: "bold", fontSize: 8 },
     columnStyles: {
       // 182mm across, which is exactly A4 between the default 14mm margins —
-      // the name column takes whatever the five numeric ones do not need.
-      0: { cellWidth: 22, halign: "left" },
-      1: { cellWidth: 22 },
-      2: { cellWidth: 68 },
-      3: { cellWidth: 26, halign: "right" },
-      4: { cellWidth: 18, halign: "center" },
-      5: { cellWidth: 26, halign: "right" },
+      // the name column takes whatever the six numeric ones do not need.
+      0: { cellWidth: 20, halign: "left" },
+      1: { cellWidth: 20 },
+      2: { cellWidth: 54 },
+      3: { cellWidth: 24, halign: "right" },
+      4: { cellWidth: 24, halign: "right" },
+      5: { cellWidth: 16, halign: "center" },
+      6: { cellWidth: 24, halign: "right" },
     },
     // A page number in the same place the old sheet carried one.
     didDrawPage: data => {
@@ -192,23 +226,24 @@ export async function renderSalesReportXlsx(report: SalesReport): Promise<ArrayB
   ws.columns = [
     { key: "serial", width: 12 },
     { key: "date", width: 13 },
-    { key: "name", width: 38 },
+    { key: "name", width: 34 },
     { key: "rent", width: 14 },
+    { key: "taxable", width: 14 },
     { key: "rate", width: 10 },
     { key: "gst", width: 14 },
   ];
 
   const title = ws.addRow([`SALES REPORT - ${report.monthLabel}`]);
   title.font = { bold: true, size: 13 };
-  ws.mergeCells("A1:F1");
+  ws.mergeCells("A1:G1");
 
-  const sub = ws.addRow([`${BUSINESS.legalName}  ·  GSTIN ${BUSINESS.gstin}`]);
+  const sub = ws.addRow([`${BUSINESS.legalName}  ·  GSTIN ${BUSINESS.gstin}  ·  rent shown is inclusive of GST`]);
   sub.font = { size: 9, color: { argb: "FF666666" } };
-  ws.mergeCells("A2:F2");
+  ws.mergeCells("A2:G2");
 
   ws.addRow([]);
 
-  const head = ws.addRow(["Booking NO", "Checkin DT", "name", "Final rent", "GST (%)", "GST(Rs)"]);
+  const head = ws.addRow(["Booking NO", "Checkin DT", "name", "Final rent", "Taxable", "GST (%)", "GST(Rs)"]);
   head.font = { bold: true, size: 10 };
   head.eachCell(c => {
     c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEBEBEB" } };
@@ -224,8 +259,12 @@ export async function renderSalesReportXlsx(report: SalesReport): Promise<ArrayB
       new Date(Date.UTC(r.checkIn.getUTCFullYear(), r.checkIn.getUTCMonth(), r.checkIn.getUTCDate())),
       r.guest,
       r.rent,
+      // The tax is inside the rent, so the taxable value is the rent divided
+      // back out and the tax is what remains. Both stay formulas, so correcting
+      // a rent carries the split with it.
+      { formula: `ROUND(D${ws.rowCount + 1}/(1+F${ws.rowCount + 1}),2)`, result: r.taxable },
       r.ratePct / 100,
-      { formula: `D${ws.rowCount + 1}*E${ws.rowCount + 1}`, result: r.gst },
+      { formula: `ROUND(D${ws.rowCount + 1}-E${ws.rowCount + 1},2)`, result: r.gst },
     ]);
     row.eachCell(c => {
       c.border = { top: { style: "hair" }, left: { style: "hair" }, bottom: { style: "hair" }, right: { style: "hair" } };
@@ -236,8 +275,9 @@ export async function renderSalesReportXlsx(report: SalesReport): Promise<ArrayB
   const total = ws.addRow([
     null, null, "TOTAL(Rs) :",
     { formula: `SUM(D${firstDataRow}:D${lastDataRow})`, result: report.totalRent },
+    { formula: `SUM(E${firstDataRow}:E${lastDataRow})`, result: report.totalTaxable },
     null,
-    { formula: `SUM(F${firstDataRow}:F${lastDataRow})`, result: report.totalGst },
+    { formula: `SUM(G${firstDataRow}:G${lastDataRow})`, result: report.totalGst },
   ]);
   total.font = { bold: true };
   total.eachCell(c => {
@@ -247,13 +287,14 @@ export async function renderSalesReportXlsx(report: SalesReport): Promise<ArrayB
 
   ws.getColumn("date").numFmt = "dd/mm/yy";
   ws.getColumn("rent").numFmt = "#,##0.00";
+  ws.getColumn("taxable").numFmt = "#,##0.00";
   ws.getColumn("gst").numFmt = "#,##0.00";
   ws.getColumn("rate").numFmt = "0%";
   ws.getColumn("rate").alignment = { horizontal: "center" };
   ws.getCell(`C${total.number}`).alignment = { horizontal: "right" };
 
   // Filters over the data so the owner can pull out one date or guest quickly.
-  ws.autoFilter = { from: `A${head.number}`, to: `F${lastDataRow}` };
+  ws.autoFilter = { from: `A${head.number}`, to: `G${lastDataRow}` };
 
   return wb.xlsx.writeBuffer() as Promise<ArrayBuffer>;
 }

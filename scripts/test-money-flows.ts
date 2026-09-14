@@ -396,5 +396,30 @@ console.log("\n── 11. An extra bought at the counter ──");
      Math.abs(d.balance) < 0.01 && d.refunded === 0);
 }
 
+console.log("\n── 12. The sales report splits GST out of the rent ──");
+{
+  // The rent is what the guest paid; the tax is inside it, never added on top.
+  const split = (rent: number, nights = 1) => {
+    const perNight = rent / nights;
+    const rate = perNight <= 1000 ? 0 : perNight <= 7500 ? 5 : 18;
+    const taxable = +(rent / (1 + rate / 100)).toFixed(2);
+    return { rate, taxable, gst: +(rent - taxable).toFixed(2) };
+  };
+
+  for (const [rent, wantRate] of [[2500, 5], [1000, 0], [900, 0], [1200, 5], [9000, 18], [1529.1, 5]] as const) {
+    const s = split(rent);
+    ok(`${f(rent)} @ ${s.rate}% → taxable ${f(s.taxable)} + GST ${f(s.gst)}`,
+       s.rate === wantRate && Math.abs(s.taxable + s.gst - rent) < 0.005);
+  }
+
+  // The slab follows the nightly rate, so a long cheap stay stays exempt.
+  const twoNights = split(1800, 2);
+  ok(`₹1,800 over two nights is ₹900 a night → exempt`, twoNights.rate === 0 && twoNights.gst === 0);
+
+  // ₹2,500 must never be reported as ₹2,500 + ₹125 again.
+  const s = split(2500);
+  ok(`₹2,500 yields ${f(s.gst)} of tax, not ₹125 added on top`, Math.abs(s.gst - 119.05) < 0.01);
+}
+
 console.log(`\n${fail === 0 ? `All ${pass} checks passed.` : `${fail} FAILED of ${pass + fail}`}`);
 process.exitCode = fail === 0 ? 0 : 1;
