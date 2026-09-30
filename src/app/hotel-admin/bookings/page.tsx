@@ -13,6 +13,7 @@ import { Calendar, User, ArrowRight, Phone, Search, LogIn, LogOut } from "lucide
 import { getCategoryMeta } from "@/lib/utils/room-categories";
 import InstantBookButton from "@/components/hotel-admin/InstantBookButton";
 import { isLateEntry } from "@/lib/utils/late-entry";
+import { onlineAtBooking, GATEWAY_ENTRIES } from "@/lib/utils/online-payment";
 
 type Filter = "all" | "arrivals-today" | "departures-today" | "in-house" | "upcoming" | "checked-out";
 type SortKey = "checkin-desc" | "checkin-asc" | "created-desc" | "checkout-asc";
@@ -143,6 +144,8 @@ export default async function BookingsPage({ searchParams }: Props) {
       primaryGuest: { select: { name: true, phone: true } },
       room: { select: { roomNumber: true, roomType: true } },
       onlineCheckin: { select: { completedAt: true } },
+      payment: { select: { status: true, razorpayPaymentId: true, paidAt: true } },
+      txns: GATEWAY_ENTRIES,
     },
     orderBy: [ORDER_BY[sort]],
     take: 50,
@@ -242,6 +245,7 @@ export default async function BookingsPage({ searchParams }: Props) {
             const statusCls = status?.cls ?? "bg-white/8 text-white/40 border-white/10";
             const catMeta = getCategoryMeta(b.roomCategory);
             const accent = catMeta.accentColor;
+            const paidOnline = onlineAtBooking({ ...b, gatewayEntries: b.txns });
             return (
               <Link
                 key={b.id}
@@ -278,6 +282,15 @@ export default async function BookingsPage({ searchParams }: Props) {
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-full border shrink-0 ${statusCls}`}>
                       {statusLabel}
                     </span>
+                    {paidOnline && (
+                      <span
+                        title={`Paid by the guest ${paidOnline.via === "website" ? "on the website" : "through the payment link"}`}
+                        className={`text-xs font-semibold px-2 py-0.5 rounded-full border shrink-0 ${paidOnline.full
+                          ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
+                          : "bg-sky-500/15 text-sky-300 border-sky-500/30"}`}>
+                        {paidOnline.full ? "✓ Paid online" : `₹${paidOnline.amount.toLocaleString("en-IN")} paid online`}
+                      </span>
+                    )}
                     {b.viaKiosk && (
                       <span className="text-xs font-semibold px-2 py-0.5 rounded-full border shrink-0 bg-amber-500/15 text-amber-300 border-amber-500/30">
                         Kiosk

@@ -4,6 +4,7 @@ import { email } from "@/lib/services/email";
 import { syncBookingToAppSheet } from "@/lib/services/appsheet-sync";
 import { format } from "date-fns";
 import { getCategoryMeta } from "@/lib/utils/room-categories";
+import { postEntry } from "@/lib/services/booking-ledger";
 
 /**
  * Idempotently confirm a paid online booking.
@@ -70,12 +71,35 @@ export async function confirmPaidBooking(params: {
       })
     : [{ id: booking.id, totalAmount: booking.totalAmount, roomCategory: booking.roomCategory, checkInDate: booking.checkInDate, checkOutDate: booking.checkOutDate, roomId: booking.roomId }];
   const paidPerRoom = paidTotal / groupBookings.length;
+  // The same key whichever caller wins the claim, so a replayed webhook or a
+  // second confirm can never post the payment twice.
+  const paymentKey = razorpayPaymentId ?? booking.payment?.razorpayPaymentId ?? booking.payment?.id ?? bookingId;
+  const via = booking.source === "PHONE" ? "via the payment link" : "on the website";
   for (const b of groupBookings) {
     const onlinePaid = +Math.min(paidPerRoom, b.totalAmount).toFixed(2);
     const balanceDue = +Math.max(0, b.totalAmount - onlinePaid).toFixed(2);
-    await prisma.booking.update({
-      where: { id: b.id },
-      data: { onlinePaid, balanceDue },
+    // The booking and its ledger entry are written together. The accounts
+    // statement reads only the ledger, so a booking marked paid without its
+    // entry is money received that the accounts never show.
+    await prisma.$transaction(async (tx) => {
+      await tx.booking.update({
+        where: { id: b.id },
+        data: { onlinePaid, balanceDue },
+      });
+      await postEntry(
+        {
+          hotelId: booking.hotelId,
+          bookingId: b.id,
+          kind: "ROOM_PAYMENT",
+          mode: "ONLINE",
+          amount: onlinePaid,
+          note: `${balanceDue > 0 ? "Advance paid" : "Paid in full"} online ${via}` +
+            (razorpayPaymentId ? ` · ${razorpayPaymentId}` : ""),
+          recordedBy: "Online payment",
+          idemKey: `gw:${paymentKey}:${b.id}`,
+        },
+        tx
+      );
     });
   }
 

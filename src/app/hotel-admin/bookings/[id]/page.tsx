@@ -48,6 +48,7 @@ import IdPhotos from "@/components/hotel-admin/IdPhotos";
 import { isLateEntry, daysLate } from "@/lib/utils/late-entry";
 import { getCategoryMeta, CATEGORY_ROOMS } from "@/lib/utils/room-categories";
 import { isOtaPrepaid, otaSourceLabel } from "@/lib/ota/sources";
+import { onlineAtBooking, GATEWAY_ENTRIES } from "@/lib/utils/online-payment";
 
 const STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
   PENDING_PAYMENT: { label: "Pending Payment", cls: "bg-yellow-500/15 text-yellow-400 border-yellow-500/25" },
@@ -99,10 +100,16 @@ export default async function BookingDetailPage({
       charges: { orderBy: { id: "asc" } },
       gstInvoice: { select: { invoiceNumber: true } },
       consent: { select: { consentToken: true, primaryAcceptedAt: true, verifiedByName: true } },
+      txns: GATEWAY_ENTRIES,
     },
   });
 
   if (!booking) notFound();
+
+  // Paid online by the guest while booking — shown up front on the payment
+  // card, because otherwise a fully paid website booking says nothing at all
+  // about being paid.
+  const paidOnline = onlineAtBooking({ ...booking, gatewayEntries: booking.txns });
 
   const categoryMeta = getCategoryMeta(booking.roomCategory as never);
   const accent = categoryMeta?.accentColor ?? "#F59E0B";
@@ -645,6 +652,28 @@ export default async function BookingDetailPage({
                 <div className="flex justify-between text-amber-300/80 text-xs">
                   <span>Extra charges (tea, damage…)</span>
                   <span>₹{booking.additionalCharges.toLocaleString("en-IN")}</span>
+                </div>
+              )}
+              {paidOnline && (
+                <div className="mt-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="flex items-center gap-1.5 text-emerald-300 text-xs font-bold">
+                      <CheckCircle className="w-3.5 h-3.5" />
+                      {paidOnline.full ? "Paid in full online" : "Advance paid online"}
+                    </span>
+                    <span className="text-emerald-300 font-bold text-sm">
+                      ₹{paidOnline.amount.toLocaleString("en-IN")}
+                    </span>
+                  </div>
+                  <p className="text-emerald-400/60 text-[10px] mt-1">
+                    Paid by the guest {paidOnline.via === "website" ? "on the website while booking" : "through the WhatsApp payment link"}
+                    {paidOnline.paidAt ? ` · ${fmtIST(paidOnline.paidAt, "dd MMM yyyy, hh:mm a")}` : ""}
+                    {paidOnline.full
+                      ? " · nothing to collect for the room"
+                      : booking.balanceDue > 0
+                        ? ` · ₹${booking.balanceDue.toLocaleString("en-IN")} to collect at the hotel`
+                        : " · the rest was paid at the hotel"}
+                  </p>
                 </div>
               )}
               {/* Deposit — stated plainly, because staff need to know at a
