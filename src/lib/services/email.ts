@@ -298,6 +298,52 @@ export const email = {
   },
 
   /**
+   * The nightly accounts sheet, with the PDF attached.
+   *
+   * Unlike the other owner mails this one checks Resend's answer — Resend
+   * reports a refused mail in its return value rather than by throwing — so
+   * the nightly job can say truthfully whether the sheet went out.
+   */
+  sendOwnerDailyAccounts: async (data: {
+    dateLabel: string;
+    checkins: string;
+    moneyIn: string;
+    moneyOut: string;
+    drawer: string;
+    pdf: Buffer;
+    filename: string;
+  }): Promise<{ sentTo: string } | { skipped: string }> => {
+    const ownerEmail = process.env.OWNER_EMAIL;
+    if (!ownerEmail) return { skipped: "OWNER_EMAIL is not set" };
+
+    const html = shell(`
+      <p style="margin:0 0 4px;color:#333;font-size:16px;font-weight:700;">Daily Accounts</p>
+      <p style="margin:0 0 24px;color:#666;font-size:14px;">${data.dateLabel} · 11:00 pm to 11:00 pm. The full sheet is attached.</p>
+
+      <div style="background:#f9f9f7;border-radius:8px;padding:16px 20px;margin-bottom:20px;">
+        <table width="100%" cellpadding="0" cellspacing="0">
+          ${row("Check-ins", data.checkins)}
+          ${row("Money received", data.moneyIn)}
+          ${row("Money paid out", data.moneyOut)}
+          ${row("Cash in drawer", data.drawer)}
+        </table>
+      </div>
+
+      <p style="margin:0;color:#999;font-size:12px;">Cash in drawer is what should be in the drawer at 11 pm, including any guest deposits still to be returned.</p>
+    `);
+
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: [ownerEmail],
+      subject: `Daily Accounts – ${data.dateLabel}`,
+      html,
+      attachments: [{ filename: data.filename, content: data.pdf }],
+    });
+    if (error) throw new Error(`Email not sent: ${error.message}`);
+    return { sentTo: ownerEmail };
+  },
+
+  /**
    * A sensitive desk action just happened — cash out of the till, an expense, a
    * deleted ledger entry, a cancelled booking. These used to wait on the
    * owner's OTP; now they go through and the owner is told straight away.

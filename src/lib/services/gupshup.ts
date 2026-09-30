@@ -358,6 +358,41 @@ export const gupshup = {
     });
   },
 
+  /**
+   * The nightly accounts sheet, as a PDF document. WhatsApp fetches the file
+   * from the link itself, so the link must be publicly reachable (it is signed
+   * and short-lived — see daily-accounts.ts).
+   *
+   * Template param order (when GUPSHUP_TEMPLATE_DAILY_ACCOUNTS is set, with a
+   * DOCUMENT header): {{1}} date, {{2}} check-ins, {{3}} money received,
+   * {{4}} money paid out, {{5}} cash in drawer. Without a template it goes as a
+   * session message, which WhatsApp only delivers within 24 hours of the owner
+   * last messaging the business number.
+   */
+  sendOwnerDailyAccounts: (data: {
+    pdfUrl: string;
+    filename: string;
+    caption: string;
+    params: [string, string, string, string, string];
+  }) => {
+    const ownerPhone = process.env.OWNER_WHATSAPP;
+    if (!ownerPhone) return Promise.resolve(null);
+
+    if (process.env.GUPSHUP_TEMPLATE_DAILY_ACCOUNTS) {
+      return sendTemplate(ownerPhone, process.env.GUPSHUP_TEMPLATE_DAILY_ACCOUNTS, data.params, {
+        url: data.pdfUrl,
+        filename: data.filename,
+      });
+    }
+    return send({
+      to: ownerPhone,
+      type: "document",
+      documentUrl: data.pdfUrl,
+      caption: data.caption,
+      filename: data.filename,
+    });
+  },
+
   /** Free-form alert to the owner's WhatsApp (best-effort; needs 24h opt-in window). */
   sendOwnerText: (message: string) => {
     const ownerPhone = process.env.OWNER_WHATSAPP;

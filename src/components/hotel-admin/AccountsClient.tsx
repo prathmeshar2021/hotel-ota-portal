@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import { format, subDays, startOfMonth, differenceInDays } from "date-fns";
-import { fmtIST } from "@/lib/utils/datetime";
+import { fmtIST, istDateInput } from "@/lib/utils/datetime";
 
 const MAX_RANGE_DAYS = 180; // 6 months
 
@@ -477,6 +477,31 @@ export default function AccountsClient() {
 
   const [collectOpen, setCollectOpen] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
+  // The same sheet the owner is sent at 11 pm, for any day.
+  const [sheetDate, setSheetDate] = useState(() => istDateInput());
+  const [sheetLoading, setSheetLoading] = useState(false);
+
+  async function downloadDailySheet() {
+    setSheetLoading(true);
+    try {
+      const res = await fetch(`/api/hotel-admin/accounts/daily-sheet?date=${sheetDate}`);
+      if (!res.ok) {
+        const j = await res.json().catch(() => null);
+        toast.error(j?.error ?? "Could not make the daily sheet");
+        return;
+      }
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Daily_Accounts_${sheetDate}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error("Could not make the daily sheet");
+    } finally {
+      setSheetLoading(false);
+    }
+  }
 
   // ── Fetch summary ──
   const fetchSummary = useCallback(async () => {
@@ -724,6 +749,24 @@ export default function AccountsClient() {
 
         {/* Right: actions */}
         <div className="flex gap-2 flex-wrap">
+          <div className="flex items-center gap-1 bg-white/3 border border-white/8 rounded-xl p-1"
+            title="The same sheet the owner gets on WhatsApp and email at 11 pm">
+            <input
+              type="date"
+              value={sheetDate}
+              max={istDateInput()}
+              onChange={e => setSheetDate(e.target.value)}
+              aria-label="Day for the daily sheet"
+              className="bg-transparent px-2 py-1 text-white/70 text-xs focus:outline-none [color-scheme:dark]"
+            />
+            <button onClick={downloadDailySheet} disabled={sheetLoading || !sheetDate}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/18 border border-emerald-500/20 text-emerald-400 hover:text-emerald-300 text-xs font-semibold rounded-lg transition-all disabled:opacity-50">
+              {sheetLoading
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <FileText className="w-3.5 h-3.5" />}
+              {sheetLoading ? "Making…" : "Daily sheet"}
+            </button>
+          </div>
           <button onClick={handleRefresh}
             className="flex items-center gap-1.5 px-3 py-2 bg-white/5 hover:bg-white/10 border border-white/10 text-white/40 hover:text-white/70 text-xs font-semibold rounded-xl transition-all">
             <RefreshCw className="w-3.5 h-3.5" /> Refresh
