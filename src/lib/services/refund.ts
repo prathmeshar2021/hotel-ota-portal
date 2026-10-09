@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db/prisma";
 import { createRefund } from "@/lib/services/razorpay";
-import { recordTxn, netCredited } from "@/lib/services/booking-txn";
+import { recordTxn, netPaid, allocateRefund } from "@/lib/services/booking-txn";
 
 export type RefundOutcome = {
   refundStatus: "NONE" | "PENDING" | "PROCESSED" | "FAILED";
@@ -13,6 +13,10 @@ export type RefundOutcome = {
  * Process the refund owed on a (just-cancelled) booking.
  *
  * Rules:
+ *  • A refund is never more than the guest has actually paid and not yet had
+ *    back. Callers quote against the room price; whatever they ask for is held
+ *    to the money that really arrived, so a booking nobody paid for can never
+ *    end up "owed" a refund. The deposit is not payment and is not counted.
  *  • Nothing owed → NONE.
  *  • Online-paid → attempt a Razorpay refund of the online portion; success =>
  *    PROCESSED, error => FAILED (admin can retry). Any cash portion still owed
@@ -38,6 +42,7 @@ export async function processBookingRefund(
       cashPaid: true,
       refundStatus: true,
       refundId: true,
+      bookingGroupId: true,
       payment: { select: { id: true, razorpayPaymentId: true, refundAmount: true, amount: true } },
     },
   });
@@ -55,7 +60,16 @@ export async function processBookingRefund(
     };
   }
 
-  const owed = Math.max(0, Math.round(refundAmount));
+  // The ceiling: what has actually been paid across the rooms this payment
+  // covers. A multi-room checkout shares one payment, so the group is read
+  // together; a single booking is just itself.
+  const paid = await paidFor(bookingId, booking.bookingGroupId);
+  const refundable = Math.floor([...paid.values()].reduce((a, b) => a + b, 0));
+  const asked = Math.max(0, Math.round(refundAmount));
+  const owed = Math.min(asked, refundable);
+  if (owed < asked) {
+    console.warn(`[refund] ${booking.bookingRef}: ₹${asked} asked, held to ₹${owed} — only ₹${refundable} was paid`);
+  }
   if (owed <= 0) {
     await prisma.booking.update({
       where: { id: bookingId },
@@ -103,16 +117,21 @@ export async function processBookingRefund(
       // Ledger — money genuinely on its way back to the guest's account. The
       // cash portion (if any) is recorded separately, when the desk hands it
       // over, so the drawer isn't debited for notes still sitting in it.
-      await recordTxn({
-        hotelId: booking.hotelId,
-        bookingId,
-        kind: "REFUND",
-        mode: "ONLINE",
-        refundVia: "ONLINE",
-        amount: Math.min(onlinePortion, await netCredited(bookingId)),
-        note: opts.reason ?? "Refunded to the original payment method",
-        idemKey: `refund:${refund.id}`,
-      });
+      // Each room is given back its own share, so no booking's account shows
+      // more refunded than it paid. The first entry keeps the plain key.
+      const shares = allocateRefund(onlinePortion, paid, bookingId);
+      for (const [i, share] of shares.entries()) {
+        await recordTxn({
+          hotelId: booking.hotelId,
+          bookingId: share.bookingId,
+          kind: "REFUND",
+          mode: "ONLINE",
+          refundVia: "ONLINE",
+          amount: share.amount,
+          note: opts.reason ?? "Refunded to the original payment method",
+          idemKey: i === 0 ? `refund:${refund.id}` : `refund:${refund.id}:${share.bookingId}`,
+        });
+      }
 
       return {
         refundStatus: fullySettled ? "PROCESSED" : "PENDING",
@@ -148,6 +167,14 @@ export async function processBookingRefund(
   };
 }
 
+/** The bookings a refund draws on, with what each has paid and not had back. */
+async function paidFor(bookingId: string, groupId: string | null): Promise<Map<string, number>> {
+  const ids = groupId
+    ? (await prisma.booking.findMany({ where: { bookingGroupId: groupId }, select: { id: true } })).map(b => b.id)
+    : [bookingId];
+  return netPaid(ids.includes(bookingId) ? ids : [bookingId, ...ids]);
+}
+
 /** Mark a PENDING/FAILED cash refund as handed back manually by staff. */
 export async function markRefundManual(
   bookingId: string,
@@ -155,7 +182,7 @@ export async function markRefundManual(
 ): Promise<RefundOutcome> {
   const booking = await prisma.booking.findUnique({
     where: { id: bookingId },
-    select: { refundAmount: true, refundStatus: true, hotelId: true },
+    select: { refundAmount: true, refundStatus: true, hotelId: true, bookingGroupId: true },
   });
   if (!booking) return { refundStatus: "NONE", refundAmount: 0, message: "Booking not found" };
 
@@ -164,19 +191,34 @@ export async function markRefundManual(
     data: { refundStatus: "PROCESSED", refundedAt: new Date(), refundId: `MANUAL:${by}` },
   });
 
-  // The notes have now physically left the drawer, so this is the moment the
-  // cash figure should drop — not when the refund was first agreed.
-  await recordTxn({
-    hotelId: booking.hotelId,
-    bookingId,
-    kind: "REFUND",
-    mode: "CASH",
-    refundVia: "CASH",
-    amount: Math.min(booking.refundAmount ?? 0, await netCredited(bookingId)),
-    note: "Refunded in cash at the desk",
-    recordedBy: by,
-    idemKey: `refund-manual:${bookingId}`,
+  // Only the part still to be handed over is cash. When some of the refund has
+  // already gone back through the gateway, `refundAmount` is the whole of it —
+  // recording all of that as cash would take the online part out of the drawer
+  // a second time.
+  const paid = await paidFor(bookingId, booking.bookingGroupId);
+  const sentOnline = await prisma.bookingTxn.aggregate({
+    where: { bookingId: { in: [...paid.keys()] }, kind: "REFUND", idemKey: { startsWith: "refund:" } },
+    _sum: { amount: true },
   });
+  const cashDue = Math.max(0, (booking.refundAmount ?? 0) - (sentOnline._sum.amount ?? 0));
+
+  // The notes have now physically left the drawer, so this is the moment the
+  // cash figure should drop — not when the refund was first agreed. `paid`
+  // already has the online part taken off, so it bounds the cash on its own.
+  const shares = allocateRefund(cashDue, paid, bookingId);
+  for (const [i, share] of shares.entries()) {
+    await recordTxn({
+      hotelId: booking.hotelId,
+      bookingId: share.bookingId,
+      kind: "REFUND",
+      mode: "CASH",
+      refundVia: "CASH",
+      amount: share.amount,
+      note: "Refunded in cash at the desk",
+      recordedBy: by,
+      idemKey: i === 0 ? `refund-manual:${bookingId}` : `refund-manual:${bookingId}:${share.bookingId}`,
+    });
+  }
   return {
     refundStatus: "PROCESSED",
     refundAmount: booking.refundAmount,

@@ -20,7 +20,7 @@
 
 import { prisma } from "@/lib/db/prisma";
 import type { Prisma } from "@prisma/client";
-import { postEntry } from "@/lib/services/booking-ledger";
+import { postEntry, summarise } from "@/lib/services/booking-ledger";
 
 export type TxnKind =
   | "ROOM_PAYMENT"
@@ -90,21 +90,47 @@ export async function recordTxn(
 }
 
 /**
- * What this booking has actually been credited with, net of refunds already
- * given back. Refunds are capped against it so the statement can never show
- * more money leaving than ever came in — a cancellation refund is often quoted
- * against the full tariff, including a deposit that was never taken.
+ * What the guest has actually paid towards the bill and not yet had back, for
+ * each booking asked about.
+ *
+ * This is the ceiling on any refund. It reads the ledger the same way the
+ * booking's own account does, so the two can never disagree: payments in, less
+ * refunds and reversals out. The refundable deposit is not payment — taking it
+ * and handing it back are both left out. (They used to be added together here,
+ * which put the ceiling above what most guests had paid.)
  */
-export async function netCredited(bookingId: string): Promise<number> {
+export async function netPaid(bookingIds: string[]): Promise<Map<string, number>> {
   const rows = await prisma.bookingTxn.findMany({
-    where: { bookingId },
-    select: { kind: true, amount: true },
+    where: { bookingId: { in: bookingIds } },
+    select: { bookingId: true, kind: true, direction: true, mode: true, amount: true },
   });
-  const net = rows.reduce(
-    (s, r) => s + (r.kind === "REFUND" ? -r.amount : r.amount),
-    0
-  );
-  return Math.max(0, +net.toFixed(2));
+  const out = new Map<string, number>();
+  for (const id of bookingIds) {
+    const acct = summarise(rows.filter(r => r.bookingId === id), { roomTotal: 0, extrasOnTab: 0 });
+    out.set(id, Math.max(0, +(acct.paid - acct.refunded).toFixed(2)));
+  }
+  return out;
+}
+
+/**
+ * Shares a refund across the bookings that paid for it, never giving one back
+ * more than it paid. `first` is filled before the others, so a single-room
+ * refund lands wholly on its own booking.
+ */
+export function allocateRefund(
+  amount: number,
+  paid: Map<string, number>,
+  first: string
+): { bookingId: string; amount: number }[] {
+  const order = [first, ...[...paid.keys()].filter(id => id !== first)];
+  const out: { bookingId: string; amount: number }[] = [];
+  let left = +amount.toFixed(2);
+  for (const id of order) {
+    if (left <= 0) break;
+    const take = +Math.min(left, paid.get(id) ?? 0).toFixed(2);
+    if (take > 0) { out.push({ bookingId: id, amount: take }); left = +(left - take).toFixed(2); }
+  }
+  return out;
 }
 
 /** Convenience for the several places that record a counter collection. */

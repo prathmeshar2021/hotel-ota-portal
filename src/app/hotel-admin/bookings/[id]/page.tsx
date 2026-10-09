@@ -224,6 +224,8 @@ export default async function BookingDetailPage({
                 checkInDate={booking.checkInDate}
                 totalAmount={booking.totalAmount}
                 depositAmount={booking.refundableDeposit}
+                amountPaid={booking.cashPaid + booking.onlinePaid}
+                onlinePaid={booking.onlinePaid}
               />
               {/* No-show only makes sense once the stay has started — hide it for
                   future reservations so a booking can't be wrongly no-showed. */}
@@ -778,10 +780,26 @@ export default async function BookingDetailPage({
                       <span>₹{booking.depositCollected.toLocaleString("en-IN")}</span>
                     </div>
                   )}
-                  <div className="flex justify-between text-sm font-semibold text-white/70 pt-1 border-t border-white/8">
-                    <span>Total refund to guest</span>
-                    <span className="text-green-400">₹{(booking.totalAmount - (booking.cancellationCharge ?? 0)).toLocaleString("en-IN")}</span>
-                  </div>
+                  {/* What was actually refunded, not the room price less the
+                      charge — a booking nobody paid for is owed nothing. An OTA
+                      booking is refunded by the channel, so its figure is the
+                      channel's own. */}
+                  {isOta ? (
+                    <div className="flex justify-between text-sm font-semibold text-white/70 pt-1 border-t border-white/8">
+                      <span>Refund by {otaSourceLabel(booking.source)}</span>
+                      <span className="text-green-400">₹{(booking.totalAmount - (booking.cancellationCharge ?? 0)).toLocaleString("en-IN")}</span>
+                    </div>
+                  ) : booking.refundAmount > 0 ? (
+                    <div className="flex justify-between text-sm font-semibold text-white/70 pt-1 border-t border-white/8">
+                      <span>Refund to guest</span>
+                      <span className="text-green-400">₹{booking.refundAmount.toLocaleString("en-IN")}</span>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-white/45 pt-1 border-t border-white/8">
+                      No refund
+                      {booking.cashPaid + booking.onlinePaid <= 0 ? " — nothing had been paid on this booking" : ""}
+                    </p>
+                  )}
                   {booking.cancelledAt && (
                     <p className="text-[10px] text-white/25 mt-1">
                       Cancelled {fmtIST(booking.cancelledAt, "dd MMM yyyy, hh:mm a")}

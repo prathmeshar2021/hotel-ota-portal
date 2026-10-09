@@ -65,13 +65,15 @@ export default async function MyBookingsPage() {
 
   // Aggregate multi-room cart groups (count + totals) so a group shows one
   // "Cancel" (which cancels the whole group) and a "N rooms" badge.
-  const groupAgg = new Map<string, { count: number; total: number; deposit: number }>();
+  const groupAgg = new Map<string, { count: number; total: number; deposit: number; paid: number; online: number }>();
   for (const b of bookings) {
     if (!b.bookingGroupId) continue;
-    const g = groupAgg.get(b.bookingGroupId) ?? { count: 0, total: 0, deposit: 0 };
+    const g = groupAgg.get(b.bookingGroupId) ?? { count: 0, total: 0, deposit: 0, paid: 0, online: 0 };
     g.count += 1;
     g.total += b.totalAmount;
     g.deposit += b.refundableDeposit;
+    g.paid += b.cashPaid + b.onlinePaid;
+    g.online += b.onlinePaid;
     groupAgg.set(b.bookingGroupId, g);
   }
   const cancelRendered = new Set<string>();
@@ -238,6 +240,8 @@ export default async function MyBookingsPage() {
                               checkInDate={booking.checkInDate}
                               totalAmount={g.total}
                               depositAmount={g.deposit}
+                              amountPaid={g.paid}
+                              onlinePaid={g.online}
                               groupRooms={g.count}
                             />
                           );
@@ -249,6 +253,8 @@ export default async function MyBookingsPage() {
                             checkInDate={booking.checkInDate}
                             totalAmount={booking.totalAmount}
                             depositAmount={booking.refundableDeposit}
+                            amountPaid={booking.cashPaid + booking.onlinePaid}
+                            onlinePaid={booking.onlinePaid}
                           />
                         );
                       })()}

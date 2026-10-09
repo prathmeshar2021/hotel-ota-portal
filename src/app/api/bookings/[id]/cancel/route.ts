@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
-import { getCancellationPolicy, computeCancellationBreakdown, DEPOSIT_AMOUNT } from "@/lib/utils/cancellation";
+import { getCancellationPolicy, quoteCancellation, DEPOSIT_AMOUNT } from "@/lib/utils/cancellation";
+import { netPaid } from "@/lib/services/booking-txn";
 import { processBookingRefund } from "@/lib/services/refund";
 import { email } from "@/lib/services/email";
 import { format } from "date-fns";
@@ -81,11 +82,18 @@ export async function POST(
   let groupCharge = 0;
   let groupRefund = 0;
 
+  // What each room has actually paid, from the ledger. Every figure below is
+  // held to it: a pay-at-hotel booking cancelled before arrival has paid
+  // nothing, so it is refunded nothing and charged nothing — it used to be
+  // told a refund was on its way.
+  const paidByRoom = await netPaid(groupBookings.map((b) => b.id));
+  const groupPaid = [...paidByRoom.values()].reduce((a, b) => a + b, 0);
+
   if (isPartialPayment) {
-    const paidAmount = paymentRecord!.amount;
+    const paidAmount = Math.min(paymentRecord!.amount, groupPaid);
     // Apply policy % directly to what was actually paid online.
     groupRefund = Math.floor(paidAmount * (1 - policy.chargePercent / 100));
-    groupCharge = paidAmount - groupRefund;
+    groupCharge = +(paidAmount - groupRefund).toFixed(2);
     // Distribute the charge evenly across rooms for record-keeping.
     const chargePerRoom = Math.round(groupCharge / groupBookings.length);
     for (const b of groupBookings) {
@@ -97,16 +105,18 @@ export async function POST(
   } else {
     // Full-payment (or pay-at-hotel): deposit always refunded, policy applies to room charges.
     for (const b of groupBookings) {
-      const bk = computeCancellationBreakdown(
-        b.totalAmount,
-        b.refundableDeposit ?? DEPOSIT_AMOUNT,
-        policy.chargePercent
-      );
-      groupCharge += bk.cancellationCharge;
-      groupRefund += bk.totalRefund;
+      const bk = quoteCancellation({
+        totalAmount: b.totalAmount,
+        depositAmount: b.refundableDeposit ?? DEPOSIT_AMOUNT,
+        chargePercent: policy.chargePercent,
+        paid: paidByRoom.get(b.id) ?? 0,
+        onlineAdvance: 0,
+      });
+      groupCharge += bk.charge;
+      groupRefund += bk.refund;
       await prisma.booking.update({
         where: { id: b.id },
-        data: { status: "CANCELLED", cancelledAt: new Date(), cancellationCharge: bk.cancellationCharge },
+        data: { status: "CANCELLED", cancelledAt: new Date(), cancellationCharge: bk.charge },
       });
     }
   }

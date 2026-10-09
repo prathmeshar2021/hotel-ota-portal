@@ -9,6 +9,8 @@
 import { summarise, assessEntry, cashImpactOf } from "../src/lib/services/booking-ledger";
 import { computeTotalsForPrice } from "../src/lib/utils/booking-calc";
 import { splitFor } from "../src/components/hotel-admin/PayModePicker";
+import { quoteCancellation } from "../src/lib/utils/cancellation";
+import { allocateRefund } from "../src/lib/services/booking-txn";
 
 type Entry = { kind: string; direction: string; mode: string; amount: number };
 let pass = 0, fail = 0;
@@ -419,6 +421,67 @@ console.log("\n── 12. The sales report splits GST out of the rent ──");
   // ₹2,500 must never be reported as ₹2,500 + ₹125 again.
   const s = split(2500);
   ok(`₹2,500 yields ${f(s.gst)} of tax, not ₹125 added on top`, Math.abs(s.gst - 119.05) < 0.01);
+}
+
+console.log("\n── 13. A refund is never more than the guest paid ──");
+{
+  // ₹1,460 booking, ₹200 of it the deposit → ₹1,260 of room charges.
+  const q = (paid: number, pct: number, onlineAdvance = 0, overrideCharge?: number) =>
+    quoteCancellation({ totalAmount: 1460, depositAmount: 200, chargePercent: pct, paid, onlineAdvance, overrideCharge });
+  const is = (r: { refund: number; charge: number }, refund: number, charge: number) => r.refund === refund && r.charge === charge;
+
+  // The live cases: pay-at-hotel, cancelled before arrival, nothing ever paid.
+  for (const pct of [0, 50, 100]) {
+    const r = q(0, pct);
+    ok(`nothing paid, ${pct}% tier → refund ₹0, keep ₹0`, is(r, 0, 0) && r.unpaid);
+  }
+
+  ok("paid in full, free cancellation → all ₹1,460 back", is(q(1460, 0, 1460), 1460, 0));
+  ok("paid in full, 50% tier → ₹830 back, ₹630 kept", is(q(1460, 50, 1460), 830, 630));
+  ok("paid in full, 100% tier → ₹200 back, ₹1,260 kept", is(q(1460, 100, 1460), 200, 1260));
+  ok("paid in full, charge waived → all ₹1,460 back", is(q(1460, 100, 1460, 0), 1460, 0));
+
+  ok("₹500 advance, free cancellation → ₹500 back", is(q(500, 0, 500), 500, 0));
+  ok("₹500 advance, 50% tier → ₹250 back, ₹250 kept", is(q(500, 50, 500), 250, 250));
+  ok("₹500 advance, 100% tier → nothing back, ₹500 kept", is(q(500, 100, 500), 0, 500));
+  ok("₹500 advance, charge waived → ₹500 back", is(q(500, 100, 500, 0), 500, 0));
+
+  // Part paid in cash at the desk: the room-price sum says ₹1,460 back.
+  ok("₹1,000 cash paid, free cancellation → held to the ₹1,000 paid", is(q(1000, 0), 1000, 0));
+  ok("₹1,000 cash paid, 100% tier → ₹200 back, ₹800 kept", is(q(1000, 100), 200, 800));
+
+  let held = true;
+  for (const paid of [0, 1, 199, 200, 500, 999.5, 1460, 1529.1, 1800])
+    for (const pct of [0, 50, 100])
+      for (const adv of [0, 500])
+        for (const ov of [undefined, 0, 300, 5000]) {
+          const r = q(paid, pct, Math.min(adv, paid), ov);
+          if (r.refund < 0 || r.charge < 0 || r.refund > paid || r.refund + r.charge > paid + 0.001 || !Number.isInteger(r.refund)) held = false;
+        }
+  ok("216 combinations of paid / tier / advance / override: refund + charge never exceed what was paid", held);
+
+  // What counts as "paid" — the old ceiling added the deposit in twice.
+  const paidNet = (e: Parameters<typeof summarise>[0]) => {
+    const a = summarise(e, { roomTotal: 0, extrasOnTab: 0 });
+    return +(a.paid - a.refunded).toFixed(2);
+  };
+  const row = (kind: string, direction: string, mode: string, amount: number) => ({ kind, direction, mode, amount });
+  ok("₹1,700 room + ₹500 deposit taken and returned → ₹1,700 paid (the old sum said ₹2,700)",
+    paidNet([row("ROOM_PAYMENT", "CREDIT", "ONLINE", 1700), row("DEPOSIT_TAKEN", "CREDIT", "CASH", 500), row("DEPOSIT_RETURNED", "DEBIT", "CASH", 500)]) === 1700);
+  ok("a deposit still held is not payment", paidNet([row("DEPOSIT_TAKEN", "CREDIT", "CASH", 500)]) === 0);
+  ok("cash corrected to UPI (in, reversed, in again) is ₹1,000 paid once (the old sum said ₹3,000)",
+    paidNet([row("ROOM_PAYMENT", "CREDIT", "CASH", 1000), row("ROOM_PAYMENT", "DEBIT", "CASH", 1000), row("ROOM_PAYMENT", "CREDIT", "ONLINE", 1000)]) === 1000);
+  ok("after ₹300 is refunded, ₹700 is left to refund",
+    paidNet([row("ROOM_PAYMENT", "CREDIT", "CASH", 1000), row("REFUND", "DEBIT", "CASH", 300)]) === 700);
+
+  // Sharing one refund across the rooms of a group checkout.
+  const sh = (amt: number, paid: [string, number][], first = "a") =>
+    allocateRefund(amt, new Map(paid), first).map(x => `${x.bookingId}:${x.amount}`).join(" ");
+  ok("one room: the refund sits on its own booking", sh(500, [["a", 1460]]) === "a:500");
+  ok("two rooms, ₹2,000 back: first room's ₹1,460, then ₹540 from the second", sh(2000, [["a", 1460], ["b", 1460]]) === "a:1460 b:540");
+  ok("the room asked about is filled first", sh(300, [["a", 1460], ["b", 1460]], "b") === "b:300");
+  ok("never more than was paid, however much is asked", sh(5000, [["a", 1000], ["b", 500]]) === "a:1000 b:500");
+  ok("nothing paid → nothing recorded", sh(200, [["a", 0]]) === "");
 }
 
 console.log(`\n${fail === 0 ? `All ${pass} checks passed.` : `${fail} FAILED of ${pass + fail}`}`);

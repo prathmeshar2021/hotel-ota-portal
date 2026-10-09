@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma";
-import { getCancellationPolicy, computeCancellationBreakdown, DEPOSIT_AMOUNT } from "@/lib/utils/cancellation";
+import { getCancellationPolicy, quoteCancellation, DEPOSIT_AMOUNT } from "@/lib/utils/cancellation";
+import { netPaid } from "@/lib/services/booking-txn";
 import { recordStaffAction } from "@/lib/services/staff-action";
 import { processBookingRefund } from "@/lib/services/refund";
 import { z } from "zod";
@@ -60,33 +61,22 @@ export async function POST(
 
   const policy = getCancellationPolicy(new Date(booking.checkInDate));
 
-  // Detect PAY_PARTIAL: advance was paid but full amount was not.
-  const isPartialPayment =
-    booking.onlinePaid > 0 && booking.onlinePaid < booking.totalAmount;
-
-  let finalCharge: number;
-  let totalRefund: number;
-
-  if (isPartialPayment) {
-    // Charge% applies only to the ₹500 advance — the unpaid balance was never collected.
-    const defaultRefund = Math.floor(booking.onlinePaid * (1 - policy.chargePercent / 100));
-    const defaultCharge = booking.onlinePaid - defaultRefund;
-    // Admin override is capped at what was actually paid.
-    finalCharge =
-      parsed.data.overrideCharge !== undefined
-        ? Math.min(parsed.data.overrideCharge, booking.onlinePaid)
-        : defaultCharge;
-    totalRefund = booking.onlinePaid - finalCharge;
-  } else {
-    const depositAmount = booking.refundableDeposit ?? DEPOSIT_AMOUNT;
-    const breakdown = computeCancellationBreakdown(
-      booking.totalAmount,
-      depositAmount,
-      policy.chargePercent
-    );
-    finalCharge = parsed.data.overrideCharge ?? breakdown.cancellationCharge;
-    totalRefund = booking.totalAmount - finalCharge;
-  }
+  // Quoted against what the guest has actually paid, read from the ledger. A
+  // booking nobody paid for used to come out of the policy "owed" a refund and
+  // "charged" a fee on money that never arrived; both are now held to it.
+  // (An online advance is still treated as before: the policy percentage
+  // applies to the advance, since the rest was never collected.)
+  const paid = (await netPaid([booking.id])).get(booking.id) ?? 0;
+  const quote = quoteCancellation({
+    totalAmount: booking.totalAmount,
+    depositAmount: booking.refundableDeposit ?? DEPOSIT_AMOUNT,
+    chargePercent: policy.chargePercent,
+    paid,
+    onlineAdvance: booking.onlinePaid,
+    overrideCharge: parsed.data.overrideCharge,
+  });
+  const finalCharge = quote.charge;
+  const totalRefund = quote.refund;
 
   await prisma.booking.update({
     where: { id: booking.id },
@@ -118,10 +108,12 @@ export async function POST(
     actorName: session.user.name ?? session.user.email ?? "Staff",
     actorRole: session.user.role ?? "HOTEL_STAFF",
     details: { cancellationCharge: finalCharge, totalRefund, tier: policy.tier, refundStatus: refund.refundStatus },
-    notifyLines: [
-      `Refund to guest: ₹${totalRefund.toLocaleString("en-IN")} (${refund.refundStatus.toLowerCase()})`,
-      `Retained as cancellation fee: ₹${finalCharge.toLocaleString("en-IN")}`,
-    ],
+    notifyLines: quote.unpaid
+      ? ["Nothing had been paid on this booking, so there is no refund and no fee."]
+      : [
+          `Refund to guest: ₹${totalRefund.toLocaleString("en-IN")} (${refund.refundStatus.toLowerCase()})`,
+          `Retained as cancellation fee: ₹${finalCharge.toLocaleString("en-IN")}`,
+        ],
   });
 
   return NextResponse.json({
@@ -131,6 +123,6 @@ export async function POST(
     totalRefund,
     tier: policy.tier,
     refundStatus: refund.refundStatus,
-    refundMessage: refund.message,
+    refundMessage: quote.unpaid ? "Booking cancelled — nothing had been paid, so nothing to refund" : refund.message,
   });
 }

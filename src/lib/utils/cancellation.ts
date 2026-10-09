@@ -73,6 +73,60 @@ export function computeCancellationBreakdown(
   return { roomCharges, cancellationCharge, depositRefund, totalRefund };
 }
 
+export interface CancellationQuote {
+  /** What goes back to the guest. Never more than they have paid. */
+  refund: number;
+  /** What the hotel actually keeps — never more than was paid either. */
+  charge: number;
+  /** Nothing has been paid, so there is nothing to refund or keep. */
+  unpaid: boolean;
+}
+
+/**
+ * What a cancellation really comes to, given what the guest has paid.
+ *
+ * The policy above is written against the room price. A booking that was never
+ * paid for — pay-at-hotel, cancelled before arrival — still ran through it and
+ * came out "refund ₹200, keep ₹1,260" on money nobody had handed over. This
+ * applies the same policy and then holds both figures to the money that
+ * actually arrived.
+ *
+ * `onlineAdvance` is the part paid online when booking. When that is only an
+ * advance, the policy percentage applies to the advance itself, since the rest
+ * of the room price was never collected.
+ */
+export function quoteCancellation(p: {
+  totalAmount: number;
+  depositAmount: number;
+  chargePercent: number;
+  /** Paid towards the bill so far and not yet refunded. Deposits excluded. */
+  paid: number;
+  onlineAdvance: number;
+  /** Staff override of the charge (0 = waived). */
+  overrideCharge?: number;
+}): CancellationQuote {
+  const paid = Math.max(0, p.paid);
+  let charge: number;
+  let refund: number;
+
+  if (p.onlineAdvance > 0 && p.onlineAdvance < p.totalAmount) {
+    const policyRefund = Math.floor(p.onlineAdvance * (1 - p.chargePercent / 100));
+    charge = p.overrideCharge !== undefined
+      ? Math.min(p.overrideCharge, p.onlineAdvance)
+      : p.onlineAdvance - policyRefund;
+    refund = p.onlineAdvance - charge;
+  } else {
+    const policy = computeCancellationBreakdown(p.totalAmount, p.depositAmount, p.chargePercent);
+    charge = p.overrideCharge ?? policy.cancellationCharge;
+    refund = p.totalAmount - charge;
+  }
+
+  // Refunds are paid out in whole rupees.
+  refund = Math.max(0, Math.min(Math.round(refund), Math.floor(paid)));
+  charge = Math.max(0, Math.min(charge, +(paid - refund).toFixed(2)));
+  return { refund, charge, unpaid: paid <= 0 };
+}
+
 /** Human-readable time remaining until check-in. */
 export function formatHoursUntilCheckIn(hours: number): string {
   if (hours <= 0) return "already checked in";

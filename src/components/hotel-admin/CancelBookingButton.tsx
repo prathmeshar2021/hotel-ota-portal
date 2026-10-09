@@ -4,7 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { X, AlertTriangle, ShieldCheck, CheckCircle, Loader2 } from "lucide-react";
-import { getCancellationPolicy, computeCancellationBreakdown, formatHoursUntilCheckIn } from "@/lib/utils/cancellation";
+import { getCancellationPolicy, quoteCancellation, formatHoursUntilCheckIn } from "@/lib/utils/cancellation";
 
 interface Props {
   bookingId: string;
@@ -12,10 +12,14 @@ interface Props {
   checkInDate: Date;
   totalAmount: number;
   depositAmount: number;
+  /** Paid towards the room so far (cash + online). The refund can't exceed it. */
+  amountPaid: number;
+  /** The part of that paid online when booking. */
+  onlinePaid: number;
 }
 
 export default function AdminCancelBookingButton({
-  bookingId, bookingRef, checkInDate, totalAmount, depositAmount,
+  bookingId, bookingRef, checkInDate, totalAmount, depositAmount, amountPaid, onlinePaid,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -24,9 +28,15 @@ export default function AdminCancelBookingButton({
   const router = useRouter();
 
   const policy = getCancellationPolicy(new Date(checkInDate));
-  const breakdown = computeCancellationBreakdown(totalAmount, depositAmount, policy.chargePercent);
-  const finalCharge = waiveCharge ? 0 : breakdown.cancellationCharge;
-  const finalRefund = totalAmount - finalCharge;
+  // The same sum the server does, so the figure shown is the figure refunded.
+  const quoteFor = (overrideCharge?: number) => quoteCancellation({
+    totalAmount, depositAmount, chargePercent: policy.chargePercent,
+    paid: amountPaid, onlineAdvance: onlinePaid, overrideCharge,
+  });
+  const byPolicy = quoteFor();
+  const quote = waiveCharge ? quoteFor(0) : byPolicy;
+  const finalCharge = quote.charge;
+  const finalRefund = quote.refund;
 
   const tierBg =
     policy.tier === "FREE" ? "bg-green-500/10 border-green-500/20 text-green-400" :
@@ -43,7 +53,10 @@ export default function AdminCancelBookingButton({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          overrideCharge: finalCharge,
+          // Only a waiver is an override. Sending the policy figure as one made
+          // the server treat it as a fixed charge — on an advance-only booking
+          // that kept the whole advance instead of the policy's share of it.
+          overrideCharge: waiveCharge ? 0 : undefined,
           reason: reason.trim() || undefined,
         }),
       });
@@ -104,23 +117,35 @@ export default function AdminCancelBookingButton({
                 <span>Total booking amount</span>
                 <span className="text-white/70">₹{totalAmount.toLocaleString("en-IN")}</span>
               </div>
-              <div className="flex justify-between text-white/50 text-xs">
-                <span>Room charges</span>
-                <span>₹{breakdown.roomCharges.toLocaleString("en-IN")}</span>
-              </div>
-              <div className="flex justify-between text-red-400">
-                <span>
-                  Cancellation charge
-                  {waiveCharge ? " (waived)" : ` (${policy.chargePercent}%)`}
-                </span>
-                <span className={waiveCharge ? "line-through opacity-40" : ""}>
-                  − ₹{breakdown.cancellationCharge.toLocaleString("en-IN")}
+              <div className="flex justify-between text-white/50">
+                <span>Paid so far</span>
+                <span className={amountPaid > 0 ? "text-white/70" : "text-amber-300"}>
+                  ₹{amountPaid.toLocaleString("en-IN")}
                 </span>
               </div>
-              <div className="flex justify-between text-green-400 text-xs">
-                <span className="flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5" /> Deposit (always returned)</span>
-                <span>₹{depositAmount.toLocaleString("en-IN")}</span>
-              </div>
+              {quote.unpaid ? (
+                <p className="text-amber-300/90 text-xs leading-relaxed">
+                  Nothing has been paid on this booking, so there is nothing to refund and nothing to keep.
+                </p>
+              ) : (
+                <>
+                  <div className="flex justify-between text-red-400">
+                    <span>
+                      Kept as cancellation charge
+                      {waiveCharge ? " (waived)" : ` (${policy.chargePercent}%)`}
+                    </span>
+                    <span className={waiveCharge ? "line-through opacity-40" : ""}>
+                      − ₹{byPolicy.charge.toLocaleString("en-IN")}
+                    </span>
+                  </div>
+                  {amountPaid >= totalAmount && (
+                    <div className="flex justify-between text-green-400 text-xs">
+                      <span className="flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5" /> Deposit (always returned)</span>
+                      <span>₹{depositAmount.toLocaleString("en-IN")}</span>
+                    </div>
+                  )}
+                </>
+              )}
               <div className="pt-2 border-t border-white/8 flex justify-between font-bold text-white">
                 <span>Guest refund</span>
                 <span className={finalCharge === 0 ? "text-green-400" : "text-amber-400"}>
